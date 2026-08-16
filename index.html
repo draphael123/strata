@@ -2278,47 +2278,53 @@ const KINDS = {
                beast:true, wild:true, pack:true, blurb:'Quick, and never alone.' },
   boar:      { name:'Boar',      hp:34, mp:6, atk:[7,12],  reach:1, init:11, xp:20,
                body:0x5c4a3a, trim:0x342a20, scale:1.00, aggro:11, shape:'beast',
-               beast:true, wild:true, knock:1, blurb:'Charges, and knocks you off your line.' },
+               beast:true, wild:true, knock:1, tactic:'charge',
+               blurb:'Charges, and knocks you off your line.' },
   bear:      { name:'Bear',      hp:58, mp:4, atk:[10,16], reach:1, init:7,  xp:40,
                body:0x4a3a2c, trim:0x2a2018, scale:1.30, aggro:10, shape:'beast',
-               beast:true, wild:true, soak:0.15, blurb:'Slow. Enormous. Do not be surrounded with it.' },
+               beast:true, wild:true, soak:0.15, tactic:'hold',
+               blurb:'Slow. Enormous. Do not be surrounded with it.' },
   lynx:      { name:'Lynx',      hp:16, mp:9, atk:[6,10],  reach:1, init:18, xp:18,
                body:0x8a7a5e, trim:0x4e442f, scale:0.78, aggro:15, shape:'beast',
-               beast:true, wild:true, pack:true, blurb:'Comes out of the scrub at you.' },
+               beast:true, wild:true, pack:true, tactic:'flank',
+               blurb:'Comes out of the scrub at you.' },
   // ── the other things, further from the fire ──
   husk:      { name:'Husk',      hp:32, mp:4, atk:[6,11],  reach:1, init:8,  xp:16,
                body:0x6b5f4a, trim:0x3f3627, scale:1.00, aggro:11, shape:'brute' },
   sprig:     { name:'Sprig',     hp:19, mp:6, atk:[4,8],   reach:1, init:14, xp:12,
                body:0x5b8a46, trim:0x2f5227, scale:0.82, aggro:13, shape:'lithe' },
   slinger:   { name:'Slinger',   hp:22, mp:4, atk:[5,10],  reach:8, init:11, xp:18,
-               body:0x7a4a52, trim:0x40262b, scale:0.94, aggro:15, shape:'caster' },
+               body:0x7a4a52, trim:0x40262b, scale:0.94, aggro:15, shape:'caster',
+               tactic:'skirmish' },
   // ── the newcomers ──
   warden:    { name:'Warden',    hp:52, mp:3, atk:[8,14],  reach:1, init:6,  xp:34,
                body:0x55606b, trim:0x333c45, scale:1.18, aggro:10, shape:'brute',
-               soak:0.30, blurb:'Slow, armoured, hits like a gate falling.' },
+               soak:0.30, tactic:'hold', blurb:'Slow, armoured, hits like a gate falling.' },
   ashling:   { name:'Ashling',   hp:20, mp:5, atk:[4,8],   reach:7, init:13, xp:26,
                body:0xa8522e, trim:0x5e2a17, scale:0.88, aggro:15, shape:'caster',
-               glow:0xff8a3c, onHit:{ kind:'burn', turns:3 }, blurb:'Sets you alight.' },
+               glow:0xff8a3c, onHit:{ kind:'burn', turns:3 }, tactic:'skirmish',
+               blurb:'Sets you alight.' },
   stalker:   { name:'Stalker',   hp:24, mp:9, atk:[7,12],  reach:1, init:17, xp:30,
                body:0x40364a, trim:0x241d2c, scale:0.90, aggro:17, shape:'lithe',
-               blurb:'Crosses the whole board in one turn.' },
+               tactic:'flank', blurb:'Crosses the whole board in one turn.' },
   delver:    { name:'Delver',    hp:28, mp:4, atk:[5,9],   reach:1, init:10, xp:32,
                body:0x6d5636, trim:0x3d2f1d, scale:0.96, aggro:12, shape:'brute',
                onHit:{ kind:'root', turns:2 }, blurb:'Grabs your legs and holds you.' },
   cairnwight:{ name:'Cairnwight',hp:34, mp:3, atk:[6,10],  reach:6, init:9,  xp:36,
                body:0x707a6a, trim:0x424a3c, scale:1.06, aggro:14, shape:'caster',
-               glow:0x9fe8b0, knock:2, blurb:'A ringing blow that throws you back.' },
+               glow:0x9fe8b0, knock:2, tactic:'skirmish',
+               blurb:'A ringing blow that throws you back.' },
   // ── after dark ──
   nightjar:  { name:'Nightjar',  hp:22, mp:8, atk:[6,11],  reach:1, init:18, xp:30,
                body:0x2c2a3f, trim:0x17162a, scale:0.86, aggro:18, shape:'lithe',
-               night:true, blurb:'Fast, and it hunts in the dark.' },
+               night:true, tactic:'flank', blurb:'Fast, and it hunts in the dark.' },
   barrowkin: { name:'Barrowkin', hp:46, mp:3, atk:[7,13],  reach:1, init:5,  xp:38,
                body:0x5c5a4a, trim:0x2f2e26, scale:1.12, aggro:11, shape:'brute',
-               night:true, soak:0.22, onHit:{ kind:'dread', turns:2 },
+               night:true, soak:0.22, onHit:{ kind:'dread', turns:2 }, tactic:'hold',
                blurb:'Old, patient, and its touch saps the nerve.' },
   wisp:      { name:'Wisp',      hp:16, mp:7, atk:[5,10],  reach:8, init:16, xp:34,
                body:0x3f6d78, trim:0x1e3a44, scale:0.74, aggro:19, shape:'caster',
-               night:true, glow:0x8ff0ff, onHit:{ kind:'dread', turns:2 },
+               night:true, glow:0x8ff0ff, onHit:{ kind:'dread', turns:2 }, tactic:'skirmish',
                blurb:'A cold light that will not be pinned down.' },
 };
 const STATUS = {
@@ -4783,11 +4789,33 @@ function planApproach(a, target, ab){
 
   // Among the cells that can reach the target, prefer the ones behind it. This
   // is what turns the flank rule into pressure rather than a stat on a card.
+  // Eleven creature types all played the same: close the distance, hit the thing.
+  // The tactic decides what a good cell IS, so a Wisp wants a different square
+  // from a Warden even when both can reach you from either.
+  const tac = a.K.tactic || 'press';
+  const reach = a.K.reach || 1;
   let goal = null, goalScore = Infinity;
   for (const [, n] of far){
     if (n.cost === 0 || !inRangeFrom(n.x, n.y, n.z, target, ab)) continue;
     const fl = flankOf(n.x, n.z, target);
     let score = n.cost - (fl.m - 1) * 9 - (n.y > target.y ? 2.5 : 0);
+    const gapT = Math.max(Math.abs(n.x-target.x), Math.abs(n.z-target.z));
+    if (tac === 'skirmish'){
+      // Shooters want to be far and hidden, and they will not stand in your face:
+      // POINT BLANK costs them 40% just as it costs you.
+      score -= Math.min(gapT, reach) * 2.2;
+      if (gapT <= 1) score += 26;
+      else if (gapT <= 2) score += 8;
+      if (concealed(n.x, n.y, n.z)) score -= 4;
+    } else if (tac === 'flank'){
+      // The whole point of a stalker is that it goes around. Triple the weight.
+      score -= (fl.m - 1) * 18;
+      if (concealed(n.x, n.y, n.z)) score -= 3;
+    } else if (tac === 'hold'){
+      // Armoured things do not chase. Wandering out of position is what turned a
+      // Warden into just another body walking at you in the open.
+      score += n.cost * 1.6;
+    }
     // Pack hunters SPREAD. Queueing up in front of you is what made every fight
     // a line; wolves that refuse to bunch will find your back on their own.
     if (a.K.pack){
@@ -4826,11 +4854,31 @@ function aiPlan(a){
   const ab = abilityOf(a);
   const target = player;
   const q = [];
+  const tac = a.K.tactic || 'press';
+  const gap = Math.max(Math.abs(a.x-target.x), Math.abs(a.z-target.z));
+
+  // A skirmisher with you inside its guard backs off FIRST and shoots from there.
+  // Standing still to fire at point blank is exactly the mistake the player is now
+  // punished for, and it read as stupid when the creatures did it too.
+  if (tac === 'skirmish' && gap <= 1 && budget(a) > 0){
+    const pl = planApproach(a, target, ab);
+    if (pl && pl.cut > 0){
+      q.push({ t:'move', path: pl.path, cost: pl.cost });
+      if (pl.endsInRange) q.push({ t:'attack', ab, target });
+      return q;
+    }
+  }
   if (canHit(a, target, ab)){ q.push({ t:'attack', ab, target }); return q; }
+
+  // A holder does not cross the room. Out of its patience, it sets itself instead
+  // of trickling into the open one cell at a time.
+  if (tac === 'hold' && gap > (a.K.reach || 1) + 6){ q.push({ t:'guard' }); return q; }
+
   const pl = planApproach(a, target, ab);
   if (!pl) return q;
   if (pl.cut > 0) q.push({ t:'move', path: pl.path, cost: pl.cost });
   if (pl.endsInRange) q.push({ t:'attack', ab, target });
+  else if (tac === 'hold') q.push({ t:'guard' });
   return q;
 }
 function aiStep(){
@@ -4842,6 +4890,12 @@ function aiStep(){
     a.ap = Math.max(0, a.ap - 1);                // creatures pay for movement too
     a.mp = Math.max(0, (a.mpPool||a.K.mp) - step.cost);
     startWalk(a, step.path, ()=>{ CB.phase = 'aithink'; CB.timer = 0.28; });
+  } else if (step.t === 'guard'){
+    a.ap = Math.max(0, a.ap - 1);
+    a.guarding = true;
+    setAnim(a, 'guard', 0.5);
+    log(`<b>${a.name}</b> sets itself.`);
+    CB.phase = 'aithink'; CB.timer = 0.22;
   } else if (step.t === 'attack'){
     a.ap -= 1;
     log(`<b>${a.name}</b> attacks.`);
