@@ -23,7 +23,10 @@
   /* ---------- title ---------- */
   #title{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;
     align-items:center;justify-content:center;gap:20px;
-    background:radial-gradient(ellipse at 50% 35%,#26313f 0%,#10141b 55%,#080a0e 100%)}
+    background:linear-gradient(180deg,rgba(8,10,14,.72) 0%,rgba(8,10,14,.30) 34%,
+      rgba(8,10,14,.34) 62%,rgba(8,10,14,.86) 100%)}
+  #title h1{animation:tfade 1.6s ease both}
+  @keyframes tfade{from{opacity:0;letter-spacing:.62em;filter:blur(6px)}to{opacity:1}}
   #title h1{font-size:clamp(52px,11vw,124px);letter-spacing:.30em;font-weight:700;
     text-indent:.30em;color:#efe8d8;
     text-shadow:0 0 30px rgba(216,180,90,.30),0 5px 0 #3c3222,0 7px 16px rgba(0,0,0,.8)}
@@ -120,6 +123,46 @@
   .cfoot{display:flex;align-items:center;gap:10px}
   .cnote{font-size:11px;color:#8d97a7}
 
+  /* ---------- pause / character / satchel / settings ---------- */
+  #pause{position:fixed;inset:0;z-index:58;display:none;align-items:center;justify-content:center;
+    background:rgba(6,9,14,.74);backdrop-filter:blur(3px);padding:20px}
+  #pause.on{display:flex}
+  .pwrap{width:min(760px,100%);max-height:90vh;display:flex;flex-direction:column;gap:0;
+    background:rgba(13,15,20,.95);border:1px solid rgba(216,180,90,.34);border-radius:8px;
+    box-shadow:0 16px 50px rgba(0,0,0,.7);overflow:hidden}
+  .ptabs{display:flex;border-bottom:1px solid rgba(216,180,90,.24)}
+  .ptab{flex:1;padding:12px 8px;background:transparent;border:0;cursor:pointer;font-family:inherit;
+    font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#8d97a7;transition:.14s}
+  .ptab:hover{color:#e4ddcd;background:rgba(255,255,255,.04)}
+  .ptab.on{color:var(--gold);background:rgba(216,180,90,.10);box-shadow:inset 0 -2px 0 var(--gold)}
+  .pbody{padding:16px 18px;overflow:auto;min-height:260px}
+  .pfoot{display:flex;align-items:center;gap:10px;padding:12px 16px;
+    border-top:1px solid rgba(255,255,255,.09)}
+  .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;font-size:12px;color:#9aa4b3;line-height:2}
+  .pgrid b{color:#efe8d8;font-weight:600;float:right}
+  .psec{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);
+    margin:14px 0 7px;border-bottom:1px solid rgba(216,180,90,.2);padding-bottom:5px}
+  .psec:first-child{margin-top:0}
+  .bagrow{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:5px;
+    border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.03);margin-bottom:6px}
+  .bagrow .bi{width:26px;height:26px;border-radius:5px;display:flex;align-items:center;
+    justify-content:center;background:rgba(216,180,90,.16);color:var(--gold);font-size:14px}
+  .bagrow .bn{font-size:12px;color:#efe8d8}
+  .bagrow .bd{font-size:10px;color:#8d97a7;margin-top:1px}
+  .bagrow .bq{font-size:11px;color:#9aa4b3;font-variant-numeric:tabular-nums}
+  .bagrow.eq{border-color:var(--gold);background:rgba(216,180,90,.12)}
+  .srow2{display:flex;align-items:center;gap:12px;margin-bottom:12px;font-size:12px;color:#cfd6e2}
+  .srow2 label{flex:1}
+  .srow2 input[type=range]{flex:1;accent-color:#d8b45a}
+  .srow2 .sv{width:44px;text-align:right;color:#8d97a7;font-variant-numeric:tabular-nums}
+  .tog{padding:5px 14px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:11px;
+    letter-spacing:.12em;text-transform:uppercase;border:1px solid rgba(255,255,255,.18);
+    background:rgba(255,255,255,.05);color:#cfd6e2}
+  .tog.on{border-color:var(--gold);color:var(--gold);background:rgba(216,180,90,.14)}
+
+  #clock{position:absolute;left:18px;top:12px;font-size:11px;letter-spacing:.18em;
+    color:#b9c2d0;text-shadow:0 2px 6px #000}
+
   #lockmsg{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
     background:rgba(8,10,14,.55);cursor:pointer;font-size:13px;letter-spacing:.24em;
     text-transform:uppercase;color:#cfd6e2}
@@ -184,6 +227,14 @@
     background:rgba(0,0,0,.6);overflow:hidden;border:1px solid rgba(0,0,0,.7)}
   .tag .tb>i{display:block;height:100%;background:#cf5a4c}
   .tag.you .tb>i{background:#9ac25c}
+  .intent{margin-top:3px;font-size:10px;font-weight:700;letter-spacing:.04em;
+    padding:1px 6px;border-radius:9px;display:inline-block;white-space:nowrap;
+    background:rgba(13,15,20,.86);border:1px solid rgba(255,255,255,.16);color:#cfd6e2}
+  .intent.attack{color:#ff9a86;border-color:rgba(207,90,76,.7);background:rgba(60,18,14,.86)}
+  .intent.attack.high{color:#ffcf7a;border-color:rgba(216,180,90,.8)}
+  .intent.attack.low{color:#a8cf9a;border-color:rgba(120,180,110,.6)}
+  .intent.move{color:#8fb6e8}
+  .intent.wait{color:#7d8798}
   .fct{position:absolute;transform:translate(-50%,-50%);font-size:19px;font-weight:700;
     text-shadow:0 3px 8px #000,0 0 14px rgba(0,0,0,.9);pointer-events:none}
 
@@ -211,6 +262,7 @@
 
 <div id="hud">
   <div id="compass">N</div>
+  <div id="clock"></div>
   <div id="coords"></div>
   <div id="cross"></div>
   <div id="vitals" class="panel">
@@ -266,6 +318,23 @@
   </div>
 </div>
 
+<div id="pause">
+  <div class="pwrap">
+    <div class="ptabs">
+      <button class="ptab on" data-tab="char">Character</button>
+      <button class="ptab" data-tab="bag">Satchel</button>
+      <button class="ptab" data-tab="set">Settings</button>
+    </div>
+    <div class="pbody" id="pBody"></div>
+    <div class="pfoot">
+      <span class="cnote" id="pHint">ESC or I to close</span>
+      <span style="flex:1"></span>
+      <button class="btn ghost small" id="pQuit">Abandon run</button>
+      <button class="btn" id="pClose">Resume</button>
+    </div>
+  </div>
+</div>
+
 <div id="lockmsg">Click to look around</div>
 
 <div id="banner">
@@ -279,9 +348,10 @@
   <div class="sub">an open world of blocks &amp; turns</div>
   <div id="keyhelp">
     <b>WASD</b> move &nbsp;·&nbsp; <b>SPACE</b> jump &nbsp;·&nbsp; <b>MOUSE</b> look &nbsp;·&nbsp; <b>SHIFT</b> sprint<br>
-    <b>LEFT CLICK</b> mine &nbsp;·&nbsp; <b>RIGHT CLICK</b> place &nbsp;·&nbsp; <b>1–5</b> pick block &nbsp;·&nbsp; <b>F</b> pick block you look at<br>
-    <b>E</b> or walk close to a creature to start a fight &nbsp;·&nbsp; <b>ESC</b> release mouse<br>
-    <span style="color:#6f7889">In combat: click a blue tile to move, pick an action, click a target.</span>
+    <b>LEFT CLICK</b> mine &nbsp;·&nbsp; <b>E</b> or walk close to a creature to start a fight<br>
+    <b>C</b> character &nbsp;·&nbsp; <b>I</b> satchel &nbsp;·&nbsp; <b>ESC</b> pause &amp; settings<br>
+    <span style="color:#6f7889">In combat: click a blue tile to move, pick an action, click a target.<br>
+    Each creature shows what it will do to you if you stop where you are.</span>
   </div>
   <div style="display:flex;gap:10px;margin-top:6px">
     <button class="btn" id="btnPlay">Enter the world</button>
@@ -338,7 +408,7 @@ import * as THREE from 'three';
 // ───────────────────────────── constants ─────────────────────────────
 const CX = 16, CZ = 16, CY = 80;          // chunk dims (Y is full column)
 const SEA = 26;                            // sea level
-const VIEW = 7;                            // chunk render radius (the town sits ~75 out)
+let VIEW = 7;                              // chunk render radius (the town sits ~75 out)
 const GEN = VIEW + 2;                      // data-gen radius (meshing needs neighbours)
 const MESH_BUDGET = 7;                     // ms/frame spent building chunk meshes
 const SAVE_KEY = 'strata-save-v1';
@@ -413,6 +483,20 @@ const SPELLS = [
     desc:'A low cut that roots a foe in place for 2 turns.' },
 ];
 const meets = (st, req)=> !req || st[req[0]] >= req[1];
+
+// ── items ──────────────────────────────────────────────────────────────────
+// Consumables you drink in a fight, and trinkets you wear (two slots).
+const ITEMS = {
+  salve:   { name:'Field Salve',   kind:'use',     icon:'✚', desc:'Restore 26 vigour.' },
+  draught: { name:'Blue Draught',  kind:'use',     icon:'◈', desc:'Restore 18 mana.' },
+  ember:   { name:'Ember Flask',   kind:'use',     icon:'✦', desc:'Set your target alight (Burn 3).' },
+  charm:   { name:'Boar Charm',    kind:'trinket', icon:'❖', desc:'+2 Might.',      st:{mgt:2} },
+  ward:    { name:'Stone Ward',    kind:'trinket', icon:'❖', desc:'+2 Vitality.',   st:{vit:2} },
+  lens:    { name:'Scrying Lens',  kind:'trinket', icon:'❖', desc:'+2 Intellect.',  st:{int:2} },
+  feather: { name:'Kite Feather',  kind:'trinket', icon:'❖', desc:'+2 Agility.',    st:{agi:2} },
+  torc:    { name:'Iron Torc',     kind:'trinket', icon:'❖', desc:'Take 10% less damage.', soak:0.10 },
+};
+const LOOT_TABLE = ['salve','salve','draught','ember','charm','ward','lens','feather','torc'];
 
 // Derived character numbers, all in one place so the creator can preview them live.
 function derive(st, weaponId){
@@ -1376,12 +1460,14 @@ const skyMat = new THREE.ShaderMaterial({
   uniforms: {
     uTop:{value:new THREE.Color(0x2f5f9e)}, uMid:{value:new THREE.Color(0x8fb4d8)},
     uHaze:{value:new THREE.Color(0xf2cf9c)}, uSun:{value:SUN_DIR.clone()},
-    uSunCol:{value:new THREE.Color(0xffd9a0)},
+    uSunCol:{value:new THREE.Color(0xffd9a0)}, uNight:{value:0},
   },
   vertexShader:`varying vec3 vD;
     void main(){ vD = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader:`
-    uniform vec3 uTop,uMid,uHaze,uSun,uSunCol; varying vec3 vD;
+    uniform vec3 uTop,uMid,uHaze,uSun,uSunCol; uniform float uNight; varying vec3 vD;
+    // cheap hash for the starfield
+    float h31(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,45.164)))*43758.5453); }
     void main(){
       vec3 d = normalize(vD);
       float h = clamp(d.y*1.15, -0.2, 1.0);
@@ -1392,6 +1478,13 @@ const skyMat = new THREE.ShaderMaterial({
       col += uSunCol * pow(sd, 5.0)  * 0.42;                 // wide low-sun bloom
       col += uSunCol * pow(sd, 30.0) * 0.30;
       col += uSunCol * pow(max(1.0-abs(h),0.0), 5.0) * 0.16; // horizon warmth
+      // stars, only once the sky is actually dark and only above the horizon
+      if (uNight > 0.5 && d.y > 0.0){
+        vec3 g = floor(d * 190.0);
+        float r = h31(g);
+        float star = step(0.9975, r) * (0.55 + 0.45*h31(g+7.0));
+        col += vec3(0.92,0.95,1.0) * star * smoothstep(0.0, 0.28, d.y);
+      }
       gl_FragColor = vec4(col, 1.0);
     }`,
 });
@@ -1431,6 +1524,78 @@ const CLOUDS = [];
   cloudMesh.count = CLOUDS.length;
   cloudMesh.userData = { m, q, s, p };
 }
+// ═══════════════════════════ DAY / NIGHT ═══════════════════════════
+// tod runs 0..1: 0 midnight, 0.25 dawn, 0.5 noon, 0.75 dusk.
+const DAY_LENGTH = 600;                       // seconds for a full cycle
+const SKY_KEYS = [
+  { t:0.00, top:0x070c1c, mid:0x0d1730, haze:0x1a2340, sun:0x9fb6d8, key:0x2c3f66, kI:0.16,
+    hemiS:0x1b2c4d, hemiG:0x14161f, hemiI:0.42, amb:0x2a3550, ambI:0.20, fog:0x141d33 },
+  // an extra key so dawn's colour doesn't bleed back into the small hours
+  { t:0.16, top:0x0a1226, mid:0x14203c, haze:0x27304e, sun:0xa8bcd8, key:0x33466e, kI:0.20,
+    hemiS:0x22355a, hemiG:0x171a24, hemiI:0.46, amb:0x303c58, ambI:0.21, fog:0x1c2740 },
+  { t:0.22, top:0x1d3a63, mid:0x6a5f80, haze:0xd98f63, sun:0xffb066, key:0xff9d55, kI:0.85,
+    hemiS:0x6a7fae, hemiG:0x5a4636, hemiI:0.75, amb:0x8c86a0, ambI:0.30, fog:0xc98a68 },
+  { t:0.32, top:0x2f5f9e, mid:0x8fb4d8, haze:0xf2cf9c, sun:0xffd9a0, key:0xffcf8a, kI:1.55,
+    hemiS:0x9cc0ec, hemiG:0x7a6748, hemiI:1.05, amb:0xc8d6ea, ambI:0.38, fog:0xe8c9a0 },
+  { t:0.50, top:0x2a6bc4, mid:0x8fc4e8, haze:0xdfeaf2, sun:0xfff6e0, key:0xfff4dc, kI:1.85,
+    hemiS:0xbcdcf8, hemiG:0x7d7458, hemiI:1.15, amb:0xd8e6f2, ambI:0.40, fog:0xd8e6f0 },
+  { t:0.70, top:0x2f5f9e, mid:0x8fb4d8, haze:0xf2cf9c, sun:0xffd9a0, key:0xffcf8a, kI:1.55,
+    hemiS:0x9cc0ec, hemiG:0x7a6748, hemiI:1.05, amb:0xc8d6ea, ambI:0.38, fog:0xe8c9a0 },
+  { t:0.80, top:0x21365f, mid:0x7a5a7e, haze:0xc46f55, sun:0xff8c52, key:0xff8a4c, kI:0.70,
+    hemiS:0x5a6a9a, hemiG:0x4a3830, hemiI:0.68, amb:0x7a7290, ambI:0.28, fog:0xb0705c },
+  { t:0.88, top:0x0c1428, mid:0x172140, haze:0x2b3050, sun:0xa8bcd8, key:0x36486e, kI:0.22,
+    hemiS:0x22355a, hemiG:0x171a24, hemiI:0.46, amb:0x303c58, ambI:0.21, fog:0x1e2742 },
+  { t:1.00, top:0x070c1c, mid:0x0d1730, haze:0x1a2340, sun:0x9fb6d8, key:0x2c3f66, kI:0.16,
+    hemiS:0x1b2c4d, hemiG:0x14161f, hemiI:0.42, amb:0x2a3550, ambI:0.20, fog:0x141d33 },
+];
+const hemi = scene.children.find(o=>o.isHemisphereLight);
+const ambient = scene.children.find(o=>o.isAmbientLight);
+const _kc = [new THREE.Color(), new THREE.Color(), new THREE.Color(),
+             new THREE.Color(), new THREE.Color(), new THREE.Color(), new THREE.Color()];
+function skyAt(tod){
+  let i = 0;
+  while (i < SKY_KEYS.length-2 && SKY_KEYS[i+1].t < tod) i++;
+  const a = SKY_KEYS[i], b = SKY_KEYS[i+1];
+  const f = clamp((tod - a.t) / Math.max(1e-4, b.t - a.t), 0, 1);
+  const mix = (ka, kb, out)=> out.setHex(ka).lerp(_tmpc.setHex(kb), f);
+  mix(a.top,b.top,_kc[0]); mix(a.mid,b.mid,_kc[1]); mix(a.haze,b.haze,_kc[2]);
+  mix(a.sun,b.sun,_kc[3]); mix(a.key,b.key,_kc[4]); mix(a.hemiS,b.hemiS,_kc[5]);
+  mix(a.hemiG,b.hemiG,_kc[6]);
+  return { kI:lerp(a.kI,b.kI,f), hemiI:lerp(a.hemiI,b.hemiI,f),
+           ambI:lerp(a.ambI,b.ambI,f), amb:a.amb, fog:_kc[2] };
+}
+const _tmpc = new THREE.Color();
+const isNight = ()=> G.tod < 0.20 || G.tod > 0.82;
+function updateDayNight(){
+  const tod = G.tod;
+  // sun arcs east→west; below the horizon a cold moon takes over
+  const ang = (tod - 0.25) * Math.PI * 2;
+  const h = Math.sin(ang);
+  // X and Z sweep continuously all the way round; only the elevation is floored,
+  // so after dark the light reads as a low moon in the same quarter. Swapping to
+  // a true opposite-side moon snapped every shadow 180° at sunrise.
+  SUN_DIR.set(Math.cos(ang)*0.86, Math.max(0.17, h), 0.34).normalize();
+  const s = skyAt(tod);
+  sun.position.copy(SUN_DIR).multiplyScalar(1);
+  sun.color.copy(_kc[4]); sun.intensity = s.kI;
+  if (hemi){ hemi.color.copy(_kc[5]); hemi.groundColor.copy(_kc[6]); hemi.intensity = s.hemiI; }
+  if (ambient){ ambient.color.setHex(s.amb); ambient.intensity = s.ambI; }
+  skyMat.uniforms.uTop.value.copy(_kc[0]);
+  skyMat.uniforms.uMid.value.copy(_kc[1]);
+  skyMat.uniforms.uHaze.value.copy(_kc[2]);
+  skyMat.uniforms.uSunCol.value.copy(_kc[3]);
+  skyMat.uniforms.uSun.value.copy(SUN_DIR);
+  skyMat.uniforms.uNight.value = isNight() ? 1 : 0;
+  matWater.uniforms.uSun.value.copy(SUN_DIR);
+  matWater.uniforms.uFogCol.value.copy(_kc[2]);
+  matWater.uniforms.uLight.value.copy(_kc[4]).multiplyScalar(0.30 + s.kI*0.46)
+    .addScalar(s.ambI*0.5);
+  scene.fog.color.copy(_kc[2]);
+  scene.background.copy(_kc[1]);
+  cloudMesh.material.color.copy(_kc[3]).lerp(_tmpc.setHex(0xffffff), 0.35);
+  cloudMesh.material.opacity = 0.5;
+}
+
 function tickClouds(t, camX, camZ){
   const { m, q, s, p } = cloudMesh.userData;
   q.identity();
@@ -1484,6 +1649,9 @@ const matWater = new THREE.ShaderMaterial({
   uniforms:{
     uTime:{value:0}, uSun:{value:SUN_DIR.clone()}, uCam:{value:new THREE.Vector3()},
     uFogCol:{value:new THREE.Color(0xcfdde6)}, uFogNear:{value:0}, uFogFar:{value:1},
+    // Water is a ShaderMaterial with no lighting term, so without this it keeps
+    // its noon palette after dark and the lake glows like a lightbox at midnight.
+    uLight:{value:new THREE.Color(1,1,1)},
   },
   vertexShader:`
     attribute float shore; attribute float depth;
@@ -1499,7 +1667,8 @@ const matWater = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * viewMatrix * wp;
     }`,
   fragmentShader:`
-    uniform float uTime; uniform vec3 uSun, uCam, uFogCol; uniform float uFogNear, uFogFar;
+    uniform float uTime; uniform vec3 uSun, uCam, uFogCol, uLight;
+    uniform float uFogNear, uFogFar;
     varying vec3 vCol; varying float vShore; varying vec3 vW; varying float vUp; varying float vDep;
     void main(){
       float dep = clamp(vDep / 7.0, 0.0, 1.0);
@@ -1523,6 +1692,7 @@ const matWater = new THREE.ShaderMaterial({
       // construction, and clear shallows just display that staircase to you —
       // better to lose the bed early and keep only a hint of sand.
       float a = mix(0.74, 0.97, pow(dep, 0.42));
+      col *= uLight;                              // obey the hour
       float fd = smoothstep(uFogNear, uFogFar, length(uCam - vW));
       col = mix(col, uFogCol, fd);
       gl_FragColor = vec4(col, mix(a, 0.0, fd*0.85));
@@ -1768,10 +1938,23 @@ const KINDS = {
   cairnwight:{ name:'Cairnwight',hp:34, mp:3, atk:[6,10],  reach:6, init:9,  xp:36,
                body:0x707a6a, trim:0x424a3c, scale:1.06, aggro:14, shape:'caster',
                glow:0x9fe8b0, knock:2, blurb:'A ringing blow that throws you back.' },
+  // ── after dark ──
+  nightjar:  { name:'Nightjar',  hp:22, mp:8, atk:[6,11],  reach:1, init:18, xp:30,
+               body:0x2c2a3f, trim:0x17162a, scale:0.86, aggro:18, shape:'lithe',
+               night:true, blurb:'Fast, and it hunts in the dark.' },
+  barrowkin: { name:'Barrowkin', hp:46, mp:3, atk:[7,13],  reach:1, init:5,  xp:38,
+               body:0x5c5a4a, trim:0x2f2e26, scale:1.12, aggro:11, shape:'brute',
+               night:true, soak:0.22, onHit:{ kind:'dread', turns:2 },
+               blurb:'Old, patient, and its touch saps the nerve.' },
+  wisp:      { name:'Wisp',      hp:16, mp:7, atk:[5,10],  reach:8, init:16, xp:34,
+               body:0x3f6d78, trim:0x1e3a44, scale:0.74, aggro:19, shape:'caster',
+               night:true, glow:0x8ff0ff, onHit:{ kind:'dread', turns:2 },
+               blurb:'A cold light that will not be pinned down.' },
 };
 const STATUS = {
-  burn: { name:'Burning', col:'#ff8a5c', dmg:4,  tick:'damage' },
-  root: { name:'Rooted',  col:'#8fbf6a', mp:1,   tick:'slow'   },
+  burn:  { name:'Burning', col:'#ff8a5c', dmg:4, tick:'damage' },
+  root:  { name:'Rooted',  col:'#8fbf6a', mp:1,  tick:'slow'   },
+  dread: { name:'Dread',   col:'#9fb6d8', tick:'weaken' },   // −30% damage dealt
 };
 function applyStatus(t, kind, turns){
   t.status = t.status || {};
@@ -1789,6 +1972,8 @@ function tickStatus(a){
       damage(a, STATUS[k].dmg, STATUS[k].name.toUpperCase());
     } else if (STATUS[k].tick === 'slow'){
       a.mp = Math.min(a.mp, STATUS[k].mp);
+    } else if (STATUS[k].tick === 'weaken'){
+      log(`<b>${a.name}</b> is gripped by dread.`);
     }
     a.status[k]--;
     if (a.status[k] <= 0) delete a.status[k];
@@ -1798,11 +1983,21 @@ const statusText = a => a.status ? Object.keys(a.status).map(k=>STATUS[k].name[0
 // Weighted so the nasty newcomers stay uncommon — an even roll across eight
 // types means a level-1 character meets two Wardens in their first fight.
 const KIND_WEIGHTS = { husk:26, sprig:24, slinger:18, ashling:10, stalker:9,
-                       delver:7, cairnwight:4, warden:3 };
+                       delver:7, cairnwight:4, warden:3,
+                       nightjar:22, barrowkin:12, wisp:14 };
 const KIND_KEYS = Object.keys(KINDS);
-const KIND_POOL = [];
-for (const k of KIND_KEYS) for (let i=0; i<(KIND_WEIGHTS[k]||1); i++) KIND_POOL.push(k);
-const randomKind = ()=> KIND_POOL[Math.floor(Math.random()*KIND_POOL.length)];
+const DAY_POOL = [], NIGHT_POOL = [];
+for (const k of KIND_KEYS){
+  const n = KIND_WEIGHTS[k] || 1;
+  // night things only come out at night; day things thin out but don't vanish
+  if (KINDS[k].night) for (let i=0;i<n;i++) NIGHT_POOL.push(k);
+  else { for (let i=0;i<n;i++) DAY_POOL.push(k);
+         for (let i=0;i<Math.ceil(n*0.35);i++) NIGHT_POOL.push(k); }
+}
+const randomKind = ()=>{
+  const pool = isNight() ? NIGHT_POOL : DAY_POOL;
+  return pool[Math.floor(Math.random()*pool.length)];
+};
 const entities = [];        // living creatures in the world (not the player)
 
 function makeBody(kind){
@@ -2129,6 +2324,74 @@ function tickFX(dt){
   SHAKE = Math.max(0, SHAKE - dt*3.2);
 }
 
+// ═══════════════════════════ ATMOSPHERE ═══════════════════════════
+// One drifting mote field that changes character with the hour: pollen and dust
+// in daylight, fireflies after dark. Plus a low mist bank that only forms in the
+// cool hours near water.
+const MOTE_N = 220;
+let motes = null, mist = null;
+function buildAtmosphere(){
+  if (motes) return;
+  const pos = new Float32Array(MOTE_N*3), seed = [];
+  for (let i=0;i<MOTE_N;i++) seed.push({ x:(Math.random()-0.5)*70, y:Math.random()*14,
+    z:(Math.random()-0.5)*70, p:Math.random()*6.28, s:0.4+Math.random()*1.2 });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  motes = new THREE.Points(g, new THREE.PointsMaterial({
+    size:0.14, map:softDot(0xffffff), transparent:true, depthWrite:false,
+    blending:THREE.AdditiveBlending, opacity:0.5 }));
+  motes.frustumCulled = false;
+  motes.userData = { seed };
+  scene.add(motes);
+
+  // mist: a few big soft slabs that hug the water
+  mist = new THREE.Group();
+  for (let i=0;i<16;i++){
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2),
+      new THREE.MeshBasicMaterial({ color:0xdfe8f2, transparent:true, opacity:0.0,
+        depthWrite:false, fog:true }));
+    const a = i/16*Math.PI*2, r = 6 + (i%5)*5;
+    m.position.set(LAKE.x + Math.cos(a)*r, SEA+1.4 + (i%3)*0.5, LAKE.z + Math.sin(a)*r);
+    m.scale.set(26+(i%4)*8, 1, 20+(i%3)*7);
+    m.renderOrder = 4;
+    mist.add(m);
+  }
+  scene.add(mist);
+}
+function tickAtmosphere(t, dt){
+  if (!motes) return;
+  const night = isNight();
+  const arr = motes.geometry.attributes.position.array, sd = motes.userData.seed;
+  const px = player.pos.x, pz = player.pos.z, py = player.pos.y;
+  for (let i=0;i<MOTE_N;i++){
+    const s = sd[i];
+    if (night){                                  // fireflies: bob, hover low, blink
+      s.y += Math.sin(t*1.6 + s.p)*dt*0.5;
+      arr[i*3]   = px + s.x;
+      arr[i*3+1] = py + 0.6 + (s.y % 4);
+      arr[i*3+2] = pz + s.z;
+    } else {                                     // pollen: drift and fall
+      s.y -= dt*s.s*0.35;
+      if (s.y < 0) s.y += 14;
+      arr[i*3]   = px + s.x + Math.sin(t*0.4 + s.p)*1.6;
+      arr[i*3+1] = py + s.y - 3;
+      arr[i*3+2] = pz + s.z + Math.cos(t*0.3 + s.p)*1.4;
+    }
+  }
+  motes.geometry.attributes.position.needsUpdate = true;
+  motes.material.size    = night ? 0.20 : 0.12;
+  motes.material.opacity = night ? (0.55 + 0.35*Math.sin(t*3)) : 0.30;
+  motes.material.color.setHex(night ? 0xaaff88 : 0xfff0c8);
+
+  // mist forms in the cool hours and burns off by mid-morning
+  const cool = Math.max(0, 1 - Math.abs(G.tod - 0.24)/0.13) + Math.max(0, 1 - Math.abs(G.tod - 0.80)/0.13);
+  const want = clamp(cool, 0, 1) * 0.22;
+  for (const m of mist.children){
+    m.material.opacity += (want - m.material.opacity) * Math.min(1, dt*0.8);
+    m.position.x += Math.sin(t*0.12 + m.position.z*0.05) * dt * 0.35;
+  }
+}
+
 // ── the campfire you wake beside ──
 let campfire = null;
 function buildCampfire(){
@@ -2262,6 +2525,7 @@ const player = {
   mana: 18, maxMana: 18, soak: 0,
   st: { mgt:STAT_BASE, vit:STAT_BASE, int:STAT_BASE, agi:STAT_BASE },
   weaponId: 'blade', spellId: 'wind',
+  bag: {}, worn: [null, null],
   mp: 6, ap: 2, init: 0,
   mpMax: 6, apMax: 2,
   x:0, y:0, z:0,            // combat cell
@@ -2271,11 +2535,26 @@ const player = {
 };
 // Apply the creator's choices to the live character. Level-ups are kept as
 // separate bonuses so re-deriving from stats never wipes them.
+// stats as actually worn — base plus whatever trinkets are equipped
+function effStats(){
+  const s = { ...player.st };
+  for (const id of player.worn){
+    const it = id && ITEMS[id];
+    if (it && it.st) for (const k of Object.keys(it.st)) s[k] += it.st[k];
+  }
+  return s;
+}
+function wornSoak(){
+  let v = 0;
+  for (const id of player.worn){ const it = id && ITEMS[id]; if (it && it.soak) v += it.soak; }
+  return v;
+}
 function applyBuild(refill){
-  const d = derive(player.st, player.weaponId);
+  const d = derive(effStats(), player.weaponId);
   player.maxHp   = d.maxHp   + (player.bonusHp   || 0);
   player.maxMana = d.maxMana + (player.bonusMana || 0);
-  player.mpMax = d.mpMax; player.apMax = d.apMax; player.soak = d.soak;
+  player.mpMax = d.mpMax; player.apMax = d.apMax;
+  player.soak = Math.min(0.6, d.soak + wornSoak());
   if (refill){ player.hp = player.maxHp; player.mana = player.maxMana; }
   else { player.hp = Math.min(player.hp || player.maxHp, player.maxHp);
          player.mana = Math.min(player.mana, player.maxMana); }
@@ -2403,7 +2682,14 @@ addEventListener('keydown', e=>{
   if (e.repeat) { keys[e.code] = true; return; }
   keys[e.code] = true;
   if (G.mode === 'title') return;
-  if (e.code === 'Escape' && locked) document.exitPointerLock();
+  if (e.code === 'Escape'){
+    e.preventDefault();
+    if (G.paused) closePause(); else openPause();
+    return;
+  }
+  if (G.paused) return;
+  if (e.code === 'KeyI'){ openPause('bag'); return; }
+  if (e.code === 'KeyC'){ openPause('char'); return; }
   if (G.mode === 'explore'){
     if (e.code === 'KeyE') tryEngage();
   } else if (G.mode === 'combat'){
@@ -2466,8 +2752,9 @@ let digCooldown = 0;
 function updateExplore(dt){
   // look
   if (locked){
-    player.yaw   -= mouseDX * 0.0022;
-    player.pitch = clamp(player.pitch - mouseDY * 0.0022, -1.53, 1.53);
+    const sens = 0.0022 * SETTINGS.sens;
+    player.yaw   -= mouseDX * sens;
+    player.pitch = clamp(player.pitch - mouseDY * sens, -1.53, 1.53);
   }
   mouseDX = 0; mouseDY = 0;
 
@@ -2580,8 +2867,9 @@ function tryEngage(){
 // weapon's own attack, so everyone has something to do on turn one.
 let ABILITIES = [];
 function buildAbilities(){
-  const w  = derive(player.st, player.weaponId).weapon;
-  const pw = powerOf(player.st, w.scale);
+  const est = effStats();
+  const w  = derive(est, player.weaponId).weapon;
+  const pw = powerOf(est, w.scale);
   const dmg = [Math.max(1,Math.round(w.dmg[0]*pw)), Math.max(2,Math.round(w.dmg[1]*pw))];
   ABILITIES = [{
     id:'strike', name:'Strike', ap:1, mana:0, kind:w.kind, range:w.range, dmg,
@@ -2720,6 +3008,7 @@ function resolveAttack(a, t, ab){
   const dy = a.y - t.y;
   if (dy >= 1){ dmg = Math.round(dmg*1.25); notes.push('HIGH GROUND +25%'); }
   else if (dy <= -1){ dmg = Math.round(dmg*0.85); notes.push('LOW GROUND −15%'); }
+  if (a.status && a.status.dread){ dmg = Math.round(dmg*0.70); notes.push('DREAD −30%'); }
   const ignoresCover = ab.spell && ab.spell.id === 'pierce';
   if (ab.kind === 'ranged' && !ignoresCover && hasCover(a, t)){
     dmg = Math.round(dmg*0.75); notes.push('COVER −25%');
@@ -2918,7 +3207,13 @@ function leaveCombat(result){
   player.mesh.visible = false;
 
   if (result !== 'lose'){
-    if (victory) gainXp(CB.xpPot);
+    if (victory){
+      gainXp(CB.xpPot);
+      // spoils — scaled by how much the pack was worth
+      const rolls = 1 + (CB.xpPot > 45 ? 1 : 0) + (CB.xpPot > 90 ? 1 : 0);
+      for (let i=0;i<rolls;i++) if (Math.random() < 0.62)
+        giveItem(LOOT_TABLE[Math.floor(Math.random()*LOOT_TABLE.length)]);
+    }
     player.pos.set(player.px, player.py + 0.02, player.pz);
     // a draw means the pack gave up — clear them so you aren't instantly re-jumped
     if (result === 'draw') for (let i=entities.length-1;i>=0;i--) despawnEntity(entities[i]);
@@ -3010,7 +3305,44 @@ function recomputeReach(){
   for (const [k, n] of CB.reach){ if (n.cost > 0) cells.push([n.x, n.y, n.z]); }
   setTiles(tMove, cells);
   refreshTargets();
+  computeIntents();
 }
+// ── enemy intent ──────────────────────────────────────────────────────────
+// What each creature WILL do if you end your turn from where you now stand.
+// Recomputed after every move, so stepping onto high ground or behind cover
+// visibly changes the threat — which is the whole point of the terrain.
+function computeIntents(){
+  for (const e of CB.order){
+    if (e.isPlayer || !e.alive){ if (e) e.intent = null; continue; }
+    const ab = abilityOf(e);
+    const savedMp = e.mp, savedAp = e.ap;
+    e.mp = e.K.mp; e.ap = 1;                    // plan with the turn they'll actually have
+    let plan = [];
+    try { plan = aiPlan(e); } catch(err){ plan = []; }
+    e.mp = savedMp; e.ap = savedAp;
+
+    const atk = plan.find(s => s.t === 'attack');
+    if (atk){
+      // mirror resolveAttack's modifiers so the number shown is the real one
+      const end = plan.find(s => s.t === 'move');
+      const cell = end ? end.path[end.path.length-1] : [e.x, e.y, e.z];
+      let lo = ab.dmg[0], hi = ab.dmg[1];
+      const dy = cell[1] - player.y;
+      let mul = dy >= 1 ? 1.25 : dy <= -1 ? 0.85 : 1;
+      if (e.status && e.status.dread) mul *= 0.70;
+      if (ab.kind === 'ranged' && hasCover({x:cell[0],y:cell[1],z:cell[2]}, player)) mul *= 0.75;
+      const soak = player.soak || 0;
+      lo = Math.max(1, Math.round(lo*mul*(1-soak)));
+      hi = Math.max(1, Math.round(hi*mul*(1-soak)));
+      e.intent = { type:'attack', lo, hi, high: dy >= 1, low: dy <= -1 };
+    } else if (plan.some(s => s.t === 'move')){
+      e.intent = { type:'move' };
+    } else {
+      e.intent = { type:'wait' };
+    }
+  }
+}
+const INTENT_ICON = { attack:'⚔', move:'→', wait:'…' };
 function refreshTargets(){
   const a = actor();
   if (!a || !a.isPlayer || CB.selAbility < 0){ tHit.count = 0; return; }
@@ -3413,8 +3745,21 @@ function updateTags(dt){
     d.className = 'tag' + (a.isPlayer ? ' you' : '');
     d.style.left = ((_pv.x*0.5+0.5)*innerWidth) + 'px';
     d.style.top  = ((-_pv.y*0.5+0.5)*innerHeight) + 'px';
-    d.children[0].textContent = a.name;
+    const st = statusText(a);
+    d.children[0].innerHTML = a.name + (st ? ' <b style="color:#ff9a6a">'+st+'</b>' : '');
     d.children[1].firstChild.style.width = Math.max(0, a.hp/a.maxHp*100) + '%';
+    // intent chip, only on your own turn — that's when it can change your mind
+    let ic = d.children[2];
+    if (!ic){ ic = document.createElement('div'); ic.className = 'intent'; d.appendChild(ic); }
+    const showIntent = CB.active && CB.phase === 'idle' && a.intent && !a.isPlayer;
+    ic.style.display = showIntent ? '' : 'none';
+    if (showIntent){
+      const it = a.intent;
+      ic.className = 'intent ' + it.type + (it.high ? ' high' : it.low ? ' low' : '');
+      ic.textContent = it.type === 'attack'
+        ? `${INTENT_ICON.attack} ${it.lo}–${it.hi}${it.high?' ▲':it.low?' ▼':''}`
+        : INTENT_ICON[it.type];
+    }
   }
   for (let i=FCTS.length-1; i>=0; i--){
     const f = FCTS[i];
@@ -3434,7 +3779,170 @@ function updateHudText(){
   document.getElementById('coords').innerHTML =
     `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}<br>
      <span style="color:#5f6a7a">${entities.length} creatures · ${CHUNKS.size} chunks</span>`;
+  const hh = Math.floor(G.tod*24), mm = Math.floor((G.tod*24 % 1) * 60);
+  const phase = G.tod < 0.20 ? 'night' : G.tod < 0.30 ? 'dawn'
+              : G.tod < 0.68 ? 'day'   : G.tod < 0.82 ? 'dusk' : 'night';
+  document.getElementById('clock').textContent =
+    `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}  ${phase}`;
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+//  PAUSE MENU — character sheet, satchel, settings
+// ═══════════════════════════════════════════════════════════════════════
+const SETTINGS = { vol:0.34, sens:1.0, shadows:true, view:7, sfx:true };
+try { Object.assign(SETTINGS, JSON.parse(localStorage.getItem('strata-set')||'{}')); } catch(e){}
+function saveSettings(){ try { localStorage.setItem('strata-set', JSON.stringify(SETTINGS)); } catch(e){} }
+function applySettings(){
+  if (AUD.master) AUD.master.gain.value = SETTINGS.sfx ? SETTINGS.vol : 0;
+  renderer.shadowMap.enabled = SETTINGS.shadows;
+  scene.traverse(o=>{ if (o.isMesh && o.material) o.material.needsUpdate = true; });
+  saveSettings();
+}
+let pauseTab = 'char';
+function openPause(tab){
+  if (G.mode === 'title') return;
+  G.paused = true;
+  if (locked) document.exitPointerLock();
+  pauseTab = tab || pauseTab;
+  document.getElementById('pause').classList.add('on');
+  drawPause();
+}
+function closePause(){
+  G.paused = false;
+  document.getElementById('pause').classList.remove('on');
+  if (G.mode === 'explore') document.getElementById('lockmsg').style.display = 'flex';
+}
+function drawPause(){
+  const root = document.getElementById('pause');
+  root.querySelectorAll('.ptab').forEach(b=> b.classList.toggle('on', b.dataset.tab === pauseTab));
+  const body = document.getElementById('pBody');
+  const est = effStats();
+
+  if (pauseTab === 'char'){
+    const w = WEAPONS.find(x=>x.id===player.weaponId), s = SPELLS.find(x=>x.id===player.spellId);
+    const statLine = (id,name)=>{
+      const bonus = est[id] - player.st[id];
+      return `<span>${name} <b>${est[id]}${bonus?` <span style="color:#8fbf6a">(+${bonus})</span>`:''}</b></span>`;
+    };
+    body.innerHTML = `
+      <div class="psec">Attributes</div>
+      <div class="pgrid">
+        ${statLine('mgt','Might')}${statLine('vit','Vitality')}
+        ${statLine('int','Intellect')}${statLine('agi','Agility')}
+      </div>
+      <div class="psec">Standing</div>
+      <div class="pgrid">
+        <span>Level <b>${player.level}</b></span><span>Experience <b>${player.xp} / ${player.xpNext}</b></span>
+        <span>Vigour <b>${Math.round(player.hp)} / ${player.maxHp}</b></span>
+        <span>Mana <b>${Math.round(player.mana)} / ${player.maxMana}</b></span>
+        <span>Movement <b>${player.mpMax}</b></span><span>Actions <b>${player.apMax}</b></span>
+        <span>Damage soak <b>${Math.round(player.soak*100)}%</b></span>
+        <span>Initiative <b>${derive(est, player.weaponId).initiative}</b></span>
+      </div>
+      <div class="psec">Carried</div>
+      <div class="pgrid">
+        <span>Weapon <b>${w?w.name:'—'}</b></span><span>Ability <b>${s?s.name:'—'}</b></span>
+      </div>`;
+  }
+
+  else if (pauseTab === 'bag'){
+    const ids = Object.keys(player.bag).filter(k=>player.bag[k] > 0);
+    const wornRows = player.worn.map((id,i)=>{
+      const it = id && ITEMS[id];
+      return `<div class="bagrow ${it?'eq':''}">
+        <span class="bi">${it?it.icon:'·'}</span>
+        <span style="flex:1"><div class="bn">${it?it.name:'— empty trinket slot —'}</div>
+        <div class="bd">${it?it.desc:'Equip a trinket from below'}</div></span>
+        ${it?`<button class="tog" data-unequip="${i}">Remove</button>`:''}</div>`;
+    }).join('');
+    body.innerHTML = `<div class="psec">Worn</div>${wornRows}
+      <div class="psec">Satchel</div>` + (ids.length ? ids.map(id=>{
+        const it = ITEMS[id];
+        const act = it.kind === 'trinket'
+          ? `<button class="tog" data-equip="${id}">Wear</button>`
+          : `<button class="tog" data-use="${id}" ${G.mode!=='combat'&&it.icon==='✦'?'disabled style="opacity:.4"':''}>Use</button>`;
+        return `<div class="bagrow"><span class="bi">${it.icon}</span>
+          <span style="flex:1"><div class="bn">${it.name}</div><div class="bd">${it.desc}</div></span>
+          <span class="bq">×${player.bag[id]}</span>${act}</div>`;
+      }).join('') : `<div class="bd" style="color:#7d8798;font-size:12px">Empty. Creatures sometimes leave something behind.</div>`);
+  }
+
+  else {
+    const t = (k,label)=> `<div class="srow2"><label>${label}</label>
+      <button class="tog ${SETTINGS[k]?'on':''}" data-toggle="${k}">${SETTINGS[k]?'On':'Off'}</button></div>`;
+    body.innerHTML = `
+      <div class="psec">Sound</div>
+      ${t('sfx','Sound effects')}
+      <div class="srow2"><label>Volume</label>
+        <input type="range" min="0" max="100" value="${Math.round(SETTINGS.vol*100)}" data-set="vol">
+        <span class="sv">${Math.round(SETTINGS.vol*100)}</span></div>
+      <div class="psec">Controls</div>
+      <div class="srow2"><label>Mouse sensitivity</label>
+        <input type="range" min="30" max="250" value="${Math.round(SETTINGS.sens*100)}" data-set="sens">
+        <span class="sv">${SETTINGS.sens.toFixed(2)}</span></div>
+      <div class="psec">Display</div>
+      ${t('shadows','Shadows')}
+      <div class="srow2"><label>View distance</label>
+        <input type="range" min="3" max="9" value="${SETTINGS.view}" data-set="view">
+        <span class="sv">${SETTINGS.view}</span></div>
+      <div class="bd" style="font-size:10px;color:#6e7889;margin-top:10px">
+        View distance takes effect as chunks stream in.</div>`;
+  }
+
+  body.querySelectorAll('[data-use]').forEach(b=> b.onclick = ()=> useItem(b.dataset.use));
+  body.querySelectorAll('[data-equip]').forEach(b=> b.onclick = ()=> equipItem(b.dataset.equip));
+  body.querySelectorAll('[data-unequip]').forEach(b=> b.onclick = ()=> unequipItem(+b.dataset.unequip));
+  body.querySelectorAll('[data-toggle]').forEach(b=> b.onclick = ()=>{
+    SETTINGS[b.dataset.toggle] = !SETTINGS[b.dataset.toggle]; applySettings(); drawPause(); });
+  body.querySelectorAll('[data-set]').forEach(inp=> inp.oninput = ()=>{
+    const k = inp.dataset.set, v = +inp.value;
+    SETTINGS[k] = k === 'view' ? v : v/100;
+    if (k === 'view'){ VIEW = v; treeChunkKey = null; }
+    applySettings();
+    inp.nextElementSibling.textContent = k === 'view' ? v : (k === 'sens' ? SETTINGS[k].toFixed(2) : v);
+  });
+}
+function giveItem(id, n){
+  player.bag[id] = (player.bag[id] || 0) + (n || 1);
+  toast(`Found: ${ITEMS[id].name}`);
+}
+function useItem(id){
+  const it = ITEMS[id];
+  if (!player.bag[id]) return;
+  if (id === 'salve'){ player.hp = Math.min(player.maxHp, player.hp + 26); SFX.heal(); }
+  else if (id === 'draught'){ player.mana = Math.min(player.maxMana, player.mana + 18); SFX.heal(); }
+  else if (id === 'ember'){
+    if (G.mode !== 'combat'){ toast('Only in a fight'); return; }
+    const foes = CB.order.filter(o=>!o.isPlayer && o.alive && canHit(player, o, ABILITIES[0]));
+    const t = foes[0] || CB.order.find(o=>!o.isPlayer && o.alive);
+    if (!t){ toast('Nothing to burn'); return; }
+    applyStatus(t, 'burn', 3); boom(t.x, t.y, t.z, 0xff8a3c); SFX.fire();
+  }
+  player.bag[id]--;
+  if (player.bag[id] <= 0) delete player.bag[id];
+  drawVitals(); drawPause();
+}
+function equipItem(id){
+  const slot = player.worn.indexOf(null);
+  if (slot < 0){ toast('Both trinket slots full'); return; }
+  player.worn[slot] = id;
+  player.bag[id]--; if (player.bag[id] <= 0) delete player.bag[id];
+  applyBuild(false); drawVitals(); drawPause(); SFX.ui();
+}
+function unequipItem(i){
+  const id = player.worn[i]; if (!id) return;
+  player.worn[i] = null;
+  player.bag[id] = (player.bag[id] || 0) + 1;
+  applyBuild(false); drawVitals(); drawPause(); SFX.ui();
+}
+document.getElementById('pClose').onclick = closePause;
+document.getElementById('pQuit').onclick = ()=>{
+  closePause();
+  localStorage.removeItem(SAVE_KEY);
+  location.reload();
+};
+document.querySelectorAll('.ptab').forEach(b=> b.onclick = ()=>{
+  pauseTab = b.dataset.tab; SFX.ui(); drawPause(); });
 
 // ═══════════════════════════════════════════════════════════════════════
 //  SAVE / LOAD — we persist the SEED plus a diff list, never the world.
@@ -3448,7 +3956,9 @@ function saveGame(){
       p: { x:player.pos.x, y:player.pos.y, z:player.pos.z, yaw:player.yaw,
            hp:player.hp, mana:player.mana, lvl:player.level, xp:player.xp, xpNext:player.xpNext,
            st:player.st, weaponId:player.weaponId, spellId:player.spellId,
-           bonusHp:player.bonusHp||0, bonusMana:player.bonusMana||0 },
+           bonusHp:player.bonusHp||0, bonusMana:player.bonusMana||0,
+           bag:player.bag, worn:player.worn },
+      tod: G.tod,
       spawn: { x:player.spawn.x, y:player.spawn.y, z:player.spawn.z },
     }));
   } catch(e){ /* quota — not fatal for a prototype */ }
@@ -3468,6 +3978,8 @@ function loadGame(){
     player.bonusHp = s.p.bonusHp || 0; player.bonusMana = s.p.bonusMana || 0;
     player.level = s.p.lvl; player.xp = s.p.xp; player.xpNext = s.p.xpNext;
     player.hp = s.p.hp; player.mana = s.p.mana;
+    player.bag = s.p.bag || {}; player.worn = s.p.worn || [null,null];
+    if (typeof s.tod === 'number') G.tod = s.tod;
     player.spawn.set(s.spawn.x, s.spawn.y, s.spawn.z);
     return true;
   } catch(e){ return false; }
@@ -3490,6 +4002,8 @@ function newWorld(){
   player.spawn.copy(player.pos);
   player.yaw = Math.atan2(-(LAKE.x-sx), -(LAKE.z-sz));   // look out over the water
   player.pitch = -0.05; player.vel.set(0,0,0);
+  G.tod = 0.30;                                 // you wake in the early morning
+  player.bag = {}; player.worn = [null, null];  // a new run starts empty-handed
   applyBuild(true);
 }
 // A handful of creatures prowling the ruins, so there is something to fight
@@ -3516,12 +4030,21 @@ function seedValeEnemies(){
 // ═══════════════════════════════════════════════════════════════════════
 //  MAIN LOOP
 // ═══════════════════════════════════════════════════════════════════════
-const G = { mode:'title', time:0, streamT:0, saveT:0, frames:0 };
+const G = { mode:'title', time:0, tod:0.30, streamT:0, saveT:0, frames:0, paused:false };
 window.G = G;
 
 function step(dt){
   dt = Math.min(dt, 0.05);                     // clamp so a stalled tab can't teleport you
   G.time += dt;
+  if (!G.paused && G.mode !== 'title') G.tod = (G.tod + dt/DAY_LENGTH) % 1;
+  updateDayNight();
+  if (G.paused){                     // menus freeze the world but keep it rendering
+    drainMeshQueue(MESH_BUDGET);
+    skyDome.position.copy(camera.position);
+    skyDome.scale.setScalar(camera.far * 0.88);
+    trackSun(camera.position.x, camera.position.y, camera.position.z);
+    return;
+  }
   if (G.mode === 'explore'){
     updateExplore(dt);
     G.streamT -= dt;
@@ -3546,6 +4069,7 @@ function step(dt){
   trackSun(camera.position.x, camera.position.y, camera.position.z);
   tickClouds(G.time, camera.position.x, camera.position.z);
   WIND.value = G.time;
+  tickAtmosphere(G.time, dt);
   matWater.uniforms.uTime.value = G.time;
   matWater.uniforms.uCam.value.copy(camera.position);
   matWater.uniforms.uFogNear.value = scene.fog.near;
@@ -3559,11 +4083,47 @@ function render(){
   lastRender = performance.now();
 }
 let lastT = performance.now(), lastRender = 0, rafOK = 0;
+// ── title flyover ──────────────────────────────────────────────────────────
+// The menu sits over a slow orbit of the vale at first light, so the first
+// thing you ever see is the place you're about to wake up in.
+let introT = 0, introReady = false;
+function primeIntro(){
+  if (introReady) return;
+  G.tod = 0.265;                                   // just before sunrise
+  player.pos.set(HOME.x+0.5, SHORE_Y+2, HOME.z+0.5);
+  updateStreaming(HOME.x, HOME.z);
+  drainMeshQueue(500);
+  buildCampfire(); buildAtmosphere();
+  introReady = true;
+}
+function updateIntro(dt){
+  introT += dt;
+  primeIntro();
+  const a = introT*0.055;
+  const r = 46 + Math.sin(introT*0.11)*8;
+  const cy = SHORE_Y + 17 + Math.sin(introT*0.07)*4;
+  camera.position.set(HOME.x + Math.cos(a)*r, cy, HOME.z + Math.sin(a)*r);
+  camera.lookAt(HOME.x, SHORE_Y + 3, HOME.z);
+  G.tod = 0.265 + Math.min(0.055, introT*0.0016);   // dawn creeps up while you read
+  updateDayNight();
+  skyDome.position.copy(camera.position);
+  skyDome.scale.setScalar(camera.far*0.88);
+  trackSun(camera.position.x, camera.position.y, camera.position.z);
+  tickClouds(introT, camera.position.x, camera.position.z);
+  tickCampfire(introT, dt);
+  tickAtmosphere(introT, dt);
+  WIND.value = introT;
+  matWater.uniforms.uTime.value = introT;
+  matWater.uniforms.uCam.value.copy(camera.position);
+  matWater.uniforms.uFogNear.value = scene.fog.near;
+  matWater.uniforms.uFogFar.value  = scene.fog.far;
+  drainMeshQueue(MESH_BUDGET);
+}
 function frame(now){
   requestAnimationFrame(frame);
-  const dt = (now - lastT)/1000; lastT = now;
+  const dt = Math.min((now - lastT)/1000, 0.05); lastT = now;
   rafOK = now;
-  if (G.mode === 'title'){ render(); return; }
+  if (G.mode === 'title'){ updateIntro(dt); render(); return; }
   step(dt);
   render();
 }
@@ -3590,6 +4150,7 @@ function enterWorld(){
   if (!boxFree(player.pos.x, player.pos.y, player.pos.z))
     player.pos.y = surfaceY(Math.floor(player.pos.x), Math.floor(player.pos.z)) + 0.1;
   buildCampfire();
+  buildAtmosphere();
   if (!entities.length && Math.hypot(player.pos.x-HOME.x, player.pos.z-HOME.z) < 40) seedValeEnemies();
   populate(player.pos.x, player.pos.z);
   drawVitals();
@@ -3685,6 +4246,8 @@ document.getElementById('btnPlay').onclick = ()=>{
 document.getElementById('btnNew').onclick = openCreator;
 document.getElementById('bBtn').onclick = ()=> leaveCombat(CB.result || 'win');
 newWorld();                                     // prime a world so the title screen has state
+applySettings();
+VIEW = SETTINGS.view;
 
 // ═══════════════════════════════════════════════════════════════════════
 //  HEADLESS API — every loop must be drivable without a visible tab.
@@ -3789,6 +4352,8 @@ window.STRATA = {
   standable, surfaceY, reachable, hasLOS, planApproach,
   attack: resolveAttack, cast: castSpell, applyBuild, derive, knockback,
   tickStatus, applyStatus, KINDS, STATUS, AUD, SFX, audioInit, rebuildTrees, WIND,
+  isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,
+  openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
   get abilities(){ return ABILITIES; },
   WEAPONS, SPELLS, STATS, HOME, LAKE, TOWN,
   teleport(x,z){
