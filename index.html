@@ -150,6 +150,9 @@
   .sw2{width:19px;height:19px;border-radius:4px;cursor:pointer;
     border:1px solid rgba(255,255,255,.2)}
   .sw2.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 0 9px rgba(216,180,90,.5)}
+  .sw2.name{width:auto;height:auto;padding:3px 9px;font-size:10px;letter-spacing:.08em;
+    text-transform:uppercase;color:#b6bcc8;background:rgba(255,255,255,.05)}
+  .sw2.name.on{color:var(--gold)}
   .cfoot{display:flex;align-items:center;gap:10px}
   .cnote{font-size:11px;color:#8d97a7}
 
@@ -663,10 +666,18 @@ const meets = (st, req)=> !req || st[req[0]] >= req[1];
 
 // ── appearance ─────────────────────────────────────────────────────────────
 const LOOKS = {
-  skin:  { label:'Skin',  opts:[0xf0c9a4,0xd6b48f,0xb98a63,0x8d6142,0x62402c,0x40281b] },
-  hair:  { label:'Cap',   opts:[0x2b2119,0x5a3a22,0x8a5a2c,0xc49a4a,0xb0b4bc,0x7a2f22] },
-  tunic: { label:'Tunic', opts:[0x4f6f9a,0x6a7a4a,0x8a4a4a,0x5c4a76,0x7a6a3a,0x3a4a52] },
-  cloak: { label:'Cloak', opts:[0x2c3f5c,0x3c4a34,0x5a3030,0x40364a,0x4a4238,0x243034] },
+  skin:  { label:'Skin',  opts:[0xf0c9a4,0xe3bb95,0xd6b48f,0xc49a76,0xb98a63,0xa2764f,
+                                0x8d6142,0x74513a,0x62402c,0x4e3323,0x40281b,0x332016] },
+  hair:  { label:'Hair',  opts:[0x2b2119,0x4a3020,0x5a3a22,0x6f4526,0x8a5a2c,0xa87438,
+                                0xc49a4a,0xd8bc72,0xb0b4bc,0x8c9098,0x7a2f22,0x120e0b] },
+  tunic: { label:'Tunic', opts:[0x4f6f9a,0x3d5f88,0x6a7a4a,0x55683c,0x8a4a4a,0x6e3838,
+                                0x5c4a76,0x463a5c,0x7a6a3a,0x3a4a52,0x8a7a5e,0x2f3742] },
+  cloak: { label:'Cloak', opts:[0x2c3f5c,0x22314a,0x3c4a34,0x2e3a28,0x5a3030,0x452424,
+                                0x40364a,0x4a4238,0x243034,0x5e5240,0x1a1a20,0x6a5a3a] },
+  trim:  { label:'Trim',  opts:[0xd8b45a,0xc2c8d2,0x9c6a3a,0x7a8a5a,0xb06a6a,0x6a7a9a,
+                                0xd8d0bc,0x8a5a8a,0x5aa08a,0xcf8a4a,0x4a4a52,0xe0d2a0] },
+  build: { label:'Build', opts:[0,1,2,3], swatch:false,
+           names:['Slight','Lean','Solid','Heavy'] },
 };
 const LOOK_KEYS = Object.keys(LOOKS);
 
@@ -955,6 +966,11 @@ const HOME = { x: 0,  z: 0 };                  // the campfire
 const LAKE = { x:-30, z: 26, r: 27 };
 const TOWN = { x: 58, z:-46, r: 30 };
 const VALE_R = 124, VALE_BLEND = 42;
+// Where the road reaches the fence — the one way in, and the warden's post.
+const GATE = (()=>{
+  const th = Math.atan2(HOME.z-TOWN.z, HOME.x-TOWN.x), R = 23;
+  return { th, dx: Math.round(Math.cos(th)*R), dz: Math.round(Math.sin(th)*R) };
+})();
 const SHORE_Y = 31;                             // dry: comfortably above SEA (26)
 
 function valeHeight(x, z){
@@ -1295,6 +1311,27 @@ function structures(){
       put(x, gy+1, z, B.WOOD);
       if (a % 6 === 0) put(x, gy+2, z, B.WOOD);       // taller posts at intervals
     }
+  });
+
+  // ── the gatehouse ──
+  // The fence already had a gap where the path arrives; a gap is not a gate. Two
+  // piers and a lintel, so arriving at Fendmere is arriving SOMEWHERE, and the
+  // warden has a post to stand at.
+  box(TOWN.x+GATE.dx-5, TOWN.z+GATE.dz-5, TOWN.x+GATE.dx+5, TOWN.z+GATE.dz+5, (put)=>{
+    const cx = TOWN.x+GATE.dx, cz = TOWN.z+GATE.dz;
+    const gy = heightAt(cx, cz);
+    // piers set either side of the opening, across the line of the road
+    const px = Math.round(-Math.sin(GATE.th)), pz = Math.round(Math.cos(GATE.th));
+    for (const s of [-2, 2]){
+      for (let y=1; y<=4; y++)
+        for (const [ax,az] of [[0,0],[px,pz]])
+          put(cx + px*s + ax, gy+y, cz + pz*s + az, y===4 ? B.SLATE : B.STONE);
+    }
+    for (let i=-2; i<=2; i++) put(cx + px*i, gy+5, cz + pz*i, B.WOOD);   // lintel
+    for (let i=-2; i<=2; i++) put(cx + px*i, gy+6, cz + pz*i, B.SLATE);  // capping
+    for (let i=-3; i<=3; i++) for (let j=-1; j<=1; j++)                  // flagged road
+      put(cx + px*i + Math.round(Math.cos(GATE.th))*j,
+          gy, cz + pz*i + Math.round(Math.sin(GATE.th))*j, B.SLATE);
   });
 
   // a watchtower, so the town has a silhouette from 75 blocks out
@@ -2109,6 +2146,8 @@ const SKY_KEYS = [
 ];
 const hemi = scene.children.find(o=>o.isHemisphereLight);
 const ambient = scene.children.find(o=>o.isAmbientLight);
+const WEATHER = { overcast: 0 };
+const ANIM = { phase: 0, bob: 0, lean: 0 };      // the player's gait, smoothed
 
 // ═══════════════════════════ LIGHT ═══════════════════════════
 // The vale is dark and you are paid to change that. Light is not decoration here:
@@ -2192,6 +2231,20 @@ function updateDayNight(){
   SUN_DIR.set(Math.cos(ang)*0.86, Math.max(0.17, h), 0.34).normalize();
   const s = skyAt(tod);
   sun.position.copy(SUN_DIR).multiplyScalar(1);
+  // ── weather ──
+  // Every day looked identical, which made the sky a backdrop rather than
+  // something you check before going out. A slow value drifts across days: clear
+  // and blue, or grey and overcast with the sun knocked down and the haze raised.
+  const day = G.time / DAY_LENGTH;
+  const wx = fbm(day*0.37 + 11.5, day*0.19 + 4.25, 3, SEED+4711);
+  WEATHER.overcast += (clamp((wx-0.42)*2.2, 0, 1) - WEATHER.overcast) * 0.02;
+  const ov = WEATHER.overcast;
+  if (ov > 0.02){
+    const grey = _tmpc.setHex(0x8d95a2);
+    _kc[0].lerp(grey, ov*0.62); _kc[1].lerp(grey, ov*0.55);
+    _kc[2].lerp(grey, ov*0.48); _kc[4].lerp(grey, ov*0.40);
+    s.kI *= 1 - ov*0.55; s.hemiI *= 1 - ov*0.22; s.ambI *= 1 + ov*0.30;
+  }
   sun.color.copy(_kc[4]); sun.intensity = s.kI;
   if (hemi){ hemi.color.copy(_kc[5]); hemi.groundColor.copy(_kc[6]); hemi.intensity = s.hemiI; }
   if (ambient){ ambient.color.setHex(s.amb); ambient.intensity = s.ambI; }
@@ -2207,6 +2260,8 @@ function updateDayNight(){
     .addScalar(s.ambI*0.5);
   scene.fog.color.copy(_kc[2]);
   scene.background.copy(_kc[1]);
+  // Cloud cover rides the same weather value, so an overcast day is visibly one.
+  cloudMesh.count = Math.round(CLOUDS.length * (0.35 + WEATHER.overcast*0.65));
   cloudMesh.material.color.copy(_kc[3]).lerp(_tmpc.setHex(0xffffff), 0.35);
   cloudMesh.material.opacity = 0.5;
 }
@@ -3447,6 +3502,38 @@ function nearestHearth(){
       return { kind:'beacon', name:'your beacon', x:b.x, y:b.y, z:b.z };
   return null;
 }
+// ── the gate ────────────────────────────────────────────────────────────────
+// Fendmere shuts at dark and the warden means it. A fence with a hole in it is
+// scenery; a gate you can be turned away from is a place with rules. Being SWORN
+// to the town gets you in at any hour, and so does having work to settle — you
+// are not kept out in the rain holding a finished errand.
+let _wasInTown = false, _turnedBack = 0;
+function gateOpen(){
+  if (!isNight()) return true;
+  if (repIndex() >= 3) return true;                       // Sworn — you live here
+  return player.q.active.some(q => q.have >= q.need);      // work to hand in
+}
+function tickCurfew(){
+  const inside = inTown(player.pos.x, player.pos.z);
+  if (inside && !_wasInTown && !gateOpen()){
+    // Turn them round rather than teleporting them: push back along their own
+    // approach so it reads as being stopped, not as the world glitching.
+    const a = Math.atan2(player.pos.z-TOWN.z, player.pos.x-TOWN.x);
+    const R = TOWN.r*0.72 + 2.5;
+    player.pos.x = TOWN.x + Math.cos(a)*R;
+    player.pos.z = TOWN.z + Math.sin(a)*R;
+    player.vel.set(0,0,0);
+    if (_turnedBack <= 0){
+      _turnedBack = 6;
+      const w = TOWNSFOLK.find(f => f.role === 'gate');
+      toast(`${w ? w.name : 'The gatewarden'}: “Gate's shut. Nobody comes through after dark.”`, 4.4);
+    }
+    return;
+  }
+  _wasInTown = inside;
+  if (_turnedBack > 0) _turnedBack -= 1/30;
+}
+
 let restT = 0;
 function sitAt(h){
   if (hostilesAdjacent && hostilesAdjacent()){ toast('Not with something on you.', 2); return; }
@@ -3956,6 +4043,12 @@ function buildTownsfolk(){
     { role:'innkeeper', name:'Maerin of the Kettle', color:0x8a5a5a, hat:0x5a3232, dx:-1, dz:-6,
       line:'Bed\'s warm, roof\'s sound, and I lock the door at dark. Twelve coin.' },
     // people who simply live here
+    // The gate. Somebody has to be standing at it, or a wall is just scenery.
+    { role:'gate', name:'Gatewarden Aldith', color:0x4a5566, hat:0x2e3540,
+      dx:GATE.dx, dz:GATE.dz, wander:0,
+      lines:['State your business.',
+             'Nobody comes through after dark. That is the rule and I keep it.',
+             'The lamplighter, is it. Mind the road.'] },
     { role:'idler', name:'Old Cobb',   color:0x5a6a4a, hat:0x3a442e, dx: 9, dz:-4, wander:7,
       lines:['Rain coming. My knee says so.',
              'They walled that barrow up for a reason, you know.',
@@ -4351,6 +4444,12 @@ function applyLook(){
   u.hair.color.setHex(LOOKS.hair.opts[L.hair % LOOKS.hair.opts.length]);
   u.tunic.color.setHex(LOOKS.tunic.opts[L.tunic % LOOKS.tunic.opts.length]);
   u.cloakMat.color.setHex(LOOKS.cloak.opts[L.cloak % LOOKS.cloak.opts.length]);
+  if (u.trimMat) u.trimMat.color.setHex(LOOKS.trim.opts[(L.trim||0) % LOOKS.trim.opts.length]);
+  // Build changes the figure itself, not its palette — the one option that makes
+  // two characters read as different people from across a field.
+  const b = (L.build || 0);
+  const wide = 0.88 + b*0.09, tall = 1.06 - b*0.025;
+  player.mesh.scale.set(wide, tall, wide);
 }
 // A weapon in hand does more for readability than any amount of HUD text.
 function buildWeaponProp(){
@@ -4681,10 +4780,43 @@ function updateExplore(dt){
     player.mesh.visible = true;
     player.mesh.position.set(p.x, p.y, p.z);
     player.mesh.rotation.y = player.yaw + Math.PI;
-    const sw = wl > 0 ? Math.sin(G.time*speed*1.6)*0.42 : 0;
+    // ── walk / run / jump ──
+    // The old cycle was one sine on the legs and half of it on the arms, which
+    // reads as a wind-up toy. A real gait needs the legs to swing WIDER than the
+    // arms, the body to rise twice per stride, a lean into the run, and an airborne
+    // pose that is not the walk with the timing left running.
     const lg = player.mesh.userData.legs, ar = player.mesh.userData.arms;
-    if (lg){ lg[0].rotation.x = sw; lg[1].rotation.x = -sw; }
-    if (ar){ ar[0].rotation.x = -sw*0.55; ar[1].rotation.x = sw*0.55; }
+    const grounded = player.onGround !== false && Math.abs(player.vel.y) < 0.6;
+    const gait = sprint ? 2.15 : 1.55;
+    ANIM.phase += dt * (wl > 0 ? speed * gait : 0);
+    if (wl <= 0) ANIM.phase += dt * 0.9;                    // idle sway keeps ticking
+    const moving = wl > 0 && grounded;
+    const amp = moving ? (sprint ? 0.78 : 0.52) : 0;
+    const sw = Math.sin(ANIM.phase);
+    if (!grounded){
+      // Airborne: legs tuck, arms come up. Rising and falling read differently.
+      const rising = player.vel.y > 0;
+      const tuck = rising ? 0.85 : 0.30, split = rising ? 0.18 : 0.55;
+      if (lg){ lg[0].rotation.x = -tuck; lg[1].rotation.x = -tuck + split; }
+      if (ar){ ar[0].rotation.x = rising ? -1.15 : -0.45; ar[1].rotation.x = rising ? -0.95 : -0.30; }
+      ANIM.bob += (0 - ANIM.bob) * Math.min(1, dt*10);
+      ANIM.lean += ((rising ? -0.12 : 0.10) - ANIM.lean) * Math.min(1, dt*8);
+    } else {
+      if (lg){ lg[0].rotation.x = sw*amp;  lg[1].rotation.x = -sw*amp; }
+      // arms swing OPPOSITE the legs and shallower, and a little out from the body
+      if (ar){ ar[0].rotation.x = -sw*amp*0.62; ar[1].rotation.x = sw*amp*0.62;
+               ar[0].rotation.z =  0.08 + Math.abs(sw)*0.05;
+               ar[1].rotation.z = -0.08 - Math.abs(sw)*0.05; }
+      // twice per stride, and a small idle breath when standing
+      const wantBob = moving ? Math.abs(Math.cos(ANIM.phase)) * (sprint ? 0.085 : 0.05)
+                             : Math.sin(ANIM.phase*0.7)*0.012;
+      ANIM.bob += (wantBob - ANIM.bob) * Math.min(1, dt*12);
+      ANIM.lean += ((moving ? (sprint ? 0.17 : 0.07) : 0) - ANIM.lean) * Math.min(1, dt*6);
+    }
+    player.mesh.position.y = p.y + ANIM.bob;
+    player.mesh.rotation.x = ANIM.lean;
+    // the whole figure rolls very slightly into each step
+    player.mesh.rotation.z = moving ? sw * 0.035 : 0;
     const back = new THREE.Vector3(0,0,1).applyQuaternion(camera.quaternion);
     const eye = new THREE.Vector3(p.x, p.y + EYE, p.z);
     const want = 4.6;
@@ -6915,6 +7047,7 @@ function step(dt){
   // with the lamp lit, because the map is what you have SEEN.
   markSeen(player.pos.x, player.pos.z, 8 + daylight()*14 + (lanternOn() ? 4 : 0));
   drawMinimap(dt);
+  if (G.mode === 'explore') tickCurfew();
   tickCampfire(G.time, dt);
   // sky dome rides with the camera; clouds wrap around it
   skyDome.position.copy(camera.position);
@@ -7156,6 +7289,11 @@ function drawCreator(){
 
   document.getElementById('cLook').innerHTML = LOOK_KEYS.map(k=>{
     const L = LOOKS[k];
+    // Build has no colour to show, so it gets named pills instead of swatches.
+    if (L.swatch === false)
+      return `<div class="lrow"><span class="ll">${L.label}</span>` +
+        L.opts.map((c,i)=>`<span class="sw2 name ${CC.look[k]===i?'on':''}" data-look="${k}"
+          data-i="${i}">${L.names[i]}</span>`).join('') + `</div>`;
     return `<div class="lrow"><span class="ll">${L.label}</span>` +
       L.opts.map((c,i)=>`<span class="sw2 ${CC.look[k]===i?'on':''}" data-look="${k}"
         data-i="${i}" style="background:#${c.toString(16).padStart(6,'0')}"></span>`).join('') +
@@ -7427,6 +7565,7 @@ window.STRATA = {
   daylight, lightAt, playerLight, lanternOn, litBeacons, lightBeacon, nearestWaymark,
   regionAt, REGION_RULES, featureAt, treeAt, CRITTERS, populateCritters,
   nearestHearth, sitAt, SHRINES, SPELLS, SEEN, toggleWorldMap, drawWorldMap, markSeen,
+  WEATHER, LOOKS, applyLook, gateOpen, GATE,
   OIL_MAX, BEACON_COST, BEACON_R,
   openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
   flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners, backCovered, isSolid,
