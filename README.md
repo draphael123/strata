@@ -88,7 +88,26 @@ and impact bursts for Fireball and Sunder.
 - Contact shadows under every figure; campfire embers and smoke
 - Fog retuned to the sky dome's *horizon* colour so distance melts into haze
 
-Render cost at 7-chunk view distance: ~0.8 ms/frame, ~174k triangles, ~125 draw calls.
+**Away from Minecraft.** Perfect unit cubes are the loudest borrowed signal a voxel
+world sends — above palette or content. So:
+- **Blocks are bevelled.** Exposed edges are inset and bridged with a 45° chamfer,
+  plus corner patches where two chamfers meet. Interior edges are untouched, so a
+  flat wall or plain still tiles seamlessly and costs nothing — geometry appears
+  only on silhouettes, which is the only place it matters.
+- **Trees are real tapered meshes**, instanced: layered conifers, faceted oaks,
+  pale airy birches, each with its own yaw and lean so nothing is axis-aligned.
+  The tree *voxels* are still there and still block movement, sight and cover —
+  they are simply not drawn. Gameplay is untouched; only the picture changed.
+- **Golden hour**: a low raking sun, warm key against cool bounce, real cast
+  shadows, warm horizon haze, soft cloud banks.
+
+**Sound** — fully procedural WebAudio, no assets. Swings, impacts, bowstrings,
+casts, deaths, footfalls paced to ground speed, turn chimes, victory and defeat
+stings, a wind bed, distance-driven campfire crackle, and occasional birdsong.
+The context is only created on a real user gesture, so a headless `sim()` never
+makes a single node.
+
+Render cost at 7-chunk view distance: ~1.0 ms/frame, ~230k triangles.
 
 **M0 — world**
 - Chunked voxel terrain (16×16×80), value-noise FBM with continentalness + mountain mask

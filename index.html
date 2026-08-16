@@ -344,9 +344,13 @@ const MESH_BUDGET = 7;                     // ms/frame spent building chunk mesh
 const SAVE_KEY = 'strata-save-v1';
 
 const B = { AIR:0, GRASS:1, DIRT:2, STONE:3, SAND:4, WATER:5, WOOD:6, LEAF:7, SNOW:8, SLATE:9,
-            MOSS:10, PLANK:11, THATCH:12, EMBER:13, BIRCH:14, PINE:15 };
-const SOLID = [0,1,1,1,1,0,1,1,1,1, 1,1,1,1,1,1];   // blocks movement + line of sight
-const OPAQUE= [0,1,1,1,1,0,1,1,1,1, 1,1,1,1,1,1];   // blocks light for AO
+            MOSS:10, PLANK:11, THATCH:12, EMBER:13, BIRCH:14, PINE:15, TRUNK:16, SHRUB:17 };
+const SOLID = [0,1,1,1,1,0,1,1,1,1, 1,1,1,1,1,1,1,1];   // blocks movement + line of sight
+const OPAQUE= [0,1,1,1,1,0,1,1,1,1, 1,1,1,1,1,1,1,1];   // blocks light for AO
+// Tree voxels stay in the data — they still block movement, sight and cover —
+// but they are NOT drawn. Real tapered meshes are drawn over them instead, which
+// is what finally stops the forest reading as Minecraft.
+const UNDRAWN = { [B.TRUNK]:1, [B.BIRCH]:1, [B.LEAF]:1, [B.PINE]:1 };
 
 // per-block face colours: [top, side, bottom]
 const COL = {
@@ -369,6 +373,8 @@ const COL = {
   [B.EMBER]: [0xff9a3c, 0xe8742a, 0xc2551c],
   [B.BIRCH]: [0xd8d2c4, 0xcfc8b8, 0xbdb6a6],
   [B.PINE ]: [0x3c6438, 0x355a32, 0x2e4e2c],
+  [B.TRUNK]: [0x6d4f31, 0x5e432a, 0x503a24],
+  [B.SHRUB]: [0x4e7c3c, 0x477134, 0x3d632e],
 };
 
 // ═══════════════════════ character: stats, gear, spells ═══════════════════════
@@ -765,10 +771,14 @@ function genChunk(cx, cz){
   }
   // trees — scan a padded column range so canopies spill across chunk seams
   const PAD = 3;
+  const trees = [];
   for (let lz=-PAD; lz<CZ+PAD; lz++) for (let lx=-PAD; lx<CX+PAD; lx++){
     const t = treeAt(ox+lx, oz+lz); if (!t) continue;
     const base = t.topY + 1, topT = t.topY + t.trunk;
-    const bark = t.kind === 'birch' ? B.BIRCH : B.WOOD;
+    // treeAt returns only shape data — the mesh pass needs the column too
+    if (lx>=0 && lx<CX && lz>=0 && lz<CZ)
+      trees.push({ x:ox+lx, z:oz+lz, topY:t.topY, trunk:t.trunk, kind:t.kind });
+    const bark = t.kind === 'birch' ? B.BIRCH : B.TRUNK;
     const leaf = t.kind === 'pine'  ? B.PINE  : B.LEAF;
     for (let y=base; y<=topT; y++)
       if (lx>=0&&lx<CX&&lz>=0&&lz<CZ&&y<CY){ data[idx(lx,y,lz)] = bark; if(y>maxY) maxY=y; }
@@ -842,7 +852,7 @@ function genChunk(cx, cz){
     } else if (f.t === 'bush'){
       for (let dy=0; dy<f.hh; dy++) for (let dz=-1; dz<=1; dz++) for (let dx=-1; dx<=1; dx++){
         if (Math.abs(dx)===1 && Math.abs(dz)===1 && dy===f.hh-1) continue;
-        put(lx+dx, gy+1+dy, lz+dz, B.LEAF);
+        put(lx+dx, gy+1+dy, lz+dz, B.SHRUB);
       }
     } else if (f.t === 'rocks'){
       put(lx, gy+1, lz, B.STONE);
@@ -871,7 +881,7 @@ function genChunk(cx, cz){
     data[idx(lx,ly,lz)] = v;
     if (v !== B.AIR && ly > maxY) maxY = ly;
   }
-  return { data, maxY: Math.min(maxY+1, CY-1), mesh:null, wmesh:null, dirty:true };
+  return { data, trees, maxY: Math.min(maxY+1, CY-1), mesh:null, wmesh:null, dirty:true };
 }
 function ensureChunk(cx, cz){
   const k = ckey(cx,cz);
@@ -942,7 +952,7 @@ function buildChunkGeometry(cx, cz){
   for (let lz=0; lz<CZ; lz++)
   for (let lx=0; lx<CX; lx++){
     const b = c.data[idx(lx,y,lz)];
-    if (b === B.AIR) continue;
+    if (b === B.AIR || UNDRAWN[b]) continue;      // tree voxels are collision only
     const wx = ox+lx, wz = oz+lz;
     const water = (b === B.WATER);
     const jAmp = JITTER[b] || 0.06;
@@ -1055,7 +1065,7 @@ function buildChunkGeometry(cx, cz){
           const nrm = [F.n[0], F.n[1], F.n[2]];
           nrm[t] += hi ? 1 : -1;
           const nl = Math.hypot(nrm[0],nrm[1],nrm[2]) || 1;
-          const kk = F.shade * jit * AO_LEVEL[Math.min(ao[i0], ao[i1])] * 0.93;
+          const kk = F.shade * jit * AO_LEVEL[Math.min(ao[i0], ao[i1])] * 0.80;
           tmp.setHex(base);
           // winding: [inset_j, inset_i, outer_i, outer_j] faces outward
           for (const p of [cB, cA, outA, outB]){
@@ -1083,7 +1093,9 @@ function buildChunkGeometry(cx, cz){
           const ny2 = F.n[1] + (F.ta===1?(hiA?1:-1):0) + (F.tb===1?(hiB?1:-1):0);
           const nz2 = F.n[2] + (F.ta===2?(hiA?1:-1):0) + (F.tb===2?(hiB?1:-1):0);
           const nl2 = Math.hypot(nx2,ny2,nz2) || 1;
-          const kc = F.shade * jit * AO_LEVEL[ao[i]] * 0.88;
+          // kept dim: a corner patch faces halfway to everywhere, so at full
+          // brightness it catches the low sun and reads as a gold sparkle
+          const kc = F.shade * jit * AO_LEVEL[ao[i]] * 0.62;
           tmp.setHex(base);
           const s2 = P.length/3;
           for (const p of [p0,p1,p2]){
@@ -1287,6 +1299,26 @@ const SUN_DIR = new THREE.Vector3(0.62, 0.30, 0.42).normalize();
 const sun = new THREE.DirectionalLight(0xffcf8a, 1.55);   // hot enough to gild, not to blow out
 sun.position.copy(SUN_DIR);
 scene.add(sun);
+// Cast shadows. Flat ambient-occlusion-only lighting is very specifically the
+// look we're moving away from, and a low sun throws long raking shadows that do
+// more for the read than any amount of extra geometry.
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const SHADOW_HALF = 58;
+Object.assign(sun.shadow.camera, {
+  left:-SHADOW_HALF, right:SHADOW_HALF, top:SHADOW_HALF, bottom:-SHADOW_HALF, near:1, far:320 });
+sun.shadow.bias = -0.0012;
+sun.shadow.normalBias = 0.08;
+scene.add(sun.target);
+// The shadow box has to ride with the player or everything outside it goes unlit.
+function trackSun(x, y, z){
+  sun.position.set(x + SUN_DIR.x*150, y + SUN_DIR.y*150, z + SUN_DIR.z*150);
+  sun.target.position.set(x, y, z);
+  sun.target.updateMatrixWorld();
+  sun.shadow.camera.updateProjectionMatrix();
+}
 
 // ── sky dome: vertical gradient, warm horizon, and an actual sun ──
 const skyMat = new THREE.ShaderMaterial({
@@ -1430,6 +1462,76 @@ const highlight = new THREE.LineSegments(
   new THREE.LineBasicMaterial({ color:0x101318, transparent:true, opacity:0.85 }));
 highlight.visible = false; scene.add(highlight);
 
+// ───────────────────────────── tree meshes ─────────────────────────────
+// Real tapered geometry, instanced, drawn over the (invisible) tree voxels.
+const TREE_MAX = 900;
+function mkInst(geo, mat){
+  const m = new THREE.InstancedMesh(geo, mat, TREE_MAX);
+  m.frustumCulled = false; m.count = 0; m.castShadow = true; m.receiveShadow = true;
+  scene.add(m); return m;
+}
+const barkMat  = new THREE.MeshLambertMaterial({ color:0x6b4c30 });
+const birchMat = new THREE.MeshLambertMaterial({ color:0xd6d0c0 });
+const oakMat   = new THREE.MeshLambertMaterial({ color:0x4f7d38, flatShading:true });
+const pineMat  = new THREE.MeshLambertMaterial({ color:0x335c33, flatShading:true });
+const birchLeafMat = new THREE.MeshLambertMaterial({ color:0x74a04a, flatShading:true });
+const TREES = {
+  trunk:  mkInst(new THREE.CylinderGeometry(0.20, 0.38, 1, 6), barkMat),
+  birch:  mkInst(new THREE.CylinderGeometry(0.15, 0.24, 1, 6), birchMat),
+  oakTop: mkInst(new THREE.IcosahedronGeometry(1, 0), oakMat),
+  pineTop:mkInst(new THREE.ConeGeometry(1, 1, 7), pineMat),
+  birTop: mkInst(new THREE.IcosahedronGeometry(1, 0), birchLeafMat),
+};
+const _tm = new THREE.Matrix4(), _tq = new THREE.Quaternion(),
+      _tv = new THREE.Vector3(), _ts = new THREE.Vector3(), _te = new THREE.Euler();
+let treeChunkKey = null;
+function rebuildTrees(pcx, pcz){
+  const counts = { trunk:0, birch:0, oakTop:0, pineTop:0, birTop:0 };
+  const push = (key, x,y,z, sx,sy,sz, yaw, tilt)=>{
+    if (counts[key] >= TREE_MAX) return;
+    _te.set(tilt||0, yaw||0, 0);
+    _tq.setFromEuler(_te);
+    _tv.set(x,y,z); _ts.set(sx,sy,sz);
+    _tm.compose(_tv, _tq, _ts);
+    TREES[key].setMatrixAt(counts[key]++, _tm);
+  };
+  for (let dz=-VIEW; dz<=VIEW; dz++) for (let dx=-VIEW; dx<=VIEW; dx++){
+    if (dx*dx+dz*dz > VIEW*VIEW) continue;
+    const c = CHUNKS.get(ckey(pcx+dx, pcz+dz));
+    if (!c || !c.trees) continue;
+    for (const t of c.trees){
+      const x = t.x + 0.5, z = t.z + 0.5, base = t.topY + 1;
+      const h = t.trunk;
+      // a little yaw and lean on every tree — nothing in a forest is axis-aligned
+      const yaw = hash2(t.x, t.z, 991) * Math.PI * 2;
+      const tilt = (hash2(t.x, t.z, 992) - 0.5) * 0.10;
+      const jitter = 0.85 + hash2(t.x, t.z, 993) * 0.35;
+      if (t.kind === 'pine'){
+        push('trunk', x, base + h*0.5, z, 0.75, h+1.2, 0.75, yaw, tilt);
+        for (let i=0;i<3;i++){
+          const f = i/2;
+          push('pineTop', x, base + h - 1.2 + i*1.5, z,
+               (2.15 - f*1.05)*jitter, 2.4 - f*0.5, (2.15 - f*1.05)*jitter, yaw + i*0.5, tilt);
+        }
+      } else if (t.kind === 'birch'){
+        push('birch', x, base + h*0.5, z, 1, h+0.8, 1, yaw, tilt);
+        push('birTop', x, base + h + 0.25, z, 1.55*jitter, 1.35, 1.55*jitter, yaw, tilt);
+        push('birTop', x + 0.35, base + h - 0.75, z - 0.25, 1.05*jitter, 0.95, 1.05*jitter, yaw+1.1, tilt);
+      } else {
+        push('trunk', x, base + h*0.5, z, 1, h+0.6, 1, yaw, tilt);
+        push('oakTop', x, base + h + 0.35, z, 2.0*jitter, 1.55, 2.0*jitter, yaw, tilt);
+        push('oakTop', x - 0.55, base + h - 0.35, z + 0.4, 1.45*jitter, 1.15, 1.45*jitter, yaw+2.1, tilt);
+        push('oakTop', x + 0.6, base + h - 0.15, z - 0.35, 1.30*jitter, 1.05, 1.30*jitter, yaw+4.0, tilt);
+      }
+    }
+  }
+  for (const k of Object.keys(counts)){
+    TREES[k].count = counts[k];
+    TREES[k].instanceMatrix.needsUpdate = true;
+  }
+  return counts;
+}
+
 // ───────────────────────────── chunk streaming ─────────────────────────────
 const meshQueue = [];
 function updateStreaming(px, pz){
@@ -1466,6 +1568,9 @@ function updateStreaming(px, pz){
     far.sort((a,b)=> b[1] - a[1]);
     for (let i=0; i<far.length && CHUNKS.size > 600; i++) CHUNKS.delete(far[i][0]);
   }
+  // tree instances only need rebuilding when the player crosses a chunk
+  const tk = pcx + ',' + pcz;
+  if (tk !== treeChunkKey){ treeChunkKey = tk; rebuildTrees(pcx, pcz); }
 }
 function drainMeshQueue(budgetMs){
   const t0 = performance.now();
@@ -1476,7 +1581,8 @@ function drainMeshQueue(budgetMs){
     const g = buildChunkGeometry(job.cx, job.cz);
     if (c.mesh){ chunkRoot.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh = null; }
     if (c.wmesh){ chunkRoot.remove(c.wmesh); c.wmesh.geometry.dispose(); c.wmesh = null; }
-    if (g.solid){ c.mesh = new THREE.Mesh(g.solid, matSolid); c.mesh.frustumCulled = true; chunkRoot.add(c.mesh); }
+    if (g.solid){ c.mesh = new THREE.Mesh(g.solid, matSolid); c.mesh.frustumCulled = true;
+                  c.mesh.castShadow = true; c.mesh.receiveShadow = true; chunkRoot.add(c.mesh); }
     if (g.water){ c.wmesh = new THREE.Mesh(g.water, matWater); c.wmesh.renderOrder = 2; chunkRoot.add(c.wmesh); }
     c.dirty = false;
     if (performance.now() - t0 > budgetMs) break;
@@ -1489,7 +1595,8 @@ function forceRemeshAround(x, z, r=1){
     const g = buildChunkGeometry(cx+dx, cz+dz);
     if (c.mesh){ chunkRoot.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh = null; }
     if (c.wmesh){ chunkRoot.remove(c.wmesh); c.wmesh.geometry.dispose(); c.wmesh = null; }
-    if (g.solid){ c.mesh = new THREE.Mesh(g.solid, matSolid); chunkRoot.add(c.mesh); }
+    if (g.solid){ c.mesh = new THREE.Mesh(g.solid, matSolid);
+                  c.mesh.castShadow = true; c.mesh.receiveShadow = true; chunkRoot.add(c.mesh); }
     if (g.water){ c.wmesh = new THREE.Mesh(g.water, matWater); c.wmesh.renderOrder = 2; chunkRoot.add(c.wmesh); }
     c.dirty = false;
   }
@@ -1669,6 +1776,101 @@ function makeBody(kind){
   g.userData.arms = [armL, armR];
   return g;
 }
+// ═══════════════════════════════ AUDIO ═══════════════════════════════
+// Fully procedural WebAudio — no assets. The context is only created on a real
+// user gesture (autoplay policy), which also means a headless sim never makes a
+// single node, so sim() stays free.
+const AUD = { ctx:null, master:null, on:false, last:0, budget:0, ambGain:null, fireGain:null };
+function audioInit(){
+  if (AUD.ctx) return;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    AUD.ctx = new AC();
+    AUD.master = AUD.ctx.createGain();
+    AUD.master.gain.value = 0.34;
+    AUD.master.connect(AUD.ctx.destination);
+    // a low bed of wind that never stops
+    const bufSize = AUD.ctx.sampleRate * 2;
+    const buf = AUD.ctx.createBuffer(1, bufSize, AUD.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let lastV = 0;
+    for (let i=0;i<bufSize;i++){ lastV = (lastV + (Math.random()*2-1)*0.02) * 0.995; d[i] = lastV; }
+    const src = AUD.ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const lp = AUD.ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = 420;
+    AUD.ambGain = AUD.ctx.createGain(); AUD.ambGain.gain.value = 0.7;
+    src.connect(lp); lp.connect(AUD.ambGain); AUD.ambGain.connect(AUD.master); src.start();
+    // campfire crackle bed, gain driven by distance to the camp
+    const fsrc = AUD.ctx.createBufferSource(); fsrc.buffer = buf; fsrc.loop = true;
+    fsrc.playbackRate.value = 2.4;
+    const bp = AUD.ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value = 1100; bp.Q.value = 0.7;
+    AUD.fireGain = AUD.ctx.createGain(); AUD.fireGain.gain.value = 0;
+    fsrc.connect(bp); bp.connect(AUD.fireGain); AUD.fireGain.connect(AUD.master); fsrc.start();
+    AUD.on = true;
+  } catch(e){ AUD.on = false; }
+}
+function tone(freq, dur, type, vol, slideTo){
+  if (!AUD.on || AUD.budget <= 0) return;
+  AUD.budget--;
+  const t = AUD.ctx.currentTime, o = AUD.ctx.createOscillator(), g = AUD.ctx.createGain();
+  o.type = type || 'sine';
+  o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20,slideTo), t+dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol||0.2, t+0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  o.connect(g); g.connect(AUD.master); o.start(t); o.stop(t+dur+0.02);
+}
+function noise(dur, freq, vol, type){
+  if (!AUD.on || AUD.budget <= 0) return;
+  AUD.budget--;
+  const t = AUD.ctx.currentTime, n = Math.floor(AUD.ctx.sampleRate*dur);
+  const buf = AUD.ctx.createBuffer(1, n, AUD.ctx.sampleRate), d = buf.getChannelData(0);
+  for (let i=0;i<n;i++) d[i] = (Math.random()*2-1) * (1 - i/n);
+  const s = AUD.ctx.createBufferSource(); s.buffer = buf;
+  const f = AUD.ctx.createBiquadFilter(); f.type = type || 'bandpass';
+  f.frequency.value = freq; f.Q.value = 0.8;
+  const g = AUD.ctx.createGain(); g.gain.value = vol || 0.2;
+  s.connect(f); f.connect(g); g.connect(AUD.master); s.start(t);
+}
+const SFX = {
+  swing(){ noise(0.16, 1500, 0.16, 'bandpass'); },
+  hit(){   noise(0.14, 320, 0.34, 'lowpass'); tone(140, 0.12, 'square', 0.14, 70); },
+  crit(){  noise(0.18, 260, 0.42, 'lowpass'); tone(90, 0.20, 'sawtooth', 0.18, 45); },
+  bow(){   tone(680, 0.10, 'triangle', 0.16, 300); noise(0.07, 2400, 0.10); },
+  cast(){  tone(300, 0.34, 'sine', 0.16, 900); tone(450, 0.30, 'triangle', 0.08, 1200); },
+  fire(){  noise(0.34, 700, 0.30, 'lowpass'); tone(120, 0.30, 'sawtooth', 0.16, 50); },
+  heal(){  tone(520, 0.26, 'sine', 0.15, 780); tone(780, 0.30, 'sine', 0.09); },
+  die(){   tone(220, 0.45, 'sawtooth', 0.18, 60); noise(0.30, 200, 0.22, 'lowpass'); },
+  step(){  noise(0.06, 420, 0.055, 'lowpass'); },
+  ui(){    tone(880, 0.05, 'square', 0.05); },
+  turn(){  tone(560, 0.10, 'triangle', 0.08, 700); },
+  win(){   [523,659,784,1046].forEach((f,i)=> setTimeoutFX(()=>tone(f,0.28,'triangle',0.14), i*0.10)); },
+  lose(){  [392,330,262,196].forEach((f,i)=> setTimeoutFX(()=>tone(f,0.36,'sine',0.14), i*0.13)); },
+  alarm(){ tone(180, 0.30, 'sawtooth', 0.16, 260); noise(0.24, 500, 0.16, 'lowpass'); },
+};
+// birdsong, only in daylight exploration and only now and then
+let birdT = 4;
+function tickAudio(dt){
+  AUD.budget = 6;                                   // hard cap on voices per tick
+  if (!AUD.on) return;
+  if (AUD.fireGain){
+    const d = Math.hypot(player.pos.x-HOME.x, player.pos.z-HOME.z);
+    const want = G.mode === 'explore' ? Math.max(0, 1 - d/16) * 0.5 : 0;
+    AUD.fireGain.gain.value += (want - AUD.fireGain.gain.value) * Math.min(1, dt*3);
+  }
+  if (G.mode !== 'explore') return;
+  birdT -= dt;
+  if (birdT <= 0){
+    birdT = 5 + Math.random()*11;
+    const f = 1600 + Math.random()*1400;
+    tone(f, 0.09, 'sine', 0.05, f*1.5);
+    setTimeoutFX(()=> tone(f*1.1, 0.07, 'sine', 0.04, f*0.8), 0.13);
+  }
+}
+addEventListener('pointerdown', audioInit, { once:false });
+addEventListener('keydown', audioInit, { once:false });
+
 // ───────────────────────────── animation & fx ─────────────────────────────
 function setAnim(a, type, dur, v){ if (a && a.mesh) a.anim = { type, t:0, dur, v:v||'slash' }; }
 // Wind up, snap through, recover. A single sine makes every strike a slow
@@ -2216,8 +2418,15 @@ function updateExplore(dt){
   }
   player.vel.y = clamp(player.vel.y, -46, 12);
 
+  const wasGround = player.onGround;
   player.onGround = false;
   movePlayer(wx*dt, player.vel.y*dt, wz*dt, dt);
+  // footfalls, paced by actual ground speed
+  if (player.onGround && wl > 0){
+    player.stepPhase = (player.stepPhase || 0) + dt * speed * 0.42;
+    if (player.stepPhase >= 1){ player.stepPhase = 0; SFX.step(); }
+  } else player.stepPhase = 0;
+  if (player.onGround && !wasGround && player.vel.y < -6) SFX.step();
   if (p.y < -10){ p.copy(player.spawn); player.vel.set(0,0,0); }
 
   // camera
@@ -2409,6 +2618,7 @@ function damage(t, amt, note){
   hitFlash(t);
   sparks(t.x, t.y, t.z, t.isPlayer ? 0xff7a6a : 0xffd27a, 10);
   shake(t.isPlayer ? 0.55 : 0.22);
+  (amt >= 15 ? SFX.crit : SFX.hit)();
   t.hp = Math.max(0, t.hp - amt);
   setAnim(t, 'hurt', 0.28);
   CB.lastDamageRound = CB.round;              // any hit resets the stalemate clock
@@ -2417,6 +2627,7 @@ function damage(t, amt, note){
   if (t.hp <= 0){
     t.alive = false;
     setAnim(t, 'die', 0.55);
+    SFX.die();
     log(`<b>${t.name}</b> falls.`);
     if (!t.isPlayer) CB.xpPot += t.K.xp;
   }
@@ -2438,6 +2649,9 @@ function resolveAttack(a, t, ab){
 
   // visuals: a swing arc up close, a travelling shot at range
   if (ab.kind === 'ranged'){
+    if (ab.spell && ab.spell.id === 'fire') SFX.fire();
+    else if (a.isPlayer && player.weaponId === 'bow') SFX.bow();
+    else SFX.cast();
     const col = ab.spell && ab.spell.id === 'fire' ? 0xff8a3c
               : a.isPlayer && player.weaponId === 'bow' ? 0xd8c9a8 : 0xbfc8d4;
     const kind = ab.spell && ab.spell.id === 'fire' ? 'fire'
@@ -2445,6 +2659,7 @@ function resolveAttack(a, t, ab){
                  ? 'arrow' : 'stone';
     projectile(a.px, a.py+1.25, a.pz, t.x+0.5, t.y+1.05, t.z+0.5, col, kind);
   } else {
+    SFX.swing();
     slashArc(a, t.x, t.z, a.isPlayer && player.weaponId === 'axe' ? 0xffd9a0 : 0xffeec2);
   }
 
@@ -2486,6 +2701,7 @@ function castSpell(a, ab, target, cell){
   if (sp.id === 'wind'){
     const before = a.hp;
     a.hp = Math.min(a.maxHp, a.hp + 14);
+    SFX.heal();
     fct(a, '+'+(a.hp-before), '#a8cf72');
     log(`You draw a <b>Second Wind</b>.`);
   } else if (sp.id === 'bash'){
@@ -2589,6 +2805,7 @@ function startCombat(trigger){
   document.getElementById('hud').style.display = 'none';
   document.getElementById('lockmsg').style.display = 'none';
   clogEl.innerHTML = '';
+  SFX.alarm();
   log(`<b>Ambush.</b> ${foes.length} creature${foes.length>1?'s':''} close in.`);
   drawActs(); drawOrder();
   setHint('Combat — the ground you were standing on is the board.');
@@ -2602,6 +2819,7 @@ function endCombat(result){
 
   for (let i=entities.length-1; i>=0; i--) if (!entities[i].alive) despawnEntity(entities[i]);
 
+  if (result === 'win') SFX.win(); else if (result === 'lose') SFX.lose();
   const TXT = {
     win:  ['VICTORY',   `+${CB.xpPot} experience`,                    'Continue', 'on win'],
     lose: ['YOU FALL',  'You wake at your waystone, weakened.',       'Rise',     'on lose'],
@@ -2693,6 +2911,7 @@ function beginTurn(a){
     player.mana = Math.min(player.maxMana, player.mana + 2);   // trickle back each turn
     if (player.mana > before) drawVitals();
     recomputeReach();
+    SFX.turn();
     log(`— <b>Your turn</b> —`);
     setHint('Click a blue tile to move · pick an action · click a target');
   } else {
@@ -3184,6 +3403,7 @@ function newWorld(){
   CHUNKS.clear();
   for (let i=entities.length-1;i>=0;i--) despawnEntity(entities[i]);
   _structs = null;                          // structures are seed-dependent
+  treeChunkKey = null;                      // force a tree instance rebuild
   // You wake at the campfire, facing the lake, with the town on your right.
   const sx = HOME.x + 3, sz = HOME.z + 2;
   const sy = surfaceY(sx, sz);
@@ -3239,10 +3459,12 @@ function step(dt){
     updateCombat(dt);
   }
   drainMeshQueue(MESH_BUDGET);
+  tickAudio(dt);
   tickCampfire(G.time, dt);
   // sky dome rides with the camera; clouds wrap around it
   skyDome.position.copy(camera.position);
   skyDome.scale.setScalar(camera.far * 0.88);
+  trackSun(camera.position.x, camera.position.y, camera.position.z);
   tickClouds(G.time, camera.position.x, camera.position.z);
   matWater.uniforms.uTime.value = G.time;
   matWater.uniforms.uCam.value.copy(camera.position);
@@ -3486,7 +3708,7 @@ window.STRATA = {
   block(x,y,z){ return getBlock(x,y,z); },
   standable, surfaceY, reachable, hasLOS, planApproach,
   attack: resolveAttack, cast: castSpell, applyBuild, derive, knockback,
-  tickStatus, applyStatus, KINDS, STATUS,
+  tickStatus, applyStatus, KINDS, STATUS, AUD, SFX, audioInit, rebuildTrees,
   get abilities(){ return ABILITIES; },
   WEAPONS, SPELLS, STATS, HOME, LAKE, TOWN,
   teleport(x,z){
