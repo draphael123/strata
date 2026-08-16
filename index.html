@@ -3584,6 +3584,10 @@ addEventListener('keydown', e=>{
     if (n >= 0) selectAbility(n);
     if (e.code === 'Space'){ e.preventDefault(); endPlayerTurn(); }
     if (e.code === 'KeyQ'){ CB.selAbility = -1; refreshTargets(); drawActs(); }
+    if (e.code === 'KeyT'){
+      showAllThreat = !showAllThreat; drawThreat(); SFX.ui();
+      toast(showAllThreat ? 'Showing every creature’s reach' : 'Reach: hover a creature', 1.8);
+    }
   }
 });
 addEventListener('keyup', e=>{ keys[e.code] = false; });
@@ -3946,6 +3950,9 @@ function mkTiles(color, opacity){
 const tMove = mkTiles(0x5fa8e8, 0.30);
 const tPath = mkTiles(0xd8b45a, 0.62);
 const tHit  = mkTiles(0xd05a4a, 0.42);
+// where a creature could GET TO, and where it could get to AND hit you from
+const tReach  = mkTiles(0xe08a3c, 0.20);
+const tThreat = mkTiles(0xd0402c, 0.30);
 const _m4 = new THREE.Matrix4();
 const _camDir = new THREE.Vector3();
 function setTiles(mesh, cells, yOff=0.035){
@@ -4297,7 +4304,8 @@ function endCombat(result){
   CB.active = false;
   CB.phase = 'over';
   CB.result = result;
-  tMove.count = tPath.count = tHit.count = 0;
+  tMove.count = tPath.count = tHit.count = tReach.count = tThreat.count = 0;
+  CB.hoverFoe = null;
   highlight.visible = false;
 
   for (let i=entities.length-1; i>=0; i--) if (!entities[i].alive) despawnEntity(entities[i]);
@@ -4422,7 +4430,7 @@ function beginTurn(a){
     recomputeReach();
     SFX.turn();
     log(`— <b>Your turn</b> —`);
-    setHint('Click a blue tile to move · pick an action · click a target');
+    setHint('Move · act · T shows what every creature can reach');
   } else {
     CB.phase = 'aithink'; CB.timer = 0.45;
     tMove.count = 0; tHit.count = 0;
@@ -4443,6 +4451,7 @@ function recomputeReach(){
   setTiles(tMove, cells);
   refreshTargets();
   computeIntents();
+  drawThreat();
 }
 // ── enemy intent ──────────────────────────────────────────────────────────
 // What each creature WILL do if you end your turn from where you now stand.
@@ -4482,6 +4491,39 @@ function computeIntents(){
   }
 }
 const INTENT_ICON = { attack:'⚔', move:'→', wait:'…' };
+
+// ── enemy reach & threat ────────────────────────────────────────────────────
+// Two overlays: the ground a creature can COVER next turn, and the subset of
+// that ground it could also strike you from. Knowing how far a thing moves is
+// the difference between choosing your ground and guessing.
+let showAllThreat = false;
+function threatOf(e){
+  const ab = abilityOf(e);
+  const pool = e.mpPool || e.K.mp;
+  const r = reachable(e.x, e.y, e.z, pool, occupiedSet(e));
+  const reach = [], threat = [];
+  for (const [, n] of r){
+    reach.push([n.x, n.y, n.z]);
+    // could it stand here and reach the player's CURRENT square?
+    if (inRangeFrom(n.x, n.y, n.z, player, ab)) threat.push([n.x, n.y, n.z]);
+  }
+  return { reach, threat };
+}
+function drawThreat(){
+  if (!CB.active || CB.phase !== 'idle'){ tReach.count = 0; tThreat.count = 0; return; }
+  const live = CB.order.filter(o => !o.isPlayer && o.alive);
+  const targets = showAllThreat ? live : (CB.hoverFoe && CB.hoverFoe.alive ? [CB.hoverFoe] : []);
+  if (!targets.length){ tReach.count = 0; tThreat.count = 0; return; }
+  const seenR = new Set(), seenT = new Set(), R = [], T = [];
+  for (const e of targets){
+    const { reach, threat } = threatOf(e);
+    for (const c of reach){ const k = c.join(','); if (!seenR.has(k)){ seenR.add(k); R.push(c); } }
+    for (const c of threat){ const k = c.join(','); if (!seenT.has(k)){ seenT.add(k); T.push(c); } }
+  }
+  // threatened ground is drawn on top of merely-reachable ground
+  setTiles(tReach,  R.filter(c=> !seenT.has(c.join(','))), 0.028);
+  setTiles(tThreat, T, 0.042);
+}
 function refreshTargets(){
   const a = actor();
   if (!a || !a.isPlayer || CB.selAbility < 0){ tHit.count = 0; return; }
@@ -4665,6 +4707,7 @@ function startWalk(a, path, done){
   CB.walkDone = done;
   CB.phase = 'walk';
   tMove.count = 0; tPath.count = 0; tHit.count = 0;
+  tReach.count = 0; tThreat.count = 0;
   highlight.visible = false;
   drawActs();
 }
@@ -4847,6 +4890,10 @@ function updateCombat(dt){
             else tPath.count = 0;
           }
         } else { tPath.count = 0; CB.hoverKey = null; }
+      }
+      {
+        const hov = pickEnemyUnderMouse();
+        if (hov !== CB.hoverFoe){ CB.hoverFoe = hov; drawThreat(); }
       }
       if (pendingClick){ pendingClick = null; handleCombatClick(); }
       break;
@@ -5052,7 +5099,9 @@ function updateTags(dt){
     d.style.left = ((_pv.x*0.5+0.5)*innerWidth) + 'px';
     d.style.top  = ((-_pv.y*0.5+0.5)*innerHeight) + 'px';
     const st = statusText(a);
-    d.children[0].innerHTML = a.name + (st ? ' <b style="color:#ff9a6a">'+st+'</b>' : '');
+    const mv = (CB.active && !a.isPlayer && a.alive)
+      ? ` <span style="color:#e0a86a">◄${a.mpPool || a.K.mp}►</span>` : '';
+    d.children[0].innerHTML = a.name + mv + (st ? ' <b style="color:#ff9a6a">'+st+'</b>' : '');
     d.children[1].firstChild.style.width = Math.max(0, a.hp/a.maxHp*100) + '%';
     // intent chip, only on your own turn — that's when it can change your mind
     let ic = d.children[2];
@@ -6009,6 +6058,7 @@ window.STRATA = {
   attack: resolveAttack, cast: castSpell, applyBuild, derive, knockback,
   tickStatus, applyStatus, KINDS, STATUS, AUD, SFX, audioInit, rebuildTrees, WIND,
   MUSIC, musicInit, tickMusic, IS_TOUCH, TOUCH, initTouch,
+  threatOf, drawThreat, tReach, tThreat, save:saveGame, load:loadGame,
   isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,
   openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
   flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners, backCovered, isSolid,
