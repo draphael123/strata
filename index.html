@@ -65,6 +65,18 @@
   .bar.xp>i{background:linear-gradient(90deg,#5c7c3a,#9ac25c)}
   .bar.mn>i{background:linear-gradient(90deg,#3a5c8e,#6ea8e0)}
   .bar.oil>i{background:linear-gradient(90deg,#8a5a1e,#ffc26a)}
+  #minimap{position:absolute;right:14px;top:64px;width:150px;height:150px;
+    border-radius:50%;border:2px solid rgba(0,0,0,.55);
+    box-shadow:0 4px 18px rgba(0,0,0,.5), inset 0 0 22px rgba(0,0,0,.55);
+    background:#0a0e16;opacity:.94;pointer-events:none;z-index:6}
+  #worldmap{position:absolute;inset:0;display:none;place-items:center;
+    background:rgba(6,8,12,.88);z-index:40}
+  #worldmap.on{display:grid}
+  #wmC{border:2px solid rgba(180,150,90,.35);border-radius:4px;
+    box-shadow:0 10px 60px rgba(0,0,0,.7);max-width:88vw;max-height:78vh;background:#0a0e16}
+  #wmLegend{margin-top:12px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:#8d97a7;text-align:center}
+  #wmLegend b{color:#e0a24a}
   .row{display:flex;justify-content:space-between;align-items:baseline}
   .val{font-size:12px;color:#dfd8c8;font-variant-numeric:tabular-nums}
 
@@ -371,6 +383,10 @@
     <div class="bar xp"><i id="vXpB" style="width:0%"></i></div>
     <div id="vLamp" class="lbl" style="margin-top:7px;color:#e0a24a"></div>
     <div id="vGear" class="lbl" style="margin-top:3px;color:#8d97a7"></div>
+  </div>
+  <canvas id="minimap" width="150" height="150"></canvas>
+  <div id="worldmap"><canvas id="wmC" width="720" height="720"></canvas>
+    <div id="wmLegend">M or ESC to close · you have seen <b id="wmSeen">0</b>% of the vale</div>
   </div>
   <div id="toast"></div>
   <div id="quests"></div>
@@ -3562,6 +3578,135 @@ function tickBarrowLights(t){
   }
 }
 
+// ═══════════════════════════ MAPS ═══════════════════════════
+// What you have SEEN, not what exists. Explored ground is remembered on a coarse
+// grid and saved with everything else, so the world map fills in as you walk it
+// and the rest stays under fog. Terrain colour is sampled from the same functions
+// that build the world, so the map can never disagree with the ground.
+const MAP_CELL = 4;                       // world units per remembered cell
+const MAP_R = 150;                        // cells from origin the map covers
+const SEEN = new Set();
+const mapKey = (cx, cz)=> cx + ',' + cz;
+function markSeen(x, z, r=7){
+  const c0 = Math.round(r/MAP_CELL);
+  const cx = Math.round(x/MAP_CELL), cz = Math.round(z/MAP_CELL);
+  for (let dz=-c0; dz<=c0; dz++) for (let dx=-c0; dx<=c0; dx++){
+    if (dx*dx + dz*dz > c0*c0) continue;
+    SEEN.add(mapKey(cx+dx, cz+dz));
+  }
+}
+// A cell's colour on the map. Water, sand, stone, snow and the region palette —
+// the same source of truth the terrain uses.
+const MAP_COL = {
+  water:'#28577d', sand:'#c9b884', snow:'#e6ecf4', rock:'#767a83',
+  oldwood:'#3f6b33', pinewood:'#2f5738', heath:'#6f7355',
+  meadow:'#6f9a4d', marsh:'#4a6b52', ruinfield:'#77785e',
+};
+function mapColour(x, z){
+  const h = heightAt(x, z);
+  if (h <= SEA) return MAP_COL.water;
+  if (h <= SEA+1) return MAP_COL.sand;
+  if (h > 54) return MAP_COL.snow;
+  if (h > 46) return MAP_COL.rock;
+  return MAP_COL[regionAt(x, z)] || MAP_COL.meadow;
+}
+// Landmarks worth drawing: the things you would actually put on a map.
+function mapMarks(){
+  const m = [ { x:HOME.x, z:HOME.z, c:'#ffb35e', s:'fire' },
+              { x:TOWN.x, z:TOWN.z, c:'#e8d9a8', s:'town' },
+              { x:BARROW.x, z:BARROW.z, c:'#b06a9a', s:'barrow' } ];
+  for (const b of litBeacons()) m.push({ x:b.x, z:b.z, c:'#ffc26a', s:'beacon' });
+  for (const c of chests)
+    if (!player.q.chests[c.id]) m.push({ x:c.x, z:c.z, c:'#9fd0ff', s:'cache' });
+  for (const q of player.q.active)
+    if (q.site) m.push({ x:q.site.x, z:q.site.z, c:'#9ac25c', s:'errand' });
+  return m;
+}
+let _miniT = 0;
+function drawMinimap(dt){
+  const cv = document.getElementById('minimap');
+  if (!cv) return;
+  _miniT -= dt;
+  if (_miniT > 0) return;
+  _miniT = 0.25;                                   // four redraws a second is plenty
+  const g = cv.getContext('2d');
+  const S = cv.width, half = S/2, SPAN = 3;        // world units per pixel
+  g.clearRect(0,0,S,S);
+  const px = player.pos.x, pz = player.pos.z;
+  for (let sy=0; sy<S; sy+=3) for (let sx=0; sx<S; sx+=3){
+    const ddx = sx-half, ddy = sy-half;
+    if (ddx*ddx + ddy*ddy > half*half) continue;
+    const wx = Math.round(px + ddx*SPAN), wz = Math.round(pz + ddy*SPAN);
+    g.fillStyle = mapColour(wx, wz);
+    g.fillRect(sx, sy, 3, 3);
+  }
+  // marks
+  for (const mk of mapMarks()){
+    const sx = half + (mk.x-px)/SPAN, sy = half + (mk.z-pz)/SPAN;
+    if ((sx-half)**2 + (sy-half)**2 > half*half) continue;
+    g.fillStyle = mk.c; g.beginPath(); g.arc(sx, sy, 3, 0, 6.29); g.fill();
+  }
+  // creatures you can actually see, and the wildlife
+  for (const e of entities){
+    if (!e.alive) continue;
+    const sx = half + (e.px-px)/SPAN, sy = half + (e.pz-pz)/SPAN;
+    if ((sx-half)**2 + (sy-half)**2 > half*half) continue;
+    g.fillStyle = '#cf5a4c'; g.fillRect(sx-1.5, sy-1.5, 3, 3);
+  }
+  // you, and which way you are facing
+  g.save(); g.translate(half, half); g.rotate(-player.yaw);
+  g.fillStyle = '#fff6e0'; g.beginPath();
+  g.moveTo(0,-6); g.lineTo(4,5); g.lineTo(0,2.5); g.lineTo(-4,5); g.closePath(); g.fill();
+  g.restore();
+  // north
+  g.fillStyle = 'rgba(255,255,255,.55)'; g.font = '9px monospace';
+  g.textAlign = 'center'; g.fillText('N', half, 11);
+}
+let worldMapOpen = false;
+function toggleWorldMap(){
+  worldMapOpen = !worldMapOpen;
+  document.getElementById('worldmap').classList.toggle('on', worldMapOpen);
+  if (worldMapOpen){ drawWorldMap(); if (locked) document.exitPointerLock(); }
+}
+function drawWorldMap(){
+  const cv = document.getElementById('wmC');
+  const g = cv.getContext('2d');
+  const S = cv.width, cells = MAP_R*2, px = S/cells;
+  g.fillStyle = '#080b12'; g.fillRect(0,0,S,S);
+  let seen = 0;
+  for (let cz=-MAP_R; cz<MAP_R; cz++) for (let cx=-MAP_R; cx<MAP_R; cx++){
+    if (!SEEN.has(mapKey(cx,cz))) continue;        // unvisited stays under fog
+    seen++;
+    g.fillStyle = mapColour(cx*MAP_CELL, cz*MAP_CELL);
+    g.fillRect((cx+MAP_R)*px, (cz+MAP_R)*px, px+0.6, px+0.6);
+  }
+  // a soft vignette so the fog reads as fog rather than as a black background
+  const grd = g.createRadialGradient(S/2,S/2,S*0.30, S/2,S/2,S*0.62);
+  grd.addColorStop(0,'rgba(8,11,18,0)'); grd.addColorStop(1,'rgba(8,11,18,.55)');
+  g.fillStyle = grd; g.fillRect(0,0,S,S);
+  const toS = (w)=> (w/MAP_CELL + MAP_R)*px;
+  for (const mk of mapMarks()){
+    if (!SEEN.has(mapKey(Math.round(mk.x/MAP_CELL), Math.round(mk.z/MAP_CELL)))) continue;
+    const sx = toS(mk.x), sy = toS(mk.z);
+    g.fillStyle = mk.c;
+    g.beginPath(); g.arc(sx, sy, mk.s==='town'?6:4.5, 0, 6.29); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 1.4; g.stroke();
+    if (mk.s === 'town' || mk.s === 'barrow' || mk.s === 'fire'){
+      g.fillStyle = '#e8e2d4'; g.font = '11px monospace'; g.textAlign = 'center';
+      g.fillText(mk.s === 'town' ? TOWN_NAME : mk.s === 'barrow' ? 'The Barrow' : 'Camp',
+                 sx, sy - 9);
+    }
+  }
+  const sx = toS(player.pos.x), sy = toS(player.pos.z);
+  g.save(); g.translate(sx, sy); g.rotate(-player.yaw);
+  g.fillStyle = '#fff6e0'; g.beginPath();
+  g.moveTo(0,-9); g.lineTo(6,7); g.lineTo(0,3.5); g.lineTo(-6,7); g.closePath(); g.fill();
+  g.strokeStyle = '#1a1410'; g.lineWidth = 1.5; g.stroke();
+  g.restore();
+  document.getElementById('wmSeen').textContent =
+    Math.min(99, Math.round(seen / (cells*cells) * 100 * 6));
+}
+
 // ── wildlife ────────────────────────────────────────────────────────────────
 // Nothing in this world existed that didn't want to kill you, which makes a
 // wilderness read as an arena. These are pure scenery: no hp, no turn order, they
@@ -4304,8 +4449,11 @@ addEventListener('keydown', e=>{
   }
   if (townFolk){ if (e.code === 'KeyE') closeTown(); return; }
   if (G.paused) return;
+  if (e.code === 'KeyM'){ toggleWorldMap(); return; }
+  if (worldMapOpen){ if (e.code === 'Escape') toggleWorldMap(); return; }
   if (e.code === 'KeyI'){ openPause('bag'); return; }
   if (e.code === 'KeyC'){ openPause('char'); return; }
+  if (e.code === 'KeyJ'){ openPause('quests'); return; }
   if (e.code === 'KeyV'){
     SETTINGS.thirdPerson = !SETTINGS.thirdPerson; saveSettings();
     toast(SETTINGS.thirdPerson ? 'Third person' : 'First person', 1.2);
@@ -6522,6 +6670,7 @@ function saveGame(){
            look:player.look, gear:player.gear, rest:player.rest },
       tod: G.tod,
       spawn: { x:player.spawn.x, y:player.spawn.y, z:player.spawn.z },
+      seen: [...SEEN],                    // the map you have filled in
     }));
   } catch(e){ /* quota — not fatal for a prototype */ }
 }
@@ -6552,6 +6701,8 @@ function loadGame(){
     player.gear = s.p.gear || {};
     player.rest = s.p.rest || null;
     for (const q of player.q.active) q.spawned = false;   // sites repopulate on return
+    SEEN.clear();
+    if (Array.isArray(s.seen)) for (const k of s.seen) SEEN.add(k);
     if (typeof s.tod === 'number') G.tod = s.tod;
     player.spawn.set(s.spawn.x, s.spawn.y, s.spawn.z);
     return true;
@@ -6582,6 +6733,7 @@ function newWorld(){
   // What happened since you last stood in front of the reeve. Deliberately NOT
   // saved: the ledger is about this trip out, and it resets when you report in.
   player.run = { lit:0, killed:0, died:0, fled:0, chests:0, oilSpent:0 };
+  SEEN.clear();                                 // a new world is unmapped
   player.gear = {};
   // The waymark is a second mesh per cache and it has to go too. Starting a new
   // world used to leave the old one's chests in the scene — invisible while they
@@ -6668,6 +6820,10 @@ function step(dt){
     if (CRITTER_T <= 0){ CRITTER_T = 2.0; populateCritters(); }
     tickCritters(dt, G.time);
   }
+  // You remember ground you have stood near — further by day, and further still
+  // with the lamp lit, because the map is what you have SEEN.
+  markSeen(player.pos.x, player.pos.z, 8 + daylight()*14 + (lanternOn() ? 4 : 0));
+  drawMinimap(dt);
   tickCampfire(G.time, dt);
   // sky dome rides with the camera; clouds wrap around it
   skyDome.position.copy(camera.position);
@@ -7161,7 +7317,7 @@ window.STRATA = {
   isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,
   daylight, lightAt, playerLight, lanternOn, litBeacons, lightBeacon, nearestWaymark,
   regionAt, REGION_RULES, featureAt, treeAt, CRITTERS, populateCritters,
-  nearestHearth, sitAt, SHRINES, SPELLS,
+  nearestHearth, sitAt, SHRINES, SPELLS, SEEN, toggleWorldMap, drawWorldMap, markSeen,
   OIL_MAX, BEACON_COST, BEACON_R,
   openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
   flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners, backCovered, isSolid,
