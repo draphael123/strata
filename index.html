@@ -3020,7 +3020,12 @@ function chestSpotsNear(px, pz){
     if (inTown(x,z) || inCamp(x,z)) continue;
     const y = surfaceY(x, z);
     if (y <= SEA+1 || y > 52) continue;
-    out.push({ id:`c${cx}_${cz}`, x, y, z, tier:1 });
+    // The world needs a gradient or there is no reason to go further than the
+    // nearest cache. Distance from Fendmere IS the difficulty dial: the good
+    // stones stand a long way out, where the things that live there are worse.
+    const away = Math.hypot(x-TOWN.x, z-TOWN.z);
+    const tier = away > 240 ? 3 : away > 130 ? 2 : 1;
+    out.push({ id:`c${cx}_${cz}`, x, y, z, tier });
   }
   // hand-placed in the barrow
   const D = BARROW, F = BARROW_FLOOR;
@@ -3029,6 +3034,50 @@ function chestSpotsNear(px, pz){
     if (Math.hypot(px-x, pz-z) < 110) out.push({ id:`b${i}`, x, y:F, z, tier:t });
   }
   return out;
+}
+// A chest lying flat in the grass is invisible until you are standing on it, so the
+// open world had nothing in it to walk TOWARDS — you went to town, you went to the
+// barrow, and the rest was scenery. Every cache now stands under a marker you can
+// read from a ridge, and the silhouette tells you what it is worth before you
+// commit the walk: one stacked cairn, a standing stone, or a lit trilith.
+function makeWaymark(tier){
+  const g = new THREE.Group();
+  // The world is already full of grey boulders, so a grey standing stone is not a
+  // signal — it is more scenery. Waymarks are PALE dressed stone with an ochre rag
+  // tied round them: nothing natural in this world is that colour, so a marker
+  // reads as made-by-someone from as far away as you can see it.
+  const rock = new THREE.MeshLambertMaterial({ color:0xb9bcc2 });
+  const lich = new THREE.MeshLambertMaterial({ color:0x9aa48a });
+  const rag  = new THREE.MeshLambertMaterial({ color:0xc4642c });
+  const stone = (w,h,d,y,rot,mat)=>{
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat || rock);
+    m.position.y = y; m.rotation.y = rot; m.castShadow = true; return m;
+  };
+  if (tier <= 1){                                  // a cairn — someone passed here
+    g.add(stone(0.9,0.34,0.8, 0.17, 0.3),
+          stone(0.7,0.30,0.62, 0.49, 1.1, lich),
+          stone(0.46,0.26,0.42, 0.77, 2.2),
+          stone(0.26,0.20,0.24, 1.00, 0.6, lich),
+          stone(0.5,0.10,0.5, 0.62, 0.5, rag));           // rag round the middle
+  } else if (tier === 2){                          // a standing stone
+    g.add(stone(0.62,3.2,0.5, 1.60, 0.35),
+          stone(1.1,0.26,0.9, 0.13, 0.9, lich),
+          stone(0.72,0.16,0.6, 2.55, 0.35, rag),
+          stone(0.10,0.9,0.10, 3.60, 0.35),                 // a pole
+          stone(0.06,0.34,0.56, 3.85, 0.35, rag));          // and a pennant
+  } else {                                         // a trilith, and it is lit
+    g.add(stone(0.5,3.6,0.45, 1.80, 0.2),
+          stone(0.5,2.6,0.45, 1.30, -0.5).translateX(1.15),
+          stone(0.5,2.6,0.45, 1.30, 0.7).translateX(-1.15),
+          stone(1.9,0.3,0.7, 0.15, 0.15, lich),
+          stone(0.6,0.18,0.55, 3.05, 0.2, rag),
+          stone(0.08,1.1,0.08, 4.15, 0.2),
+          stone(0.06,0.42,0.7, 4.45, 0.2, rag));
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6),
+      new THREE.MeshBasicMaterial({ color:0xffd27a, transparent:true, opacity:0.8, fog:false }));
+    glow.position.y = 3.75; g.add(glow);
+  }
+  return g;
 }
 function makeChest(tier){
   const g = new THREE.Group();
@@ -3048,7 +3097,11 @@ function refreshChests(){
   const want = chestSpotsNear(player.pos.x, player.pos.z);
   const keep = new Set(want.map(c=>c.id));
   for (let i=chests.length-1;i>=0;i--){
-    if (!keep.has(chests[i].id)){ scene.remove(chests[i].mesh); chests.splice(i,1); }
+    if (!keep.has(chests[i].id)){
+      scene.remove(chests[i].mesh);
+      if (chests[i].mark) scene.remove(chests[i].mark);
+      chests.splice(i,1);
+    }
   }
   const have = new Set(chests.map(c=>c.id));
   for (const s of want){
@@ -3058,7 +3111,13 @@ function refreshChests(){
     m.rotation.y = hash2(s.x, s.z, SEED+9)*6.28;
     if (player.q.chests && player.q.chests[s.id]) m.userData.lid.rotation.x = -1.5;
     scene.add(m);
-    chests.push({ ...s, mesh:m });
+    // the marker that makes it findable, set a pace off so it doesn't hide the chest
+    const w = makeWaymark(s.tier);
+    const wa = hash2(s.z, s.x, SEED+11)*6.28;
+    w.position.set(s.x+0.5 + Math.cos(wa)*1.4, s.y, s.z+0.5 + Math.sin(wa)*1.4);
+    w.rotation.y = wa;
+    scene.add(w);
+    chests.push({ ...s, mesh:m, mark:w });
   }
 }
 function nearestChest(){
@@ -3089,6 +3148,33 @@ function openChest(c){
   }
   toast(lines.join(' · '), 3.4);
   drawVitals();
+  // Finding one thing should tell you where the next one is. Without a thread to
+  // pull, a cache is a coincidence; with one, the map is something you are working
+  // through. Search wider than the streamed chests so it can point off-screen.
+  const nx = nextWaymark(c.x, c.z);
+  if (nx) toast(`Cut stone on the horizon — ${nx.dist} paces ${nx.dir}.`, 4.6);
+}
+const BEARING_NAME = ['north','north-east','east','south-east','south','south-west','west','north-west'];
+// Sweeps the same deterministic grid the chests come from, so it can name a site
+// that has not streamed in yet.
+function nextWaymark(fromX, fromZ){
+  const gx = Math.floor(fromX/CHEST_GRID), gz = Math.floor(fromZ/CHEST_GRID);
+  let best = null, bd = Infinity;
+  for (let dz=-9; dz<=9; dz++) for (let dx=-9; dx<=9; dx++){
+    const cx = gx+dx, cz = gz+dz;
+    if (hash2(cx, cz, SEED+5150) > 0.34) continue;
+    const x = cx*CHEST_GRID + Math.floor(hash2(cx,cz,SEED+7)*CHEST_GRID);
+    const z = cz*CHEST_GRID + Math.floor(hash2(cz,cx,SEED+8)*CHEST_GRID);
+    if (inTown(x,z) || inCamp(x,z)) continue;
+    if (player.q.chests && player.q.chests[`c${cx}_${cz}`]) continue;
+    const d = Math.hypot(x-fromX, z-fromZ);
+    if (d < 6 || d >= bd) continue;
+    bd = d; best = { x, z };
+  }
+  if (!best) return null;
+  const ang = Math.atan2(best.x-fromX, -(best.z-fromZ));          // 0 = north(-Z)
+  const oct = ((Math.round(ang/(Math.PI/4)) % 8) + 8) % 8;
+  return { dist: Math.round(bd), dir: BEARING_NAME[oct] };
 }
 
 // ── barrow lighting ─────────────────────────────────────────────────────────
@@ -5748,7 +5834,11 @@ function newWorld(){
   player.bag = {}; player.worn = [null, null];  // a new run starts empty-handed
   player.q = { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none', chests:{} };
   player.gear = {};
-  for (const c of chests) scene.remove(c.mesh);
+  // The waymark is a second mesh per cache and it has to go too. Starting a new
+  // world used to leave the old one's chests in the scene — invisible while they
+  // were plain boxes on the ground, obvious the moment they grew 4-metre pennants:
+  // 13 caches, 37 markers, after two resets.
+  for (const c of chests){ scene.remove(c.mesh); if (c.mark) scene.remove(c.mark); }
   chests.length = 0;
   applyBuild(true);
 }
@@ -6303,7 +6393,7 @@ window.STRATA = {
   dig(x,y,z){ setBlock(x,y,z,B.AIR); forceRemeshAround(x,z,1); if (CB.active) settleFalls(); },
   place(x,y,z,b=B.STONE){ setBlock(x,y,z,b); forceRemeshAround(x,z,1); if (CB.active) settleFalls(); },
   block(x,y,z){ return getBlock(x,y,z); },
-  standable, surfaceY, reachable, hasLOS, planApproach,
+  standable, surfaceY, reachable, hasLOS, planApproach, nextWaymark, trait,
   attack: resolveAttack, cast: castSpell, applyBuild, derive, knockback,
   tickStatus, applyStatus, KINDS, STATUS, AUD, SFX, audioInit, rebuildTrees, WIND,
   MUSIC, musicInit, tickMusic, IS_TOUCH, TOUCH, initTouch,
