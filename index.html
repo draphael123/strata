@@ -77,6 +77,8 @@
   #wmLegend{margin-top:12px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;
     color:#8d97a7;text-align:center}
   #wmLegend b{color:#e0a24a}
+  #saveinfo{margin-top:10px;font-size:11px;letter-spacing:.1em;color:#7d8798;text-align:center}
+  #saveinfo b{color:var(--gold)}
   .row{display:flex;justify-content:space-between;align-items:baseline}
   .val{font-size:12px;color:#dfd8c8;font-variant-numeric:tabular-nums}
 
@@ -460,6 +462,8 @@
     <div class="ptabs">
       <button class="ptab on" data-tab="char">Character</button>
       <button class="ptab" data-tab="bag">Satchel</button>
+      <button class="ptab" data-tab="quests">Errands</button>
+      <button class="ptab" data-tab="guide">Guide</button>
       <button class="ptab" data-tab="set">Settings</button>
     </div>
     <div class="pbody" id="pBody"></div>
@@ -514,6 +518,7 @@
     <button class="btn" id="btnPlay">Enter the world</button>
     <button class="btn ghost small" id="btnNew">New world</button>
   </div>
+  <div id="saveinfo"></div>
   <div id="bootfail">
     <b>The game engine didn't load.</b>
     <div id="bootwhy"></div>
@@ -6546,10 +6551,79 @@ function drawPause(){
       }).join('') : `<div class="bd" style="color:#7d8798;font-size:12px">Empty. Creatures sometimes leave something behind.</div>`);
   }
 
+  else if (pauseTab === 'quests'){
+    const row = (q, done)=>`
+      <div class="offer ${done?'done':''}">
+        <span style="flex:1"><div class="on3">${q.title}</div>
+          <div class="od3">${q.desc}</div>
+          ${q.site ? `<div class="orw">${Math.round(Math.hypot(q.site.x-player.pos.x, q.site.z-player.pos.z))} paces ${bearingTo(q.site.x, q.site.z)}</div>` : ''}
+          <div class="orw">${q.coin} coin · ${q.xp} xp</div></span>
+        <span class="prog">${q.have}/${q.need}</span></div>`;
+    const active = player.q.active.map(q=>row(q, q.have>=q.need)).join('');
+    body.innerHTML = `
+      <div class="psec">In hand</div>
+      ${active || `<div class="od3">Nothing in hand. The reeve at ${TOWN_NAME} keeps the board.</div>`}
+      <div class="psec">The lamp</div>
+      <div class="od3">${Object.keys(player.q.beacons||{}).length} beacon${Object.keys(player.q.beacons||{}).length===1?'':'s'} lit ·
+        ${Math.round(player.q.oil||0)} oil in hand</div>
+      <div class="psec">The barrow</div>
+      <div class="od3">${player.q.barrow==='done' ? 'Aelthwyn is put out.'
+        : player.q.barrow==='active' ? 'Open, and something is still down there.'
+        : 'Sealed. The reeve will speak of it once you have settled something.'}</div>
+      <div class="psec">Standing</div>
+      <div class="od3">${repTier().name} — ${repTier().blurb} · ${player.q.done} settled · ${player.q.coin} coin</div>`;
+  }
+
+  else if (pauseTab === 'guide'){
+    body.innerHTML = `
+      <div class="psec">The work</div>
+      <div class="od3">The vale is dark. ${TOWN_NAME} pays you to push the light outward.
+        Your lamp burns <b>oil</b>, and setting a <b>beacon</b> at a standing stone costs
+        24 of it — a piece of your own safety, spent on ground that stays lit when you
+        come back through it at midnight.</div>
+      <div class="psec">Light</div>
+      <div class="od3"><b>L</b> shutters the lantern. Lit, you can work — and things find
+        you from half a field away. Shuttered, you are hard to see and nearly blind.
+        After dark, <b>unlit ground hides you as well as scrub does</b>, so where the
+        light falls is a question you answer with your feet.</div>
+      <div class="psec">A fight</div>
+      <div class="od3">Combat freezes the world where it stands — <b>the ground you were
+        standing on is the board</b>. Click a blue tile to move, pick an action, click a
+        target. Moving spends an action, so every turn is move-or-strike.</div>
+      <div class="psec">Position is most of it</div>
+      <div class="od3">
+        <b>High ground</b> +25%, low ground −15%.<br>
+        <b>Behind</b> a creature hurts far more than in front of it — and facing only
+        changes on its own turn, so stepping round something after it acts works.<br>
+        <b>Cover</b> at your back denies rear attacks; <b>Guard</b> covers your own back
+        when there is nothing to stand against.<br>
+        <b>Breaking away</b> from something in reach gives it a free swing.<br>
+        <b>Melee blows carry</b> to everything else in reach, so being surrounded is the
+        melee build's payoff. <b>Shooting</b> with a foe adjacent costs you 40%.</div>
+      <div class="psec">What things do</div>
+      <div class="od3">Every creature shows what it will do to you <b>if you stop where
+        you are</b>. <b>T</b> shows what every creature can reach. Skirmishers back off
+        before they shoot; armoured things hold their ground; stalkers go around you.</div>
+      <div class="psec">Keeping going</div>
+      <div class="od3">Rest at the campfire, a shrine, or one of your own beacons with
+        <b>E</b> — vigour, mana and lamp, at the cost of four hours. Potions cost an
+        action. Death returns you to the last fire or bed you claimed.</div>
+      <div class="psec">Keys</div>
+      <div class="od3">WASD move · SPACE jump · SHIFT sprint · <b>L</b> lantern ·
+        <b>E</b> talk, open, rest, light a beacon · <b>M</b> map · <b>I</b> satchel ·
+        <b>C</b> character · <b>J</b> errands · <b>V</b> view · ESC pause</div>`;
+  }
+
   else {
     const t = (k,label)=> `<div class="srow2"><label>${label}</label>
       <button class="tog ${SETTINGS[k]?'on':''}" data-toggle="${k}">${SETTINGS[k]?'On':'Off'}</button></div>`;
     body.innerHTML = `
+      <div class="psec">Saved game</div>
+      <div class="srow2"><label>Your progress saves itself</label>
+        <button class="tog" id="sSave">Save now</button></div>
+      <div class="srow2"><label>Go back to the last save</label>
+        <button class="tog" id="sLoad">Load</button></div>
+      <div class="bd" style="font-size:10px;color:#6e7889;margin:-2px 0 8px" id="sSaveInfo"></div>
       <div class="psec">Sound</div>
       ${t('sfx','Sound effects')}
       <div class="srow2"><label>Effects volume</label>
@@ -6580,6 +6654,23 @@ function drawPause(){
         View distance takes effect as chunks stream in.</div>`;
   }
 
+  const sv = document.getElementById('sSave');
+  if (sv) sv.onclick = ()=>{ saveGame(); SFX.ui(); toast('Saved.', 1.8); drawPause(); };
+  const ld = document.getElementById('sLoad');
+  if (ld) ld.onclick = ()=>{
+    if (!localStorage.getItem(SAVE_KEY)){ toast('No save to go back to.', 2); return; }
+    if (loadGame()){
+      applyBuild(false); refreshChests(); rebuildTrees(0,0);
+      closePause(); SFX.ui(); toast('Loaded.', 2);
+    } else toast('That save could not be read.', 2.4);
+  };
+  const si = document.getElementById('sSaveInfo');
+  if (si){
+    const raw = localStorage.getItem(SAVE_KEY);
+    si.textContent = raw
+      ? `A save exists — ${(raw.length/1024).toFixed(0)} KB. Loading discards anything since.`
+      : 'No save yet.';
+  }
   body.querySelectorAll('[data-use]').forEach(b=> b.onclick = ()=> useItem(b.dataset.use));
   body.querySelectorAll('[data-equip]').forEach(b=> b.onclick = ()=> equipItem(b.dataset.equip));
   body.querySelectorAll('[data-unequip]').forEach(b=> b.onclick = ()=> unequipItem(+b.dataset.unequip));
@@ -7118,8 +7209,26 @@ document.getElementById('btnPlay').onclick = ()=>{
   if (loadGame()){ applyBuild(); enterWorld(); }
   else openCreator();                       // no save yet → make a character first
 };
-document.getElementById('btnNew').onclick = openCreator;
+document.getElementById('btnNew').onclick = ()=>{
+  if (localStorage.getItem(SAVE_KEY) &&
+      !confirm('Start a new world? Your saved game is discarded.')) return;
+  openCreator();
+};
 document.getElementById('bBtn').onclick = ()=> leaveCombat(CB.result || 'win');
+// Say plainly whether there is anything to come back to, so "Enter the world" and
+// "New world" are a choice rather than a guess.
+(function titleSave(){
+  const el = document.getElementById('saveinfo');
+  if (!el) return;
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw){ el.textContent = 'No saved game — either button starts a new one.'; return; }
+    const s = JSON.parse(raw);
+    const lit = s.p && s.p.q && s.p.q.beacons ? Object.keys(s.p.q.beacons).length : 0;
+    el.innerHTML = `Saved game — level ${(s.p&&s.p.lvl)||1}, ${lit} beacon${lit===1?'':'s'} lit.
+      <b>Enter the world</b> continues it.`;
+  } catch(e){ el.textContent = ''; }
+})();
 newWorld();                                     // prime a world so the title screen has state
 applySettings();
 VIEW = SETTINGS.view;
