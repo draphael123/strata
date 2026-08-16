@@ -746,15 +746,18 @@ function featureAt(x, z){
   if (inCamp(x,z) || inTown(x,z) || onPath(x,z)) return null;
   const slope = Math.abs(heightAt(x+1,z)-topY) + Math.abs(heightAt(x,z+1)-topY);
   const h = hash2(x, z, SEED+4242);
-  if (h < 0.0040) return { t:'boulder', topY, r:1+Math.floor(hash2(x,z,SEED+11)*2),
+  if (h < 0.0105) return { t:'boulder', topY, r:1+Math.floor(hash2(x,z,SEED+11)*2),
                            hh:1+Math.floor(hash2(x,z,SEED+12)*3) };
   if (slope > 2) return null;
-  if (h < 0.0072) return { t:'log',   topY, len:3+Math.floor(hash2(x,z,SEED+13)*4),
+  // Density raised deliberately: with the flank rule, something solid to put your
+  // back against IS the counter, and open ground offered one in only 27% of
+  // ambushes. Furniture is now tactical infrastructure, not decoration.
+  if (h < 0.0125) return { t:'log',   topY, len:3+Math.floor(hash2(x,z,SEED+13)*4),
                            dir:hash2(x,z,SEED+14) < 0.5 };
-  if (h < 0.0102) return { t:'stump', topY };
-  if (h < 0.0130) return { t:'snag',  topY, hh:5+Math.floor(hash2(x,z,SEED+15)*5) };
-  if (h < 0.0290) return { t:'bush',  topY, r:1, hh:1+Math.floor(hash2(x,z,SEED+16)*2) };
-  if (h < 0.0330) return { t:'rocks', topY };
+  if (h < 0.0175) return { t:'stump', topY };
+  if (h < 0.0215) return { t:'snag',  topY, hh:5+Math.floor(hash2(x,z,SEED+15)*5) };
+  if (h < 0.0470) return { t:'bush',  topY, r:1, hh:1+Math.floor(hash2(x,z,SEED+16)*2) };
+  if (h < 0.0560) return { t:'rocks', topY };
   return null;
 }
 
@@ -3131,6 +3134,13 @@ function buildAbilities(){
   ABILITIES = [{
     id:'strike', name:'Strike', ap:1, mana:0, kind:w.kind, range:w.range, dmg,
     desc:`${w.kind==='ranged'?'Range '+w.range:'Melee'} · ${dmg[0]}–${dmg[1]}`,
+  },{
+    // Measured: only 27% of ambushes offered a cell that was both in reach of a
+    // foe AND had cover at your back. Without an answer in the open, the flank
+    // rule was a terrain lottery. Guard is that answer, and it costs you the
+    // attack — so every turn is now attack-or-protect rather than always attack.
+    id:'guard', name:'Guard', ap:1, mana:0, kind:'guard', range:0,
+    desc:'Cover your own back until your next turn',
   }];
   const sp = SPELLS.find(s=>s.id===player.spellId);
   if (sp){
@@ -3229,6 +3239,7 @@ function hostilesAdjacent(t){
 // behind you is THE counter to being flanked — which makes terrain the
 // defensive tool in a fight you are always outnumbered in.
 function backCovered(t){
+  if (t.guarding) return true;                  // watching your own back
   const fy = t.faceYaw === undefined ? 0 : t.faceYaw;
   for (const s of [-1, -0.7, 0.7]){             // directly behind, and both rear corners
     const bx = Math.round(t.x - Math.sin(fy + s*0.9));
@@ -3585,6 +3596,7 @@ function beginTurn(a){
   CB.walkPath = null; CB.walker = null;
   CB.hoverPath = []; tPath.count = 0;
   CB.aiQueue = []; CB.aiPlanned = false;
+  a.guarding = false;                           // a guard lasts until your next turn
   tickStatus(a);
   if (!a.alive){ nextTurn(); return; }          // burned to death on your own turn
   if (a.isPlayer){
@@ -3679,6 +3691,7 @@ function selectAbility(i){
   refreshTargets(); drawActs();
   const ab = ABILITIES[CB.selAbility];
   if (!ab) setHint('Click a blue tile to move · pick an action · click a target');
+  else if (ab.kind === 'guard')  setHint('GUARD — click anywhere; no one gets behind you this round');
   else if (ab.kind === 'self')   setHint(`${ab.name.toUpperCase()} — click anywhere to use it`);
   else if (ab.spell && ab.spell.id === 'cleave') setHint('CLEAVE — click anywhere to strike all around you');
   else setHint(`${ab.name.toUpperCase()} — click a highlighted enemy`);
@@ -3714,6 +3727,13 @@ function handleCombatClick(){
     if (a.ap < ab.ap){ toast('No action left'); return; }
     if (ab.mana > player.mana){ toast('Not enough mana'); return; }
 
+    if (ab.kind === 'guard'){
+      a.ap -= ab.ap; a.guarding = true;
+      setAnim(a, 'guard', 0.5);
+      ring(a.x, a.y, a.z, 0x9fd0ff, 1.5); SFX.ui();
+      log(`You set your <b>guard</b>.`);
+      CB.selAbility = -1; afterPlayerAction(); return;
+    }
     if (ab.kind === 'self'){                      // Second Wind and the like
       a.ap -= ab.ap;
       castSpell(a, ab, null, null);
@@ -4881,7 +4901,7 @@ window.STRATA = {
   tickStatus, applyStatus, KINDS, STATUS, AUD, SFX, audioInit, rebuildTrees, WIND,
   isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,
   openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
-  flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners,
+  flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners, backCovered, isSolid,
   TOWNSFOLK, openTown, closeTown, acceptErrand, turnInErrands, refreshOffers,
   populateSites, repTier, buildTownsfolk, creditKill,
   get abilities(){ return ABILITIES; },
