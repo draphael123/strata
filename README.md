@@ -230,6 +230,29 @@ stat tweak:
 
 ---
 
+## The hook: the lamplighter
+
+**The vale is dark, and Fendmere pays you to change that.** Light is a real quantity the
+whole game reads — `lightAt(x,z)` for anywhere in the world, `playerLight()` for how
+visible *you* are, which is what everything hunting you actually looks at.
+
+- **The lantern** (`L` to shutter). Lit, it throws a pool you can work in and makes you
+  visible half a field away. Shuttered, you're very hard to find and nearly blind. Oil
+  burns only after dark.
+- **Beacons** (`E` at a waymark). Costs **24 oil out of your own lamp** — that's the trade
+  the game sits on: your own safety, spent on ground that stays lit when you come back
+  through it at midnight. They persist, and hold a 22-unit radius.
+- **Darkness is cover.** Unlit ground conceals as well as scrub, so *where is the light*
+  is a positional question during a fight, not just while walking.
+
+Measured, walking past a wolf looking straight at you: **noon 70% caught · night with the
+lantern lit 80% · night shuttered 40%.**
+
+Two things only the screenshots caught: the barrow brazier light values read as *nothing*
+on open ground (no walls out there to catch them), and a beacon's visual reach ran well
+past the radius the rules use — which quietly teaches the player the wrong thing about
+where they are safe. Tie visual reach to the gameplay radius.
+
 ## Creature tactics
 
 Each kind carries a `tactic` that decides what a good *cell* is, so a Wisp wants a
