@@ -205,6 +205,9 @@
   #quests .qd{color:#8d97a7;font-size:10px}
   #quests .qq{margin-bottom:9px}
   #quests .qq.ready .qp{color:var(--gold)}
+  #eye{position:absolute;left:50%;top:calc(50% + 34px);transform:translateX(-50%);
+    font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:#ffb066;
+    text-shadow:0 2px 8px #000;opacity:0;transition:opacity .18s;pointer-events:none}
   #prompt{position:absolute;left:50%;bottom:22%;transform:translateX(-50%);
     font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#efe8d8;
     background:rgba(13,15,20,.78);border:1px solid rgba(216,180,90,.4);
@@ -333,6 +336,7 @@
   <div id="toast"></div>
   <div id="quests"></div>
   <div id="prompt"></div>
+  <div id="eye"></div>
 </div>
 
 <div id="hurtv"></div>
@@ -2127,6 +2131,27 @@ function surfaceY(x, z){
 }
 const DIRS4 = [[1,0],[-1,0],[0,1],[0,-1]];
 
+// ── ground that acts on you ─────────────────────────────────────────────────
+// Terrain you cannot edit, but that is never neutral: wading is slow, loose
+// sand drags, and scrub hides you. Route choice matters without adding a verb.
+function moveCostInto(x, y, z){
+  const here = getBlock(x, y, z);
+  if (here === B.WATER) return 3;            // wading
+  const under = getBlock(x, y-1, z);
+  if (under === B.SAND) return 2;            // loose footing
+  if (here === B.SHRUB || here === B.LEAF) return 2;  // pushing through scrub
+  return 1;
+}
+// standing in or against scrub breaks up your outline
+function concealed(x, y, z){
+  if (getBlock(x, y, z) === B.SHRUB || getBlock(x, y, z) === B.LEAF) return true;
+  for (const [dx,dz] of DIRS4){
+    const b = getBlock(x+dx, y, z+dz);
+    if (b === B.SHRUB || b === B.LEAF) return true;
+  }
+  return false;
+}
+
 // BFS over standable cells. Returns Map("x,y,z" -> {cost, px,py,pz}).
 function reachable(sx, sy, sz, maxCost, blocked){
   const out = new Map();
@@ -2147,7 +2172,7 @@ function reachable(sx, sy, sz, maxCost, blocked){
         }
         if (ny === null) continue;
         const extra = (ny > cy) ? 1 : 0;
-        const cost = cur.cost + 1 + extra;
+        const cost = cur.cost + moveCostInto(nx, ny, nz) + extra;
         if (cost > maxCost) continue;
         const k = nx+','+ny+','+nz;
         if (blocked && blocked.has(k)) continue;
@@ -3548,6 +3573,36 @@ function updateExplore(dt){
   if (folk) pr.textContent = `E — speak with ${folk.name}`;
   else if (chest) pr.textContent = 'E — open the chest';
 
+  // ── detection ─────────────────────────────────────────────────────────────
+  // Creatures look where they are GOING, not at you. You are seen only inside a
+  // forward cone, in line of sight, and not hidden in scrub — so approaching
+  // from behind, through cover, or simply going round is a real option, and the
+  // fight starts on ground you picked.
+  let anyAlert = false, closestSeen = 999;
+  for (const e of entities){
+    if (!e.alive || inTown(e.x, e.z)) continue;
+    const dx = p.x-e.px, dz = p.z-e.pz;
+    const d = Math.hypot(dx, dz);
+    const range = e.K.aggro * (sprint ? 1.30 : 1) * (concealed(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)) ? 0.45 : 1);
+    let sees = false;
+    if (d < range && Math.abs(p.y-e.py) < 6){
+      const fy = e.faceYaw === undefined ? e.yaw : e.faceYaw;
+      const dot = (Math.sin(fy)*dx + Math.cos(fy)*dz) / (d || 1);
+      // a wide forward cone, plus a small "right on top of me" bubble
+      if (dot > 0.20 || d < 3.2)
+        sees = hasLOS(p.x, p.y+1.4, p.z, e.px, e.py+1.0, e.pz);
+    }
+    e.notice = clamp((e.notice || 0) + (sees ? dt*(1.6 + (range-d)*0.10) : -dt*0.75), 0, 1);
+    if (e.notice > 0.02){ anyAlert = true; closestSeen = Math.min(closestSeen, e.notice); }
+    if (e.notice >= 1){ e.spotted = true; startCombat(e); break; }
+  }
+  {
+    const el = document.getElementById('eye');
+    const worst = entities.reduce((m,e)=> Math.max(m, e.notice||0), 0);
+    el.style.opacity = worst > 0.03 ? String(0.25 + worst*0.75) : '0';
+    el.textContent = worst > 0.66 ? 'SEEN' : worst > 0.3 ? 'noticing…' : 'something stirs';
+  }
+
   // creature wander + aggro
   for (const e of entities){
     e.bob += dt*2.2;
@@ -3564,7 +3619,11 @@ function updateExplore(dt){
     e.pz = lerp(e.pz, e.z+0.5, Math.min(1, dt*4));
     const moving = Math.abs(e.px-(e.x+0.5)) + Math.abs(e.pz-(e.z+0.5)) > 0.06;
     e.mesh.position.set(e.px, e.py + Math.sin(e.bob)*0.045, e.pz);
-    e.mesh.rotation.y = Math.atan2(p.x-e.px, p.z-e.pz);
+    // face where they're WANDERING — turning to stare at the player defeats the
+    // whole point of a vision cone
+    const look = (e.notice||0) > 0.25 ? Math.atan2(p.x-e.px, p.z-e.pz) : e.yaw;
+    e.faceYaw = look;
+    e.mesh.rotation.y = look;
     if (e.mesh.userData.legs){                    // stroll while they wander
       const sw = moving ? Math.sin(e.bob*3.4)*0.38 : 0;
       e.mesh.userData.legs[0].rotation.x =  sw;
@@ -3572,14 +3631,7 @@ function updateExplore(dt){
       e.mesh.userData.arms[0].rotation.x = -sw*0.6;
       e.mesh.userData.arms[1].rotation.x =  sw*0.6;
     }
-    // aggro: sees you and you are close — but never inside the town walls
-    if (inTown(e.x, e.z)) continue;
-    const d = Math.hypot(p.x-e.px, p.z-e.pz);
-    if (d < e.K.aggro && Math.abs(p.y-e.py) < 6 &&
-        hasLOS(p.x, p.y+1.4, p.z, e.px, e.py+1.2, e.pz)){
-      startCombat(e);
-      break;
-    }
+    // (engagement is driven by the detection pass above)
   }
 }
 function tryEngage(){
@@ -3807,10 +3859,16 @@ function resolveAttack(a, t, ab){
   // where you stand relative to where they're looking — the biggest lever there is
   const fl = flankOf(a.x, a.z, t);
   if (fl.m !== 1){ dmg = Math.round(dmg*fl.m); notes.push(fl.label); }
+  if (a.isPlayer && CB.drop && !CB.dropUsed){
+    CB.dropUsed = true; dmg = Math.round(dmg*1.9); notes.push('THE DROP ×1.9');
+  }
   if (a.status && a.status.dread){ dmg = Math.round(dmg*0.70); notes.push('DREAD −30%'); }
   const ignoresCover = ab.spell && ab.spell.id === 'pierce';
   if (ab.kind === 'ranged' && !ignoresCover && hasCover(a, t)){
     dmg = Math.round(dmg*0.55); notes.push('COVER −45%');
+  }
+  if (ab.kind === 'ranged' && !ignoresCover && concealed(t.x, t.y, t.z)){
+    dmg = Math.round(dmg*0.75); notes.push('CONCEALED −25%');
   }
   faceToward(a, t.x, t.z);
 
@@ -3948,8 +4006,12 @@ function startCombat(trigger){
   foes = foes.slice(0, 5);
   if (!foes.includes(trigger)) foes.push(trigger);
 
+  // THE DROP. If nothing had noticed you when the fight begins, you chose this —
+  // you act first no matter the initiative, and the first blow lands like a
+  // backstab. This is the entire reward for scouting instead of blundering in.
+  CB.drop = !trigger.spotted && (trigger.notice || 0) < 0.9;
   const roll = a => (a.isPlayer ? 12 : a.K.init) + Math.random()*6;
-  player.init = roll(player);
+  player.init = CB.drop ? 999 : roll(player);
   for (const f of foes){
     f.init = roll(f);
     f.px = f.x+0.5; f.py = f.y; f.pz = f.z+0.5;
@@ -3969,8 +4031,16 @@ function startCombat(trigger){
   document.getElementById('hud').style.display = 'none';
   document.getElementById('lockmsg').style.display = 'none';
   clogEl.innerHTML = '';
-  SFX.alarm();
-  log(`<b>Ambush.</b> ${foes.length} creature${foes.length>1?'s':''} close in.`);
+  if (CB.drop){
+    CB.dropUsed = false;
+    for (const f of foes) f.faceYaw = f.yaw;      // still looking the wrong way
+    SFX.turn();
+    log(`<b>You have the drop.</b> Nothing has seen you yet — strike before they turn.`);
+    toast('THE DROP — first blow lands hard', 3);
+  } else {
+    SFX.alarm();
+    log(`<b>Spotted.</b> ${foes.length} creature${foes.length>1?'s':''} close in.`);
+  }
   tutStart();
   drawActs(); drawOrder();
   setHint('Combat — the ground you were standing on is the board.');
@@ -4069,8 +4139,14 @@ function nextTurn(){
   beginTurn(actor());
 }
 function beginTurn(a){
-  a.mp = a.isPlayer ? player.mpMax : a.K.mp;
-  a.ap = a.isPlayer ? player.apMax : 1;
+  // Two actions. MOVING IS AN ACTION — it hands you your full movement, and you
+  // may keep using what's left of it for free. So a turn is move+strike, or
+  // strike+strike, or move+move to cover ground. Previously you got full
+  // movement AND two attacks, which made repositioning free and attacking
+  // always correct.
+  a.ap = a.isPlayer ? player.apMax : 2;
+  a.mp = 0;
+  a.mpPool = a.isPlayer ? player.mpMax : a.K.mp;
   CB.selAbility = -1;
   CB.walkPath = null; CB.walker = null;
   CB.hoverPath = []; tPath.count = 0;
@@ -4096,10 +4172,12 @@ function beginTurn(a){
   }
   drawOrder(); drawPips(); drawActs();
 }
+// how far you could go right now: what's left of an open move, or a fresh one
+function budget(a){ return a.mp > 0 ? a.mp : (a.ap > 0 ? a.mpPool : 0); }
 function recomputeReach(){
   const a = actor();
   if (!a || !a.isPlayer){ tMove.count = 0; return; }
-  CB.reach = reachable(a.x, a.y, a.z, a.mp, occupiedSet(a));
+  CB.reach = reachable(a.x, a.y, a.z, budget(a), occupiedSet(a));
   const cells = [];
   for (const [k, n] of CB.reach){ if (n.cost > 0) cells.push([n.x, n.y, n.z]); }
   setTiles(tMove, cells);
@@ -4256,6 +4334,10 @@ function handleCombatClick(){
   const node = CB.reach.get(k);
   if (!node || node.cost === 0) return;
   const path = pathFrom(CB.reach, cell.x, cell.y, cell.z);
+  if (a.mp <= 0){                       // opening a fresh move costs an action
+    if (a.ap <= 0){ toast('No actions left'); return; }
+    a.ap -= 1; a.mp = a.mpPool;
+  }
   a.mp -= node.cost;
   startWalk(a, path, ()=>{ tutAdvance('moved'); afterPlayerAction(); });
 }
@@ -4264,7 +4346,7 @@ function afterPlayerAction(){
   if (!player.alive){ endCombat('lose'); return; }
   if (!CB.order.some(o => !o.isPlayer && o.alive)){ endCombat('win'); return; }
   const a = actor();
-  if (a.mp <= 0 && a.ap <= 0){ nextTurn(); return; }
+  if (budget(a) <= 0 && a.ap <= 0){ nextTurn(); return; }
   CB.phase = 'idle';
   recomputeReach();
 }
@@ -4318,7 +4400,7 @@ function planApproach(a, target, ab){
   // creature blind to any route longer than one turn — stand it at the foot of
   // a 3-block ledge and every neighbouring cell scores worse than staying put,
   // so it does nothing, forever. The budget limits the walk, not the lookahead.
-  const far = reachable(a.x, a.y, a.z, Math.max(a.mp*4, 18), occupiedSet(a));
+  const far = reachable(a.x, a.y, a.z, Math.max((a.mpPool||a.K.mp)*4, 18), occupiedSet(a));
 
   // Among the cells that can reach the target, prefer the ones behind it. This
   // is what turns the flank rule into pressure rather than a stat on a card.
@@ -4339,10 +4421,12 @@ function planApproach(a, target, ab){
   }
 
   const path = pathFrom(far, goal.x, goal.y, goal.z);
+  const pool = a.mpPool || a.K.mp;
   let cost = 0, cut = 0;
   for (let i=1; i<path.length; i++){
-    const stepCost = 1 + (path[i][1] > path[i-1][1] ? 1 : 0);
-    if (cost + stepCost > a.mp) break;
+    const stepCost = moveCostInto(path[i][0], path[i][1], path[i][2])
+                   + (path[i][1] > path[i-1][1] ? 1 : 0);
+    if (cost + stepCost > pool) break;
     cost += stepCost; cut = i;
   }
   const end = cut > 0 ? path[cut] : [a.x, a.y, a.z];
@@ -4366,7 +4450,8 @@ function aiStep(){
   if (!CB.aiQueue.length){ nextTurn(); return; }
   const step = CB.aiQueue.shift();
   if (step.t === 'move'){
-    a.mp -= step.cost;
+    a.ap -= 1;                                   // creatures pay for movement too
+    a.mp = Math.max(0, (a.mpPool||a.K.mp) - step.cost);
     startWalk(a, step.path, ()=>{ CB.phase = 'aithink'; CB.timer = 0.28; });
   } else if (step.t === 'attack'){
     a.ap -= 1;
@@ -4621,7 +4706,7 @@ function drawOrder(){
 }
 function drawPips(){
   const a = actor();
-  const mp = a && a.isPlayer ? a.mp : 0, mpM = player.mpMax;
+  const mp = a && a.isPlayer ? budget(a) : 0, mpM = player.mpMax;
   const ap = a && a.isPlayer ? a.ap : 0, apM = player.apMax;
   document.getElementById('mpPips').innerHTML =
     Array.from({length:mpM}, (_,i)=>`<span class="pip ${i<mp?'on':''}"></span>`).join('');
@@ -5516,9 +5601,12 @@ window.STRATA = {
         if (best) { endPlayerTurn(); continue; }     // already in the best spot
       }
       // else close the distance, using the SAME planner the creatures use
-      const pl = a.mp > 0 ? planApproach(a, foe, ABILITIES[0]) : null;
-      if (pl && pl.cut > 0){ a.mp -= pl.cost; startWalk(a, pl.path, ()=>afterPlayerAction()); }
-      else endPlayerTurn();
+      const pl = budget(a) > 0 ? planApproach(a, foe, ABILITIES[0]) : null;
+      if (pl && pl.cut > 0){
+        if (a.mp <= 0){ a.ap -= 1; a.mp = a.mpPool; }
+        a.mp -= pl.cost;
+        startWalk(a, pl.path, ()=>afterPlayerAction());
+      } else endPlayerTurn();
     }
     return { result: CB.result, guard, turns, hpLost: hp0 - player.hp,
              hp: player.hp, foes: CB.order.length-1, mode: G.mode,
@@ -5566,6 +5654,7 @@ window.STRATA = {
   BARROW, BARROW_FLOOR, inBarrow, BARROW_QUEST,
   chests, refreshChests, openChest, nearestChest, rollGear, giveGear, itemDef,
   LOOKS, applyLook, tutStart, TUT, heroTick, heroAttach, heroDetach,
+  moveCostInto, concealed, budget,
   populateSites, repTier, buildTownsfolk, creditKill,
   get abilities(){ return ABILITIES; },
   WEAPONS, SPELLS, STATS, HOME, LAKE, TOWN,
