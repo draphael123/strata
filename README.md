@@ -49,13 +49,37 @@ isn't, delete two entries from `ABILITIES` and the game is unchanged.
 
 ## What's in
 
+**Character creator**
+- Four stats — Might, Vitality, Intellect, Agility. Base 4, twelve points to spend, cap 12.
+- **Weapons are stat-gated**: Worn Blade (free), Sword & Shield (Vit 8, soaks 25%),
+  Greataxe (Mgt 10, −1 move), Elm Staff (Int 9, ranged + deeper mana), Hunting Bow (Agi 9).
+- **One ability, also stat-gated**: Second Wind (free), Shield Bash (Vit 8, hurls a foe
+  2 cells — off a ledge if one is there), Cleave (Mgt 10), Fireball (Int 9, splashes),
+  Piercing Shot (Agi 9, ignores cover), Stone Sunder (Mgt 8, shatters ground).
+- **Strike is always slot 1** — it's whatever weapon you carry, so turn one is never empty.
+- Derived numbers (vigour, mana, movement, initiative, shield) preview live as you spend.
+- Anything your stats stop supporting silently falls back rather than locking you out.
+
+**Mana** — spells cost it, it trickles back 2 per turn and refills between fights.
+Intellect and the staff both deepen the pool.
+
+**The starting vale** — you wake at a campfire, and it is *authored*, not found:
+a lake below the shore, mossy ruins with a standing arch around the fire, creatures
+prowling the meadow, and a town on a rise ~75 blocks out with a watchtower.
+It is blended into the noise function rather than stamped as edits, so it survives
+save/load and chunk eviction for free and seams back into procedural terrain.
+
+**Animations** — attack lunges, cast flourishes, hurt recoils, death topples, walk
+cycles with counter-swinging arms, idle sway, a flickering fire with real point light,
+and impact bursts for Fireball and Sunder.
+
 **M0 — world**
 - Chunked voxel terrain (16×16×80), value-noise FBM with continentalness + mountain mask
 - Baked per-vertex ambient occlusion with the standard diagonal flip
 - Biomes by height: sand → grass → stone → snow; sea level 26; seamless cross-chunk trees
 - Streaming with a per-frame meshing budget; far chunk data is evicted (lossless)
 - First-person walk/jump/swim, AABB collision, **1-block auto-step**
-- Mine and place blocks (click or hold), 5-slot hotbar
+- Mine blocks (click or hold). The block palette is gone — this is an RPG, not a builder
 - Save/load persists the **seed plus a diff list**, never the world
 
 **M1 — combat**
@@ -95,14 +119,14 @@ STRATA.planApproach(a, target, ability)   // the shared movement planner
 creature AI uses.** A hand-rolled mirror of the real policy measures the mirror, not
 the game.
 
-### Last regression (33 ambushes, level-1 character, naive auto-player)
+### Last regression (25 ambushes across all six builds, level 1)
 
 | | |
 |---|---|
-| Outcomes | 26 win · 5 lose · 2 draw · **0 hangs** |
-| Pack size | 1–5 creatures |
-| Length | ~21 player turns |
-| HP lost | ~38 of 60 |
+| Outcomes | 13 win · 11 lose · 1 draw · **0 hangs** |
+| Pack size | 1–6 creatures |
+| Length | ~13 player turns |
+| HP lost | ~31 |
 
 ⚠️ **Balance is UNVALIDATED.** These numbers come from an auto-player with no tactics
 at all — it never takes high ground, never uses cover, never digs. A human who plays
@@ -139,6 +163,19 @@ well should find this much easier, and the numbers say nothing about whether it'
 - **Evict chunk DATA, not just meshes.** Roaming grew `CHUNKS` to 2333 (~48MB).
   Eviction is lossless because terrain is a pure function of the seed and every
   player change lives in `EDITS`.
+- **An authored area has to READ, not just exist.** The first vale was correct in every
+  block count and still showed neither the lake nor the town — normal forest density hid
+  both. Thin the woods toward the camp and clear a corridor along each sightline.
+- **Props laid AT ground level replace the turf and read as stains**, not objects. The log
+  seats were a brown rectangle painted on the grass until raised a block. The inverse also
+  bites: raising the hearth ring walled the flame in and hid the fire entirely.
+- **A purely radial lake bowl carves perfect concentric steps** — a machined amphitheatre.
+  Add noise to the bed. And a smoothstep profile only dips below sea level near the centre,
+  giving a pond ringed by a desert; a steeper exponent keeps the water wide.
+- **Don't measure a structure with `surfaceY`** — it returns the roof, so every wall below
+  falls outside the scanned band and reads as missing. Sweep an absolute Y range.
+- **A CDN import map is a silent single point of failure** — see the vendored `vendor/`
+  directory and the boot watchdog. A dead engine looks exactly like dead buttons.
 - InstancedMesh culls by its origin-centred bounding sphere → `frustumCulled = false`.
 - A hidden tab pauses RAF entirely; the `setInterval` render watchdog is what keeps
   the canvas from compositing as a black rectangle.

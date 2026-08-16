@@ -58,6 +58,7 @@
   .bar>i{display:block;height:100%;width:100%;transition:width .22s ease}
   .bar.hp>i{background:linear-gradient(90deg,#8e3630,#cf5a4c)}
   .bar.xp>i{background:linear-gradient(90deg,#5c7c3a,#9ac25c)}
+  .bar.mn>i{background:linear-gradient(90deg,#3a5c8e,#6ea8e0)}
   .row{display:flex;justify-content:space-between;align-items:baseline}
   .val{font-size:12px;color:#dfd8c8;font-variant-numeric:tabular-nums}
 
@@ -78,6 +79,46 @@
     font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);
     text-shadow:0 3px 12px #000;opacity:0;transition:opacity .3s}
   #toast.on{opacity:1}
+
+  /* ---------- character creator ---------- */
+  #creator{position:fixed;inset:0;z-index:62;display:none;align-items:center;justify-content:center;
+    background:radial-gradient(ellipse at 50% 30%,#243040 0%,#10141b 60%,#080a0e 100%);padding:20px}
+  #creator.on{display:flex}
+  .cwrap{width:min(1080px,100%);max-height:94vh;overflow:auto;display:flex;flex-direction:column;gap:12px}
+  #creator h2{font-size:clamp(20px,3.4vw,32px);letter-spacing:.16em;text-transform:uppercase;
+    color:#efe8d8;text-align:center}
+  .csub{font-size:12px;color:#98a2b2;text-align:center;margin-top:-6px}
+  .csub b{color:var(--gold)}
+  .ccols{display:grid;grid-template-columns:1.05fr 1fr 1fr;gap:12px}
+  @media (max-width:860px){ .ccols{grid-template-columns:1fr} }
+  .ccol{background:rgba(13,15,20,.82);border:1px solid rgba(216,180,90,.26);border-radius:7px;padding:12px}
+  .chead{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);
+    margin-bottom:9px;border-bottom:1px solid rgba(216,180,90,.2);padding-bottom:6px}
+  .srow{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .sname{flex:1}
+  .sname .sn{font-size:12px;color:#e4ddcd}
+  .sname .sb{font-size:9.5px;color:#7d8798;line-height:1.35}
+  .sbtn{width:24px;height:24px;border-radius:4px;background:#232b36;color:#e4ddcd;cursor:pointer;
+    border:1px solid rgba(255,255,255,.16);font-size:14px;line-height:1;font-family:inherit}
+  .sbtn:hover:not(:disabled){border-color:var(--gold);background:#2f3947}
+  .sbtn:disabled{opacity:.28;cursor:not-allowed}
+  .sval{width:26px;text-align:center;font-size:15px;color:#fff;font-variant-numeric:tabular-nums}
+  .cderived{margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.09);
+    font-size:11px;color:#9aa4b3;line-height:1.85;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px}
+  .cderived b{color:#e4ddcd;font-weight:600}
+  .clist{display:flex;flex-direction:column;gap:6px}
+  .copt{padding:8px 10px;border-radius:5px;cursor:pointer;border:1px solid rgba(255,255,255,.13);
+    background:rgba(255,255,255,.03);transition:.13s}
+  .copt:hover:not(.lock){border-color:var(--gold);background:rgba(216,180,90,.09)}
+  .copt.sel{border-color:var(--gold);background:rgba(216,180,90,.16);
+    box-shadow:0 0 16px rgba(216,180,90,.22)}
+  .copt.lock{opacity:.4;cursor:not-allowed}
+  .copt .on2{font-size:12px;color:#efe8d8;display:flex;justify-content:space-between;gap:8px}
+  .copt .od{font-size:10px;color:#8d97a7;margin-top:3px;line-height:1.45}
+  .copt .req{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#c88b7f;white-space:nowrap}
+  .copt.sel .req,.copt:not(.lock) .req{color:#8fbf6a}
+  .cfoot{display:flex;align-items:center;gap:10px}
+  .cnote{font-size:11px;color:#8d97a7}
 
   #lockmsg{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
     background:rgba(8,10,14,.55);cursor:pointer;font-size:13px;letter-spacing:.24em;
@@ -110,7 +151,9 @@
   .act.off{opacity:.34;cursor:not-allowed;transform:none!important;border-color:rgba(255,255,255,.1)}
   .act .an{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#efe8d8}
   .act .ad{font-size:9px;color:#8d97a7;margin-top:2px;line-height:1.35}
-  .act .ak{position:absolute;margin-top:-22px;margin-left:-42px;font-size:9px;color:#6e7889}
+  .act{position:relative}
+  .act .ak{position:absolute;top:3px;left:5px;font-size:9px;color:#6e7889}
+  .act .mc{position:absolute;top:3px;right:5px;font-size:9px;color:#6ea8e0;font-weight:700}
   .act.probe{border-style:dashed;border-color:rgba(216,180,90,.42)}
 
   #pips{position:absolute;left:50%;bottom:78px;transform:translateX(-50%);display:flex;gap:14px;
@@ -173,10 +216,12 @@
   <div id="vitals" class="panel">
     <div class="row"><span class="lbl">Vigour</span><span class="val" id="vHp">60 / 60</span></div>
     <div class="bar hp"><i id="vHpB"></i></div>
-    <div class="row" style="margin-top:7px"><span class="lbl" id="vLvl">Level 1</span><span class="val" id="vXp">0 / 40</span></div>
+    <div class="row" style="margin-top:6px"><span class="lbl">Mana</span><span class="val" id="vMana">18 / 18</span></div>
+    <div class="bar mn"><i id="vManaB"></i></div>
+    <div class="row" style="margin-top:6px"><span class="lbl" id="vLvl">Level 1</span><span class="val" id="vXp">0 / 40</span></div>
     <div class="bar xp"><i id="vXpB" style="width:0%"></i></div>
+    <div id="vGear" class="lbl" style="margin-top:7px;color:#8d97a7"></div>
   </div>
-  <div id="hotbar"></div>
   <div id="toast"></div>
 </div>
 
@@ -191,6 +236,34 @@
   </div>
   <div id="acts"></div>
   <div id="clog" class="panel"></div>
+</div>
+
+<div id="creator">
+  <div class="cwrap">
+    <h2>Who wakes by the fire?</h2>
+    <div class="csub">Spend <b id="cPool">12</b> points. Your stats decide what you can carry and cast.</div>
+    <div class="ccols">
+      <div class="ccol">
+        <div class="chead">Stats</div>
+        <div id="cStats"></div>
+        <div class="cderived" id="cDerived"></div>
+      </div>
+      <div class="ccol">
+        <div class="chead">Weapon</div>
+        <div id="cWeapons" class="clist"></div>
+      </div>
+      <div class="ccol">
+        <div class="chead">Ability</div>
+        <div id="cSpells" class="clist"></div>
+      </div>
+    </div>
+    <div class="cfoot">
+      <span class="cnote" id="cNote">Strike comes free with whatever you carry.</span>
+      <span style="flex:1"></span>
+      <button class="btn ghost small" id="cBack">Back</button>
+      <button class="btn" id="cGo">Wake up</button>
+    </div>
+  </div>
 </div>
 
 <div id="lockmsg">Click to look around</div>
@@ -265,14 +338,15 @@ import * as THREE from 'three';
 // ───────────────────────────── constants ─────────────────────────────
 const CX = 16, CZ = 16, CY = 80;          // chunk dims (Y is full column)
 const SEA = 26;                            // sea level
-const VIEW = 5;                            // chunk render radius
+const VIEW = 7;                            // chunk render radius (the town sits ~75 out)
 const GEN = VIEW + 2;                      // data-gen radius (meshing needs neighbours)
 const MESH_BUDGET = 7;                     // ms/frame spent building chunk meshes
 const SAVE_KEY = 'strata-save-v1';
 
-const B = { AIR:0, GRASS:1, DIRT:2, STONE:3, SAND:4, WATER:5, WOOD:6, LEAF:7, SNOW:8, SLATE:9 };
-const SOLID = [0,1,1,1,1,0,1,1,1,1];       // blocks movement + line of sight
-const OPAQUE= [0,1,1,1,1,0,1,1,1,1];       // blocks light for AO
+const B = { AIR:0, GRASS:1, DIRT:2, STONE:3, SAND:4, WATER:5, WOOD:6, LEAF:7, SNOW:8, SLATE:9,
+            MOSS:10, PLANK:11, THATCH:12, EMBER:13 };
+const SOLID = [0,1,1,1,1,0,1,1,1,1, 1,1,1,1];   // blocks movement + line of sight
+const OPAQUE= [0,1,1,1,1,0,1,1,1,1, 1,1,1,1];   // blocks light for AO
 
 // per-block face colours: [top, side, bottom]
 const COL = {
@@ -289,10 +363,64 @@ const COL = {
   [B.LEAF ]: [0x54823c, 0x4b7635, 0x426a2f],
   [B.SNOW ]: [0xeef3fa, 0xe3e9f2, 0xd6dde8],
   [B.SLATE]: [0x5d636e, 0x565c66, 0x4c525b],
+  [B.MOSS ]: [0x6d7a5c, 0x6a7159, 0x5c6350],   // weathered, lichen-blotched ruin stone
+  [B.PLANK]: [0x9c7444, 0x8a663c, 0x775833],
+  [B.THATCH]:[0xb08a4a, 0x8d6d39, 0x775c30],
+  [B.EMBER]: [0xff9a3c, 0xe8742a, 0xc2551c],
 };
-const BLOCK_NAME = {[B.GRASS]:'Turf',[B.DIRT]:'Loam',[B.STONE]:'Stone',
-  [B.SAND]:'Sand',[B.WOOD]:'Timber',[B.LEAF]:'Bough',[B.SNOW]:'Snow',[B.SLATE]:'Slate'};
-const HOTBAR = [B.STONE, B.DIRT, B.WOOD, B.LEAF, B.SAND];
+
+// ═══════════════════════ character: stats, gear, spells ═══════════════════════
+const STAT_BASE = 4, STAT_POOL = 12, STAT_CAP = 12;
+const STATS = [
+  { id:'mgt', name:'Might',   blurb:'Melee damage. Heavy arms.' },
+  { id:'vit', name:'Vitality',blurb:'Vigour, and the nerve to hold a shield.' },
+  { id:'int', name:'Intellect',blurb:'Mana and spell power.' },
+  { id:'agi', name:'Agility', blurb:'Movement, initiative, bowcraft.' },
+];
+// Every gate is a single stat threshold so the creator reads at a glance.
+const WEAPONS = [
+  { id:'blade',  name:'Worn Blade',      req:null,           kind:'melee',  range:1, dmg:[6,10],
+    scale:'mgt', desc:'A soldier\'s castoff. Asks nothing of you.' },
+  { id:'sword',  name:'Sword & Shield',  req:['vit',8],      kind:'melee',  range:1, dmg:[5,9],
+    scale:'mgt', soak:0.25, desc:'Take a quarter less from every blow.' },
+  { id:'axe',    name:'Greataxe',        req:['mgt',10],     kind:'melee',  range:1, dmg:[10,17],
+    scale:'mgt', move:-1, desc:'Ruinous. Costs you a step of movement.' },
+  { id:'staff',  name:'Elm Staff',       req:['int',9],      kind:'ranged', range:6, dmg:[5,9],
+    scale:'int', mana:2, desc:'Strikes at range and deepens your mana.' },
+  { id:'bow',    name:'Hunting Bow',     req:['agi',9],      kind:'ranged', range:9, dmg:[5,10],
+    scale:'agi', desc:'Reach, if you can keep your distance.' },
+];
+const SPELLS = [
+  { id:'wind',   name:'Second Wind', req:null,       mana:2, ap:1, target:'self',
+    desc:'Recover 14 vigour.' },
+  { id:'bash',   name:'Shield Bash', req:['vit',8],  mana:1, ap:1, target:'melee', dmg:[4,7],
+    desc:'Hurl a foe back 2 cells — over a ledge, if one is there.' },
+  { id:'cleave', name:'Cleave',      req:['mgt',10], mana:2, ap:1, target:'melee', dmg:[7,13],
+    desc:'Strike every foe around you at once.' },
+  { id:'fire',   name:'Fireball',    req:['int',9],  mana:4, ap:1, target:'ranged', range:7, dmg:[11,18],
+    desc:'Bursts on impact, scorching everything adjacent.' },
+  { id:'pierce', name:'Piercing Shot',req:['agi',9], mana:3, ap:1, target:'ranged', range:10, dmg:[9,15],
+    desc:'Ignores cover entirely.' },
+  { id:'sunder', name:'Stone Sunder',req:['mgt',8],  mana:3, ap:1, target:'ground', range:5,
+    desc:'Shatter a block and the ones beside it. Anything standing there falls.' },
+];
+const meets = (st, req)=> !req || st[req[0]] >= req[1];
+
+// Derived character numbers, all in one place so the creator can preview them live.
+function derive(st, weaponId){
+  const w = WEAPONS.find(x=>x.id===weaponId) || WEAPONS[0];
+  return {
+    maxHp:   40 + st.vit*4,
+    maxMana:  6 + st.int*3 + (w.mana||0)*3,
+    mpMax:   Math.max(3, 4 + Math.floor(st.agi/3) + (w.move||0)),
+    apMax:   2,
+    initiative: 8 + st.agi,
+    soak:    w.soak || 0,
+    weapon:  w,
+  };
+}
+// A weapon's basic attack and every spell scale off the stat that earned them.
+function powerOf(st, scaleStat){ return 1 + (st[scaleStat] - STAT_BASE) * 0.085; }
 
 // ───────────────────────────── noise ─────────────────────────────
 let SEED = 1337;
@@ -334,6 +462,11 @@ function heightAt(x, z){
   const d = fbm(x*0.0120, z*0.0120, 4, SEED+511) - 0.5;
   const m = Math.max(0, c - 0.55) / 0.45;             // mountain mask
   let h = 18 + c*22 + d*9 + m*m*26;
+  const vale = valeHeight(x, z);
+  if (vale !== null){
+    const dd = Math.hypot(x-HOME.x, z-HOME.z);
+    h = lerp(vale, h, clamp((dd - (VALE_R-VALE_BLEND)) / VALE_BLEND, 0, 1));
+  }
   h = clamp(h, 4, CY-8);
   const v = Math.floor(h);
   if (_hCache.size > 400000) _hCache.clear();
@@ -346,16 +479,166 @@ function biomeTop(topY, x, z){
   if (topY > 46) return B.STONE;
   return B.GRASS;
 }
+// ───────────────────── the authored starting vale ─────────────────────
+// Terrain is a pure function of (x,z), so the start area is BLENDED INTO the
+// noise rather than stamped as edits: it survives save/load and chunk eviction
+// for free, and the seam back into procedural terrain is seamless.
+const HOME = { x: 0,  z: 0 };                  // the campfire
+const LAKE = { x:-30, z: 26, r: 27 };
+const TOWN = { x: 58, z:-46, r: 30 };
+const VALE_R = 124, VALE_BLEND = 42;
+const SHORE_Y = 31;                             // dry: comfortably above SEA (26)
+
+function valeHeight(x, z){
+  const d = Math.hypot(x-HOME.x, z-HOME.z);
+  if (d > VALE_R) return null;
+  let h = SHORE_Y + (fbm(x*0.045, z*0.045, 3, SEED+91) - 0.5) * 2.6;
+  // lake bowl — bottoms out below sea level, so the water fill handles the rest
+  const ld = Math.hypot(x-LAKE.x, z-LAKE.z);
+  if (ld < LAKE.r){
+    // A smoothstep bowl only dips below sea level near the centre, leaving a
+    // pond ringed by an enormous beach. A steeper profile keeps the water wide
+    // and the sand a shoreline rather than a desert.
+    // A purely radial profile carves perfect concentric steps — the bed reads as
+    // a machined amphitheatre. Noise breaks the rings into a lake bottom.
+    const s = Math.pow(ld/LAKE.r, 2.6);
+    h = Math.min(h, 19 + (h-19)*s + (fbm(x*0.085, z*0.085, 3, SEED+55) - 0.5) * 3.4);
+  }
+  // the town sits on a rise so it reads against the sky from the camp
+  const td = Math.hypot(x-TOWN.x, z-TOWN.z);
+  if (td < TOWN.r){ const t = 1 - td/TOWN.r; h += t*t*15; }   // clears the canopy
+  // flat pad under the camp so the fire and ruins don't sit on a slope
+  if (d < 12) h = lerp(SHORE_Y, h, clamp((d-6)/6, 0, 1));
+  return h;
+}
+function inTown(x, z){ return Math.hypot(x-TOWN.x, z-TOWN.z) < TOWN.r*0.72; }
+function inCamp(x, z){ return Math.hypot(x-HOME.x, z-HOME.z) < 17; }
+
+// How thick the woods are at a point. The opening shot has to READ — a vale
+// forested at normal density hides the lake and the town completely, which is
+// the whole reason to have authored them. Open meadow at the fire, thickening
+// to real forest by the rim, with a cleared sightline along the camp→town axis.
+function corridor(x, z, tx, tz, halfW){
+  const ax = tx-HOME.x, az = tz-HOME.z, L2 = ax*ax + az*az || 1;
+  const t = clamp(((x-HOME.x)*ax + (z-HOME.z)*az) / L2, 0, 1);
+  const perp = Math.hypot(HOME.x + ax*t - x, HOME.z + az*t - z);
+  return clamp((perp - halfW*0.5) / (halfW*0.5), 0, 1);
+}
+function treeDensity(x, z){
+  const d = Math.hypot(x-HOME.x, z-HOME.z);
+  if (d >= VALE_R) return 1;
+  let f = clamp((d - 20) / 80, 0, 1);
+  f = Math.min(f, corridor(x, z, TOWN.x, TOWN.z, 15));
+  f = Math.min(f, corridor(x, z, LAKE.x, LAKE.z, 17));
+  return f;
+}
+
 // deterministic tree test for a column
 function treeAt(x, z){
+  if (inCamp(x,z) || inTown(x,z)) return null;   // keep the camp and streets clear
   const topY = heightAt(x, z);
   if (topY <= SEA+1 || topY > 46) return null;
-  if (hash2(x, z, SEED+31337) > 0.022) return null;
+  if (hash2(x, z, SEED+31337) > 0.022 * treeDensity(x, z)) return null;
   // thin them out on steep slopes so trees don't hang off cliffs
   const slope = Math.abs(heightAt(x+1,z)-topY) + Math.abs(heightAt(x,z+1)-topY);
   if (slope > 2) return null;
   const trunk = 4 + Math.floor(hash2(x,z,SEED+777)*4);
   return { topY, trunk };
+}
+
+// ───────────────────── structures (camp / ruins / town) ─────────────────────
+// Each structure declares a world-space bbox and a build(put) that writes voxels.
+// genChunk only runs the ones overlapping the chunk, so this stays cheap.
+let _structs = null, _structSeed = null;
+function structures(){
+  if (_structs && _structSeed === SEED) return _structs;
+  const S = [];
+  const box = (x0,z0,x1,z1,build)=> S.push({ x0, z0, x1, z1, build });
+  const rnd = (i)=> hash2(i*17, i*31, SEED+404);
+
+  // ── campfire: a ring of hearth stones, spent logs, and embers ──
+  box(HOME.x-4, HOME.z-4, HOME.x+4, HOME.z+4, (put)=>{
+    // The hearth ring and ember pit stay FLUSH — stones set into the ground, and
+    // raising the ring walls the flame in and hides it. The log seats sit proud,
+    // otherwise a 3-long strip of timber reads as a brown stain on the grass.
+    const gy = SHORE_Y;
+    for (let a=0; a<10; a++){
+      const th = a/10*Math.PI*2;
+      put(Math.round(HOME.x+Math.cos(th)*2.4), gy, Math.round(HOME.z+Math.sin(th)*2.4), B.STONE);
+    }
+    put(HOME.x,   gy, HOME.z,   B.EMBER);
+    put(HOME.x+1, gy, HOME.z,   B.EMBER);
+    put(HOME.x,   gy, HOME.z+1, B.EMBER);
+    for (let i=-1;i<=1;i++){ put(HOME.x+i, gy+1, HOME.z-4, B.WOOD); put(HOME.x+i, gy+1, HOME.z+4, B.WOOD); }
+  });
+
+  // ── ruins: broken mossy walls, toppled columns, a standing arch ──
+  const wall = (x0,z0,dx,dz,len,hMax)=> box(
+    Math.min(x0,x0+dx*len), Math.min(z0,z0+dz*len),
+    Math.max(x0,x0+dx*len), Math.max(z0,z0+dz*len), (put)=>{
+      for (let i=0;i<len;i++){
+        const x = x0+dx*i, z = z0+dz*i, gy = heightAt(x,z);
+        // ragged, gap-toothed crest — a wall with a flat top reads as new, not ruined
+        const hh = Math.max(0, Math.round(hMax * (0.45 + hash2(x,z,SEED+7)*0.75)));
+        if (hash2(x,z,SEED+13) < 0.16) continue;             // collapsed section
+        for (let y=1;y<=hh;y++) put(x, gy+y, z, B.MOSS);
+      }
+    });
+  wall(HOME.x-14, HOME.z-9,  1, 0, 13, 4);
+  wall(HOME.x-14, HOME.z-9,  0, 1, 10, 4);
+  wall(HOME.x+8,  HOME.z+5,  0, 1, 11, 3);
+  wall(HOME.x+8,  HOME.z+15, 1, 0,  7, 3);
+  for (let i=0;i<7;i++){                                     // broken columns
+    const th = i/7*Math.PI*2 + 0.4;
+    const cx = Math.round(HOME.x + Math.cos(th)*11), cz = Math.round(HOME.z + Math.sin(th)*11);
+    const hh = 2 + Math.floor(rnd(i)*5);
+    box(cx,cz,cx,cz,(put)=>{ const gy=heightAt(cx,cz); for(let y=1;y<=hh;y++) put(cx,gy+y,cz,B.MOSS); });
+  }
+  box(HOME.x-3, HOME.z-13, HOME.x+3, HOME.z-11, (put)=>{     // the arch you walk through
+    const gy = heightAt(HOME.x, HOME.z-12);
+    for (let y=1;y<=4;y++){ put(HOME.x-2, gy+y, HOME.z-12, B.MOSS); put(HOME.x+2, gy+y, HOME.z-12, B.MOSS); }
+    for (let x=-2;x<=2;x++) put(HOME.x+x, gy+5, HOME.z-12, B.MOSS);
+  });
+
+  // ── town on the rise ──
+  const house = (px,pz,w,d,h)=> box(px-2, pz-2, px+w+1, pz+d+1, (put)=>{
+    const gy = heightAt(px+(w>>1), pz+(d>>1));
+    for (let dx=0;dx<w;dx++) for (let dz=0;dz<d;dz++){
+      put(px+dx, gy, pz+dz, B.PLANK);
+      const edge = dx===0||dx===w-1||dz===0||dz===d-1;
+      for (let y=1;y<=h;y++) put(px+dx, gy+y, pz+dz, edge ? (y===h?B.WOOD:B.PLANK) : B.AIR);
+    }
+    const dx0 = w>>1;
+    put(px+dx0, gy+1, pz, B.AIR); put(px+dx0, gy+2, pz, B.AIR);
+    let a0=px-1, b0=pz-1, a1=px+w, b1=pz+d, ry=gy+h+1;
+    while (a0<=a1 && b0<=b1){                                 // stepped thatch roof
+      for (let x=a0;x<=a1;x++) for (let z=b0;z<=b1;z++)
+        if (x===a0||x===a1||z===b0||z===b1) put(x,ry,z,B.THATCH);
+      a0++; b0++; a1--; b1--; ry++;
+    }
+  });
+  const HOUSES = [[-9,-8,7,6,4],[2,-10,6,6,4],[-10,3,6,5,3],[3,4,7,6,5],
+                  [-2,-2,5,5,4],[11,-3,6,6,4],[-16,-4,5,5,3]];
+  for (const [ox,oz,w,d,h] of HOUSES) house(TOWN.x+ox, TOWN.z+oz, w, d, h);
+  box(TOWN.x-1, TOWN.z-1, TOWN.x+2, TOWN.z+2, (put)=>{        // well
+    const gy = heightAt(TOWN.x, TOWN.z);
+    for (let x=0;x<=1;x++) for (let z=0;z<=1;z++){
+      put(TOWN.x+x, gy+1, TOWN.z+z, B.STONE);
+      if (x+z===0||x+z===2) put(TOWN.x+x, gy+2, TOWN.z+z, B.STONE);
+    }
+  });
+  // a watchtower, so the town has a silhouette from 75 blocks out
+  box(TOWN.x+17, TOWN.z+9, TOWN.x+21, TOWN.z+13, (put)=>{
+    const gy = heightAt(TOWN.x+19, TOWN.z+11);
+    for (let y=1;y<=12;y++) for (let x=18;x<=20;x++) for (let z=10;z<=12;z++){
+      const edge = x===18||x===20||z===10||z===12;
+      put(TOWN.x+x, gy+y, TOWN.z+z, edge ? B.STONE : B.AIR);
+    }
+    for (let x=17;x<=21;x++) for (let z=9;z<=13;z++) put(TOWN.x+x, gy+13, TOWN.z+z, B.WOOD);
+  });
+
+  _structs = S; _structSeed = SEED;
+  return S;
 }
 
 // ───────────────────────────── chunk store ─────────────────────────────
@@ -401,6 +684,20 @@ function genChunk(cx, cz){
       }
     }
   }
+  // stamp camp / ruins / town over the generated terrain (before player edits)
+  {
+    const put = (wx, wy, wz, b)=>{
+      const lx = wx-ox, lz = wz-oz;
+      if (lx<0||lx>=CX||lz<0||lz>=CZ||wy<0||wy>=CY) return;
+      data[idx(lx,wy,lz)] = b;
+      if (b !== B.AIR && wy > maxY) maxY = wy;
+    };
+    for (const s of structures()){
+      if (s.x1 < ox || s.x0 > ox+CX-1 || s.z1 < oz || s.z0 > oz+CZ-1) continue;
+      s.build(put);
+    }
+  }
+
   // apply saved player edits on top of the generated seed world
   const ed = EDITS.get(ckey(cx,cz));
   if (ed) for (const [k,v] of ed){
@@ -586,7 +883,7 @@ app.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const SKY_COL = 0x9dc0dc;
 scene.background = new THREE.Color(SKY_COL);
-scene.fog = new THREE.Fog(SKY_COL, VIEW*CX*0.52, VIEW*CX*0.98);
+scene.fog = new THREE.Fog(SKY_COL, VIEW*CX*0.62, VIEW*CX*0.99);
 
 const camera = new THREE.PerspectiveCamera(74, innerWidth/innerHeight, 0.1, 600);
 
@@ -771,6 +1068,89 @@ function makeBody(kind){
   g.userData.arms = [armL, armR];
   return g;
 }
+// ───────────────────────────── animation & fx ─────────────────────────────
+function setAnim(a, type, dur){ if (a && a.mesh) a.anim = { type, t:0, dur }; }
+function tickAnims(dt, list){
+  for (const a of list){
+    const g = a.mesh; if (!g) continue;
+    const arms = g.userData.arms, legs = g.userData.legs;
+    a.bob = (a.bob || 0) + dt * 2;
+    let fwd = 0, up = 0, tilt = 0, armX = 0, armZ = 0;
+
+    if (a.anim){
+      a.anim.t += dt;
+      const p = Math.min(1, a.anim.t / a.anim.dur), s = Math.sin(p*Math.PI);
+      switch (a.anim.type){
+        case 'attack': fwd = s*0.42; armX = -s*2.3; break;
+        case 'cast':   up  = s*0.20; armX = -s*2.5; armZ = s*0.55; break;
+        case 'hurt':   fwd = -s*0.26; tilt = -s*0.34; break;
+        case 'die':    tilt = -p*(Math.PI/2.1); up = -p*0.35; break;
+      }
+      if (p >= 1 && a.anim.type !== 'die') a.anim = null;
+    }
+    if (!a.alive && !a.anim) tilt = -Math.PI/2.1;
+
+    if (!a.walking){
+      const yaw = g.rotation.y;
+      g.position.set(a.px + Math.sin(yaw)*fwd,
+                     a.py + up + (a.alive ? Math.sin(a.bob)*0.035 : 0),
+                     a.pz + Math.cos(yaw)*fwd);
+      if (legs){ legs[0].rotation.x = 0; legs[1].rotation.x = 0; }
+    }
+    g.rotation.x = tilt;
+    if (arms){
+      // idle sway so a waiting fighter isn't a statue
+      const sway = a.alive && !a.anim && !a.walking ? Math.sin(a.bob*0.7)*0.07 : 0;
+      arms[0].rotation.x = armX + sway; arms[1].rotation.x = armX - sway;
+      arms[0].rotation.z = armZ;        arms[1].rotation.z = -armZ;
+    }
+  }
+}
+const FX = [];
+function boom(x, y, z, color){
+  const m = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8),
+    new THREE.MeshBasicMaterial({ color, transparent:true, opacity:0.9, depthWrite:false }));
+  m.position.set(x+0.5, y+0.9, z+0.5);
+  fxRoot.add(m); FX.push({ m, t:0, dur:0.5 });
+}
+function tickFX(dt){
+  for (let i=FX.length-1; i>=0; i--){
+    const f = FX[i]; f.t += dt;
+    const p = f.t/f.dur;
+    if (p >= 1){ fxRoot.remove(f.m); f.m.geometry.dispose(); f.m.material.dispose(); FX.splice(i,1); continue; }
+    f.m.scale.setScalar(0.6 + p*3.4);
+    f.m.material.opacity = 0.9*(1-p);
+  }
+}
+
+// ── the campfire you wake beside ──
+let campfire = null;
+function buildCampfire(){
+  if (campfire){ scene.remove(campfire); campfire = null; }
+  const g = new THREE.Group();
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.15, 7),
+    new THREE.MeshBasicMaterial({ color:0xffa23c, transparent:true, opacity:0.92 }));
+  flame.position.y = 0.62;
+  const core = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.72, 6),
+    new THREE.MeshBasicMaterial({ color:0xfff0b0 }));
+  core.position.y = 0.46;
+  const light = new THREE.PointLight(0xffa54a, 3.2, 26, 1.7);
+  light.position.y = 1.1;
+  g.add(flame, core, light);
+  g.position.set(HOME.x+0.5, SHORE_Y+1, HOME.z+0.5);
+  g.userData = { flame, core, light };
+  scene.add(g); campfire = g;
+}
+function tickCampfire(t){
+  if (!campfire) return;
+  const u = campfire.userData;
+  const f = 0.82 + Math.sin(t*11)*0.11 + Math.sin(t*23.7)*0.07;
+  u.flame.scale.set(0.94+Math.sin(t*17)*0.08, f, 0.94+Math.cos(t*13)*0.08);
+  u.core.scale.setScalar(0.9 + Math.sin(t*19)*0.12);
+  u.flame.rotation.y = t*1.3;
+  u.light.intensity = 2.7 + f*0.9;
+}
+
 let nextId = 1;
 function spawnEntity(kind, x, y, z){
   const K = KINDS[kind];
@@ -829,15 +1209,28 @@ const player = {
   yaw: 0, pitch: 0,
   onGround: false, inWater: false,
   hp: 60, maxHp: 60, level: 1, xp: 0, xpNext: 40,
+  mana: 18, maxMana: 18, soak: 0,
+  st: { mgt:STAT_BASE, vit:STAT_BASE, int:STAT_BASE, agi:STAT_BASE },
+  weaponId: 'blade', spellId: 'wind',
   mp: 6, ap: 2, init: 0,
   mpMax: 6, apMax: 2,
-  atk: [8,14], reach: 1,
   x:0, y:0, z:0,            // combat cell
   px:0, py:0, pz:0,         // combat render pos
   mesh: null, K: { name:'You', scale:1 },
-  hotbar: 0,
   spawn: new THREE.Vector3(0, 40, 0),
 };
+// Apply the creator's choices to the live character. Level-ups are kept as
+// separate bonuses so re-deriving from stats never wipes them.
+function applyBuild(refill){
+  const d = derive(player.st, player.weaponId);
+  player.maxHp   = d.maxHp   + (player.bonusHp   || 0);
+  player.maxMana = d.maxMana + (player.bonusMana || 0);
+  player.mpMax = d.mpMax; player.apMax = d.apMax; player.soak = d.soak;
+  if (refill){ player.hp = player.maxHp; player.mana = player.maxMana; }
+  else { player.hp = Math.min(player.hp || player.maxHp, player.maxHp);
+         player.mana = Math.min(player.mana, player.maxMana); }
+  buildAbilities();
+}
 // third-person avatar, only shown during combat
 {
   const g = new THREE.Group();
@@ -912,9 +1305,6 @@ addEventListener('keydown', e=>{
   if (G.mode === 'title') return;
   if (e.code === 'Escape' && locked) document.exitPointerLock();
   if (G.mode === 'explore'){
-    const n = ['Digit1','Digit2','Digit3','Digit4','Digit5'].indexOf(e.code);
-    if (n >= 0){ player.hotbar = n; drawHotbar(); }
-    if (e.code === 'KeyF') pickBlock();
     if (e.code === 'KeyE') tryEngage();
   } else if (G.mode === 'combat'){
     const n = ['Digit1','Digit2','Digit3','Digit4'].indexOf(e.code);
@@ -1023,24 +1413,13 @@ function updateExplore(dt){
   if (rc.hit){ highlight.visible = true; highlight.position.set(rc.x+0.5, rc.y+0.5, rc.z+0.5); }
   else highlight.visible = false;
 
-  // click OR hold — holding to mine is the difference between a toy and a tool
-  const wantDig   = locked && (mouseDown[0] || (pendingClick && pendingClick.button === 0));
-  const wantPlace = locked && (mouseDown[2] || (pendingClick && pendingClick.button === 2));
-  if (rc.hit && digCooldown <= 0){
-    if (wantDig){
-      setBlock(rc.x, rc.y, rc.z, B.AIR);
-      forceRemeshAround(rc.x, rc.z, 1);
-      digCooldown = 0.16;
-    } else if (wantPlace){
-      const b = HOTBAR[player.hotbar];
-      // never brick yourself into the block you are standing in
-      if (!(Math.floor(p.x)===rc.nx && Math.floor(p.z)===rc.nz &&
-            (Math.floor(p.y)===rc.ny || Math.floor(p.y+1)===rc.ny))){
-        setBlock(rc.nx, rc.ny, rc.nz, b);
-        forceRemeshAround(rc.nx, rc.nz, 1);
-        digCooldown = 0.22;
-      }
-    }
+  // Mining stays (it is traversal, and it feeds the terrain hook); the block
+  // palette is gone — this is an RPG, not a builder.
+  if (rc.hit && digCooldown <= 0 && locked &&
+      (mouseDown[0] || (pendingClick && pendingClick.button === 0))){
+    setBlock(rc.x, rc.y, rc.z, B.AIR);
+    forceRemeshAround(rc.x, rc.z, 1);
+    digCooldown = 0.16;
   }
   pendingClick = null;
 
@@ -1058,8 +1437,16 @@ function updateExplore(dt){
     e.px = lerp(e.px, e.x+0.5, Math.min(1, dt*4));
     e.py = lerp(e.py, e.y,     Math.min(1, dt*4));
     e.pz = lerp(e.pz, e.z+0.5, Math.min(1, dt*4));
+    const moving = Math.abs(e.px-(e.x+0.5)) + Math.abs(e.pz-(e.z+0.5)) > 0.06;
     e.mesh.position.set(e.px, e.py + Math.sin(e.bob)*0.045, e.pz);
     e.mesh.rotation.y = Math.atan2(p.x-e.px, p.z-e.pz);
+    if (e.mesh.userData.legs){                    // stroll while they wander
+      const sw = moving ? Math.sin(e.bob*3.4)*0.38 : 0;
+      e.mesh.userData.legs[0].rotation.x =  sw;
+      e.mesh.userData.legs[1].rotation.x = -sw;
+      e.mesh.userData.arms[0].rotation.x = -sw*0.6;
+      e.mesh.userData.arms[1].rotation.x =  sw*0.6;
+    }
     // aggro: sees you and you are close
     const d = Math.hypot(p.x-e.px, p.z-e.pz);
     if (d < e.K.aggro && Math.abs(p.y-e.py) < 6 &&
@@ -1068,13 +1455,6 @@ function updateExplore(dt){
       break;
     }
   }
-}
-function pickBlock(){
-  const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-  const rc = raycastVoxel(camera.position, dir, 6.2);
-  if (!rc.hit) return;
-  const i = HOTBAR.indexOf(rc.block);
-  if (i >= 0){ player.hotbar = i; drawHotbar(); }
 }
 function tryEngage(){
   let best = null, bd = 9;
@@ -1089,12 +1469,33 @@ function tryEngage(){
 // ═══════════════════════════════════════════════════════════════════════
 //  COMBAT — freeze-in-place. The world you were standing in IS the board.
 // ═══════════════════════════════════════════════════════════════════════
-const ABILITIES = [
-  { id:'strike', name:'Strike', desc:'Melee · 8–14',      ap:1, kind:'melee',  range:1, dmg:[8,14] },
-  { id:'sling',  name:'Sling',  desc:'Ranged 8 · 5–9',    ap:1, kind:'ranged', range:8, dmg:[5,9]  },
-  { id:'quarry', name:'Quarry', desc:'Break a block · 5', ap:1, kind:'dig',    range:5, probe:true },
-  { id:'raise',  name:'Raise',  desc:'Set a block · 4',   ap:1, kind:'build',  range:4, probe:true },
-];
+// Rebuilt whenever the character changes. Strike is ALWAYS slot 1 — it is the
+// weapon's own attack, so everyone has something to do on turn one.
+let ABILITIES = [];
+function buildAbilities(){
+  const w  = derive(player.st, player.weaponId).weapon;
+  const pw = powerOf(player.st, w.scale);
+  const dmg = [Math.max(1,Math.round(w.dmg[0]*pw)), Math.max(2,Math.round(w.dmg[1]*pw))];
+  ABILITIES = [{
+    id:'strike', name:'Strike', ap:1, mana:0, kind:w.kind, range:w.range, dmg,
+    desc:`${w.kind==='ranged'?'Range '+w.range:'Melee'} · ${dmg[0]}–${dmg[1]}`,
+  }];
+  const sp = SPELLS.find(s=>s.id===player.spellId);
+  if (sp){
+    const sw = sp.target==='ranged'||sp.id==='fire' ? 'int' : (sp.id==='pierce'?'agi':(sp.id==='bash'?'vit':'mgt'));
+    const sd = sp.dmg ? [Math.round(sp.dmg[0]*powerOf(player.st,sw)), Math.round(sp.dmg[1]*powerOf(player.st,sw))] : null;
+    ABILITIES.push({
+      id:sp.id, name:sp.name, ap:sp.ap, mana:sp.mana, spell:sp, dmg:sd,
+      kind: sp.target==='self' ? 'self' : sp.target==='ground' ? 'sunder'
+          : sp.target==='melee' ? 'melee' : 'ranged',
+      range: sp.range || 1,
+      desc: `${sp.mana} mana · ${sd ? sd[0]+'–'+sd[1] : 'no damage'}`,
+    });
+  }
+  ABILITIES.push(
+    { id:'quarry', name:'Quarry', desc:'Break a block · 5', ap:1, mana:0, kind:'dig',   range:5, probe:true },
+    { id:'raise',  name:'Raise',  desc:'Set a block · 4',   ap:1, mana:0, kind:'build', range:4, probe:true });
+}
 
 const CB = {
   active:false, order:[], turn:0, phase:'idle',
@@ -1185,19 +1586,20 @@ function toast(msg, secs=1.9){
 
 // ── damage & death ──
 function damage(t, amt, note){
+  if (t.isPlayer && t.soak > 0){              // sword & shield
+    const cut = Math.round(amt * t.soak);
+    if (cut > 0){ amt -= cut; note = (note?note+' · ':'') + 'SHIELD −'+cut; }
+  }
   t.hp = Math.max(0, t.hp - amt);
+  setAnim(t, 'hurt', 0.28);
   CB.lastDamageRound = CB.round;              // any hit resets the stalemate clock
   fct(t, '−'+amt, t.isPlayer ? '#ff8a7a' : '#ffd27a');
   log(`<b>${t.name}</b> takes <span class="hit">${amt}</span>${note?' <span style="color:#8d97a7">('+note+')</span>':''}`);
   if (t.hp <= 0){
     t.alive = false;
+    setAnim(t, 'die', 0.55);
     log(`<b>${t.name}</b> falls.`);
-    if (t.isPlayer){ t.mesh.visible = false; }
-    else {
-      t.mesh.rotation.x = -Math.PI/2.1;
-      t.mesh.position.y = t.py + 0.15;
-      CB.xpPot += t.K.xp;
-    }
+    if (!t.isPlayer) CB.xpPot += t.K.xp;
   }
   drawOrder();
   drawVitals();
@@ -1209,10 +1611,78 @@ function resolveAttack(a, t, ab){
   const dy = a.y - t.y;
   if (dy >= 1){ dmg = Math.round(dmg*1.25); notes.push('HIGH GROUND +25%'); }
   else if (dy <= -1){ dmg = Math.round(dmg*0.85); notes.push('LOW GROUND −15%'); }
-  if (ab.kind === 'ranged' && hasCover(a, t)){ dmg = Math.round(dmg*0.75); notes.push('COVER −25%'); }
-  // face the target
-  a.mesh.rotation.y = Math.atan2((t.x+0.5)-(a.px), (t.z+0.5)-(a.pz));
+  const ignoresCover = ab.spell && ab.spell.id === 'pierce';
+  if (ab.kind === 'ranged' && !ignoresCover && hasCover(a, t)){
+    dmg = Math.round(dmg*0.75); notes.push('COVER −25%');
+  }
+  faceToward(a, t.x, t.z);
   damage(t, dmg, notes.join(' · '));
+}
+function faceToward(a, tx, tz){
+  if (a.mesh) a.mesh.rotation.y = Math.atan2((tx+0.5)-a.px, (tz+0.5)-a.pz);
+}
+// push a creature away from `from`, letting terrain decide where it lands
+function knockback(t, from, cells){
+  let dx = Math.sign(t.x-from.x), dz = Math.sign(t.z-from.z);
+  if (!dx && !dz) dz = 1;
+  for (let i=0; i<cells; i++){
+    const nx = t.x+dx, nz = t.z+dz;
+    let ny = null;
+    for (const c of [t.y, t.y+1, t.y-1, t.y-2, t.y-3, t.y-4, t.y-5]) if (standable(nx,c,nz)){ ny = c; break; }
+    if (ny === null) break;                       // slammed into a wall
+    if (CB.order.some(o=>o.alive&&o!==t&&o.x===nx&&o.y===ny&&o.z===nz)) break;
+    const drop = t.y - ny;
+    t.x = nx; t.y = ny; t.z = nz;
+    t.px = nx+0.5; t.py = ny; t.pz = nz+0.5;
+    if (drop >= 3){ damage(t, (drop-2)*4, 'HURLED DOWN'); break; }
+  }
+  if (t.mesh) t.mesh.position.set(t.px, t.py, t.pz);
+}
+
+// The chosen spell. Returns false if the cast could not be made.
+function castSpell(a, ab, target, cell){
+  const sp = ab.spell;
+  if (a.isPlayer && player.mana < ab.mana){ toast('Not enough mana'); return false; }
+  setAnim(a, sp.id==='bash'||sp.id==='cleave' ? 'attack' : 'cast', 0.45);
+
+  if (sp.id === 'wind'){
+    const before = a.hp;
+    a.hp = Math.min(a.maxHp, a.hp + 14);
+    fct(a, '+'+(a.hp-before), '#a8cf72');
+    log(`You draw a <b>Second Wind</b>.`);
+  } else if (sp.id === 'bash'){
+    faceToward(a, target.x, target.z);
+    resolveAttack(a, target, ab);
+    if (target.alive){ knockback(target, a, 2); log(`<b>${target.name}</b> is hurled back.`); }
+  } else if (sp.id === 'cleave'){
+    const hit = CB.order.filter(o => o.alive && o !== a &&
+      Math.max(Math.abs(o.x-a.x), Math.abs(o.z-a.z)) <= 1 && Math.abs(o.y-a.y) <= 1);
+    if (!hit.length){ toast('Nothing in reach'); return false; }
+    log(`You <b>Cleave</b> through ${hit.length}.`);
+    for (const o of hit) resolveAttack(a, o, ab);
+  } else if (sp.id === 'fire'){
+    faceToward(a, target.x, target.z);
+    log(`<b>Fireball</b> bursts on ${target.name}.`);
+    boom(target.x, target.y, target.z, 0xff8a3c);
+    resolveAttack(a, target, ab);
+    const splash = CB.order.filter(o => o.alive && o !== a && o !== target &&
+      Math.hypot(o.x-target.x, o.y-target.y, o.z-target.z) <= 1.9);
+    for (const o of splash) damage(o, Math.round((ab.dmg[0]+ab.dmg[1])/2 * 0.5), 'SCORCHED');
+  } else if (sp.id === 'pierce'){
+    faceToward(a, target.x, target.z);
+    log(`<b>Piercing Shot</b> — cover be damned.`);
+    resolveAttack(a, target, ab);
+  } else if (sp.id === 'sunder'){
+    if (!cell) return false;
+    log(`You <b>Sunder</b> the ground.`);
+    boom(cell.x, cell.y, cell.z, 0x9aa3b0);
+    for (const [dx,dy,dz] of [[0,0,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1],[0,-1,0]])
+      setBlock(cell.x+dx, cell.y+dy, cell.z+dz, B.AIR);
+    forceRemeshAround(cell.x, cell.z, 1);
+    settleFalls();
+  }
+  if (a.isPlayer){ player.mana -= ab.mana; drawVitals(); }
+  return true;
 }
 
 // gravity check after the ground changes — the whole point of the terrain probe
@@ -1340,8 +1810,9 @@ function gainXp(n){
     player.xp -= player.xpNext;
     player.level++;
     player.xpNext = Math.round(player.xpNext*1.55);
-    player.maxHp += 8; player.hp = player.maxHp;
-    player.mpMax = 6 + Math.floor(player.level/3);
+    player.bonusHp = (player.bonusHp||0) + 6;
+    player.bonusMana = (player.bonusMana||0) + 3;
+    applyBuild(true);
     toast('Level ' + player.level);
   }
   drawVitals();
@@ -1380,6 +1851,9 @@ function beginTurn(a){
   CB.aiQueue = []; CB.aiPlanned = false;
   if (a.isPlayer){
     CB.phase = 'idle';
+    const before = player.mana;
+    player.mana = Math.min(player.maxMana, player.mana + 2);   // trickle back each turn
+    if (player.mana > before) drawVitals();
     recomputeReach();
     log(`— <b>Your turn</b> —`);
     setHint('Click a blue tile to move · pick an action · click a target');
@@ -1427,8 +1901,11 @@ function selectAbility(i){
   refreshTargets(); drawActs();
   const ab = ABILITIES[CB.selAbility];
   if (!ab) setHint('Click a blue tile to move · pick an action · click a target');
-  else if (ab.kind === 'dig')   setHint('QUARRY — click a block within 5 to break it');
-  else if (ab.kind === 'build') setHint('RAISE — click a face within 4 to set stone');
+  else if (ab.kind === 'dig')    setHint('QUARRY — click a block within 5 to break it');
+  else if (ab.kind === 'build')  setHint('RAISE — click a face within 4 to set stone');
+  else if (ab.kind === 'sunder') setHint(`${ab.name.toUpperCase()} — click the ground to shatter it`);
+  else if (ab.kind === 'self')   setHint(`${ab.name.toUpperCase()} — click anywhere to use it`);
+  else if (ab.spell && ab.spell.id === 'cleave') setHint('CLEAVE — click anywhere to strike all around you');
   else setHint(`${ab.name.toUpperCase()} — click a highlighted enemy`);
 }
 
@@ -1460,7 +1937,28 @@ function handleCombatClick(){
   // 1) an ability is armed
   if (ab){
     if (a.ap < ab.ap){ toast('No action left'); return; }
+    if (ab.mana > player.mana){ toast('Not enough mana'); return; }
+
+    if (ab.kind === 'self'){                      // Second Wind and the like
+      a.ap -= ab.ap;
+      castSpell(a, ab, null, null);
+      CB.selAbility = -1; afterPlayerAction(); return;
+    }
+    if (ab.kind === 'sunder'){                    // Stone Sunder — targets ground
+      const rc = mouseVoxel(40);
+      if (!rc.hit) return;
+      if (Math.hypot(rc.x+0.5-a.px, rc.y-a.py, rc.z+0.5-a.pz) > ab.range + 0.9){ toast('Too far'); return; }
+      a.ap -= ab.ap;
+      castSpell(a, ab, null, { x:rc.x, y:rc.y, z:rc.z });
+      CB.selAbility = -1; afterPlayerAction(); return;
+    }
     if (ab.kind === 'melee' || ab.kind === 'ranged'){
+      // Cleave hits everything adjacent, so it needs no target under the cursor
+      if (ab.spell && ab.spell.id === 'cleave'){
+        a.ap -= ab.ap;
+        if (!castSpell(a, ab, null, null)){ a.ap += ab.ap; return; }
+        CB.selAbility = -1; afterPlayerAction(); return;
+      }
       const t = pickEnemyUnderMouse();
       if (!t) return;
       if (!canHit(a, t, ab)){
@@ -1469,8 +1967,13 @@ function handleCombatClick(){
         return;
       }
       a.ap -= ab.ap;
-      log(`You use <b>${ab.name}</b> on ${t.name}.`);
-      resolveAttack(a, t, ab);
+      if (ab.spell){
+        castSpell(a, ab, t, null);
+      } else {
+        log(`You <b>${ab.name}</b> ${t.name}.`);
+        setAnim(a, 'attack', 0.35);
+        resolveAttack(a, t, ab);
+      }
       CB.selAbility = -1;
       afterPlayerAction();
       return;
@@ -1593,6 +2096,7 @@ function aiStep(){
   } else if (step.t === 'attack'){
     a.ap -= 1;
     log(`<b>${a.name}</b> attacks.`);
+    setAnim(a, 'attack', 0.35);
     resolveAttack(a, step.target, step.ab);
     if (!player.alive){ endCombat('lose'); return; }
     CB.phase = 'aithink'; CB.timer = 0.42;
@@ -1641,12 +2145,8 @@ function updateCombat(dt){
   camera.position.z = lerp(camera.position.z, tz, k);
   camera.lookAt(CB.focus.x, CB.focus.y, CB.focus.z);
 
-  // idle bob
-  for (const c of CB.order){
-    if (!c.alive || c === CB.walker) continue;
-    c.bob = (c.bob || 0) + dt*2;
-    c.mesh.position.set(c.px, c.py + Math.sin(c.bob)*0.035, c.pz);
-  }
+  tickAnims(dt, CB.order);
+  tickFX(dt);
 
   switch (CB.phase){
     case 'intro':
@@ -1658,12 +2158,12 @@ function updateCombat(dt){
       // hover preview: path to the tile under the cursor
       const cell = tileUnderMouse();
       const ab = ABILITIES[CB.selAbility];
-      if (ab && (ab.kind === 'dig' || ab.kind === 'build')){
+      if (ab && (ab.kind === 'dig' || ab.kind === 'build' || ab.kind === 'sunder')){
         const rc = mouseVoxel(40);
         if (rc.hit){
           highlight.visible = true;
-          if (ab.kind === 'dig') highlight.position.set(rc.x+0.5, rc.y+0.5, rc.z+0.5);
-          else highlight.position.set(rc.nx+0.5, rc.ny+0.5, rc.nz+0.5);
+          if (ab.kind === 'build') highlight.position.set(rc.nx+0.5, rc.ny+0.5, rc.nz+0.5);
+          else highlight.position.set(rc.x+0.5, rc.y+0.5, rc.z+0.5);
         } else highlight.visible = false;
         tPath.count = 0;
       } else {
@@ -1694,10 +2194,15 @@ function updateCombat(dt){
       w.px = lerp(A[0]+0.5, Bp[0]+0.5, t);
       w.py = lerp(A[1],     Bp[1],     t);
       w.pz = lerp(A[2]+0.5, Bp[2]+0.5, t);
+      w.walking = true;
       const sw = Math.sin(performance.now()*0.014)*0.42;
       if (w.mesh.userData.legs){
         w.mesh.userData.legs[0].rotation.x =  sw;
         w.mesh.userData.legs[1].rotation.x = -sw;
+      }
+      if (w.mesh.userData.arms){
+        w.mesh.userData.arms[0].rotation.x = -sw*0.6;
+        w.mesh.userData.arms[1].rotation.x =  sw*0.6;
       }
       w.mesh.position.set(w.px, w.py, w.pz);
       if (Bp !== A) w.mesh.rotation.y = Math.atan2(Bp[0]-A[0], Bp[2]-A[2]);
@@ -1707,6 +2212,7 @@ function updateCombat(dt){
         w.px = w.x+0.5; w.py = w.y; w.pz = w.z+0.5;
         w.mesh.position.set(w.px, w.py, w.pz);
         if (w.mesh.userData.legs){ w.mesh.userData.legs[0].rotation.x = 0; w.mesh.userData.legs[1].rotation.x = 0; }
+        w.walking = false;
         CB.walker = null; CB.walkPath = null;
         const done = CB.walkDone; CB.walkDone = null;
         CB.phase = 'idle';
@@ -1740,18 +2246,13 @@ function setHint(t){ document.getElementById('hint').textContent = t; }
 function drawVitals(){
   document.getElementById('vHp').textContent = `${Math.round(player.hp)} / ${player.maxHp}`;
   document.getElementById('vHpB').style.width = (player.hp/player.maxHp*100) + '%';
+  document.getElementById('vMana').textContent = `${Math.round(player.mana)} / ${player.maxMana}`;
+  document.getElementById('vManaB').style.width = (player.mana/player.maxMana*100) + '%';
   document.getElementById('vLvl').textContent = 'Level ' + player.level;
   document.getElementById('vXp').textContent = `${player.xp} / ${player.xpNext}`;
   document.getElementById('vXpB').style.width = (player.xp/player.xpNext*100) + '%';
-}
-function drawHotbar(){
-  const el = document.getElementById('hotbar');
-  el.innerHTML = HOTBAR.map((b,i)=>{
-    const c = '#' + COL[b][0].toString(16).padStart(6,'0');
-    return `<div class="slot ${i===player.hotbar?'on':''}"><span class="k">${i+1}</span>
-      <span class="sw" style="background:${c}"></span>
-      <span style="font-size:8px;letter-spacing:.06em;color:#98a2b2">${BLOCK_NAME[b]}</span></div>`;
-  }).join('');
+  const w = WEAPONS.find(x=>x.id===player.weaponId), s = SPELLS.find(x=>x.id===player.spellId);
+  document.getElementById('vGear').textContent = `${w?w.name:'—'} · ${s?s.name:'—'}`;
 }
 function drawOrder(){
   const el = document.getElementById('order');
@@ -1775,9 +2276,10 @@ function drawActs(){
   const yours = a && a.isPlayer && CB.phase === 'idle';
   const el = document.getElementById('acts');
   el.innerHTML = ABILITIES.map((ab,i)=>{
-    const off = !yours || a.ap < ab.ap;
+    const off = !yours || a.ap < ab.ap || ab.mana > player.mana;
+    const cost = ab.mana ? `<span class="mc">${ab.mana}</span>` : '';
     return `<div class="act ${CB.selAbility===i?'sel':''} ${off?'off':''} ${ab.probe?'probe':''}" data-i="${i}">
-      <span class="ak">${i+1}</span>
+      <span class="ak">${i+1}</span>${cost}
       <div class="an">${ab.name}</div><div class="ad">${ab.desc}</div></div>`;
   }).join('') + `<div class="act" data-end="1"><div class="an">End Turn</div><div class="ad">SPACE</div></div>`;
   el.querySelectorAll('.act').forEach(n=>{
@@ -1847,7 +2349,9 @@ function saveGame(){
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       seed: SEED, edits: ed,
       p: { x:player.pos.x, y:player.pos.y, z:player.pos.z, yaw:player.yaw,
-           hp:player.hp, maxHp:player.maxHp, lvl:player.level, xp:player.xp, xpNext:player.xpNext },
+           hp:player.hp, mana:player.mana, lvl:player.level, xp:player.xp, xpNext:player.xpNext,
+           st:player.st, weaponId:player.weaponId, spellId:player.spellId,
+           bonusHp:player.bonusHp||0, bonusMana:player.bonusMana||0 },
       spawn: { x:player.spawn.x, y:player.spawn.y, z:player.spawn.z },
     }));
   } catch(e){ /* quota — not fatal for a prototype */ }
@@ -1860,11 +2364,13 @@ function loadGame(){
     SEED = s.seed;
     EDITS.clear(); _hCache.clear(); CHUNKS.clear();
     for (const [k, arr] of s.edits) EDITS.set(k, new Map(arr));
+    if (!s.p || !s.p.st) return false;          // pre-creator save — start fresh
     player.pos.set(s.p.x, s.p.y, s.p.z);
     player.yaw = s.p.yaw || 0;
-    player.hp = s.p.hp; player.maxHp = s.p.maxHp;
+    player.st = s.p.st; player.weaponId = s.p.weaponId; player.spellId = s.p.spellId;
+    player.bonusHp = s.p.bonusHp || 0; player.bonusMana = s.p.bonusMana || 0;
     player.level = s.p.lvl; player.xp = s.p.xp; player.xpNext = s.p.xpNext;
-    player.mpMax = 6 + Math.floor(player.level/3);
+    player.hp = s.p.hp; player.mana = s.p.mana;
     player.spawn.set(s.spawn.x, s.spawn.y, s.spawn.z);
     return true;
   } catch(e){ return false; }
@@ -1878,20 +2384,34 @@ function newWorld(){
   }
   CHUNKS.clear();
   for (let i=entities.length-1;i>=0;i--) despawnEntity(entities[i]);
-  // walk outward from the origin until we find dry, gentle land
-  let sx = 0, sz = 0;
-  for (let r=0; r<400; r++){
-    const a = r*2.399, rr = r*1.7;
-    const x = Math.round(Math.cos(a)*rr), z = Math.round(Math.sin(a)*rr);
-    const h = heightAt(x,z);
-    if (h > SEA+2 && h < 44){ sx = x; sz = z; break; }
-  }
+  _structs = null;                          // structures are seed-dependent
+  // You wake at the campfire, facing the lake, with the town on your right.
+  const sx = HOME.x + 3, sz = HOME.z + 2;
   const sy = surfaceY(sx, sz);
   player.pos.set(sx+0.5, sy+0.2, sz+0.5);
   player.spawn.copy(player.pos);
-  player.hp = 60; player.maxHp = 60; player.level = 1;
-  player.xp = 0; player.xpNext = 40; player.mpMax = 6;
-  player.yaw = 0; player.pitch = 0; player.vel.set(0,0,0);
+  player.yaw = Math.atan2(-(LAKE.x-sx), -(LAKE.z-sz));   // look out over the water
+  player.pitch = -0.05; player.vel.set(0,0,0);
+  applyBuild(true);
+}
+// A handful of creatures prowling the ruins, so there is something to fight
+// within sight of the fire without them walking into you the moment you stand up.
+function seedValeEnemies(){
+  const spots = [[-19,-14],[-22,-6],[14,12],[19,17],[9,-19],[-6,22],[24,-3],[-13,15]];
+  const kinds = ['husk','sprig','husk','slinger','sprig','husk','slinger','sprig'];
+  spots.forEach(([ox,oz], i)=>{
+    // nudge off anything perched on a ruin wall — a creature on a 4-block wall
+    // is unreachable by melee and turns the fight into a stalemate
+    for (let tryN=0; tryN<8; tryN++){
+      const x = HOME.x+ox+(tryN?Math.round((hash2(i,tryN,SEED)-0.5)*7):0);
+      const z = HOME.z+oz+(tryN?Math.round((hash2(tryN,i,SEED)-0.5)*7):0);
+      const y = surfaceY(x, z);
+      if (y <= SEA+1) continue;
+      if (getBlock(x, y-1, z) === B.MOSS || getBlock(x, y-1, z) === B.STONE) continue;
+      spawnEntity(kinds[i], x, y, z);
+      return;
+    }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1919,6 +2439,8 @@ function step(dt){
     updateCombat(dt);
   }
   drainMeshQueue(MESH_BUDGET);
+  tickCampfire(G.time);
+  if (G.mode === 'explore') tickFX(dt);
   updateTags(dt);
 }
 function render(){
@@ -1957,20 +2479,100 @@ function enterWorld(){
   // make sure we are standing on something
   if (!boxFree(player.pos.x, player.pos.y, player.pos.z))
     player.pos.y = surfaceY(Math.floor(player.pos.x), Math.floor(player.pos.z)) + 0.1;
+  buildCampfire();
+  if (!entities.length && Math.hypot(player.pos.x-HOME.x, player.pos.z-HOME.z) < 40) seedValeEnemies();
   populate(player.pos.x, player.pos.z);
-  drawHotbar(); drawVitals();
+  drawVitals();
   document.getElementById('lockmsg').style.display = 'flex';
-  toast('Find something to fight', 3);
+  toast('Ruins, water, and a town on the hill', 3.4);
 }
-document.getElementById('btnPlay').onclick = ()=>{
-  if (!loadGame()) newWorld();
-  enterWorld();
+// ═══════════════════════════════════════════════════════════════════════
+//  CHARACTER CREATOR
+// ═══════════════════════════════════════════════════════════════════════
+const CC = { st:null, weaponId:'blade', spellId:'wind' };
+function ccSpent(){ return STATS.reduce((n,s)=> n + (CC.st[s.id]-STAT_BASE), 0); }
+function ccLeft(){ return STAT_POOL - ccSpent(); }
+
+function openCreator(){
+  CC.st = { mgt:STAT_BASE, vit:STAT_BASE, int:STAT_BASE, agi:STAT_BASE };
+  CC.weaponId = 'blade'; CC.spellId = 'wind';
+  document.getElementById('title').style.display = 'none';
+  document.getElementById('creator').classList.add('on');
+  drawCreator();
+}
+function drawCreator(){
+  const left = ccLeft();
+  document.getElementById('cPool').textContent = left;
+
+  document.getElementById('cStats').innerHTML = STATS.map(s=>{
+    const v = CC.st[s.id];
+    return `<div class="srow">
+      <div class="sname"><div class="sn">${s.name}</div><div class="sb">${s.blurb}</div></div>
+      <button class="sbtn" data-dec="${s.id}" ${v<=STAT_BASE?'disabled':''}>−</button>
+      <div class="sval">${v}</div>
+      <button class="sbtn" data-inc="${s.id}" ${(left<=0||v>=STAT_CAP)?'disabled':''}>+</button>
+    </div>`;
+  }).join('');
+
+  // Anything the player picked that their stats no longer support falls back.
+  if (!meets(CC.st, (WEAPONS.find(w=>w.id===CC.weaponId)||{}).req)) CC.weaponId = 'blade';
+  if (!meets(CC.st, (SPELLS.find(s=>s.id===CC.spellId)||{}).req))   CC.spellId  = 'wind';
+
+  const d = derive(CC.st, CC.weaponId);
+  document.getElementById('cDerived').innerHTML = `
+    <span>Vigour <b>${d.maxHp}</b></span><span>Mana <b>${d.maxMana}</b></span>
+    <span>Movement <b>${d.mpMax}</b></span><span>Actions <b>${d.apMax}</b></span>
+    <span>Initiative <b>${d.initiative}</b></span><span>Shield <b>${d.soak?Math.round(d.soak*100)+'%':'—'}</b></span>`;
+
+  const optHtml = (o, sel, kind)=>{
+    const ok = meets(CC.st, o.req);
+    const req = o.req ? `${STATS.find(s=>s.id===o.req[0]).name} ${o.req[1]}` : 'no requirement';
+    return `<div class="copt ${sel?'sel':''} ${ok?'':'lock'}" data-${kind}="${o.id}">
+      <div class="on2"><span>${o.name}</span><span class="req">${req}</span></div>
+      <div class="od">${o.desc}</div></div>`;
+  };
+  document.getElementById('cWeapons').innerHTML =
+    WEAPONS.map(w=> optHtml(w, w.id===CC.weaponId, 'weapon')).join('');
+  document.getElementById('cSpells').innerHTML =
+    SPELLS.map(s=> optHtml(s, s.id===CC.spellId, 'spell')).join('');
+
+  document.getElementById('cNote').textContent = left > 0
+    ? `${left} point${left>1?'s':''} unspent — raise a stat to unlock better gear.`
+    : 'Strike comes free with whatever you carry.';
+
+  const root = document.getElementById('creator');
+  root.querySelectorAll('[data-inc]').forEach(b=> b.onclick = ()=>{
+    if (ccLeft() > 0 && CC.st[b.dataset.inc] < STAT_CAP){ CC.st[b.dataset.inc]++; drawCreator(); } });
+  root.querySelectorAll('[data-dec]').forEach(b=> b.onclick = ()=>{
+    if (CC.st[b.dataset.dec] > STAT_BASE){ CC.st[b.dataset.dec]--; drawCreator(); } });
+  root.querySelectorAll('[data-weapon]').forEach(el=> el.onclick = ()=>{
+    if (el.classList.contains('lock')) return;
+    CC.weaponId = el.dataset.weapon; drawCreator(); });
+  root.querySelectorAll('[data-spell]').forEach(el=> el.onclick = ()=>{
+    if (el.classList.contains('lock')) return;
+    CC.spellId = el.dataset.spell; drawCreator(); });
+}
+document.getElementById('cBack').onclick = ()=>{
+  document.getElementById('creator').classList.remove('on');
+  document.getElementById('title').style.display = 'flex';
 };
-document.getElementById('btnNew').onclick = ()=>{
+document.getElementById('cGo').onclick = ()=>{
+  player.st = { ...CC.st };
+  player.weaponId = CC.weaponId; player.spellId = CC.spellId;
+  player.level = 1; player.xp = 0; player.xpNext = 40; player.hp = 0;
+  applyBuild();
+  player.hp = player.maxHp;
+  document.getElementById('creator').classList.remove('on');
   localStorage.removeItem(SAVE_KEY);
   newWorld();
   enterWorld();
 };
+
+document.getElementById('btnPlay').onclick = ()=>{
+  if (loadGame()){ applyBuild(); enterWorld(); }
+  else openCreator();                       // no save yet → make a character first
+};
+document.getElementById('btnNew').onclick = openCreator;
 document.getElementById('bBtn').onclick = ()=> leaveCombat(CB.result || 'win');
 newWorld();                                     // prime a world so the title screen has state
 
@@ -1979,7 +2581,10 @@ newWorld();                                     // prime a world so the title sc
 // ═══════════════════════════════════════════════════════════════════════
 window.STRATA = {
   G, CB, player, entities, CHUNKS, EDITS,
-  THREE, camera, scene,
+  THREE, camera, scene, renderer,
+  // Render and grab the frame in the SAME tick — without preserveDrawingBuffer
+  // the buffer is gone by the next task and toDataURL returns an empty image.
+  shot(q=0.72){ renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', q); },
   start(){ if (!loadGame()) newWorld(); enterWorld(); },
   fresh(){ localStorage.removeItem(SAVE_KEY); newWorld(); enterWorld(); },
   step(dt=1/60){ step(dt); },
@@ -2025,10 +2630,11 @@ window.STRATA = {
       if (!a || !a.isPlayer) continue;
       const foe = CB.order.find(o => !o.isPlayer && o.alive);
       if (!foe){ endPlayerTurn(); continue; }
+      // Strike only. Spells vary in shape (self-target, ground-target, no damage
+      // at all), so driving them here would measure the harness, not the loop.
       if (a.ap > 0 && canHit(a, foe, ABILITIES[0])){ CB.selAbility = 0;
-        a.ap--; resolveAttack(a, foe, ABILITIES[0]); afterPlayerAction(); continue; }
-      if (a.ap > 0 && canHit(a, foe, ABILITIES[1])){ CB.selAbility = 1;
-        a.ap--; resolveAttack(a, foe, ABILITIES[1]); afterPlayerAction(); continue; }
+        a.ap--; setAnim(a,'attack',0.35); resolveAttack(a, foe, ABILITIES[0]);
+        afterPlayerAction(); continue; }
       // else close the distance, using the SAME planner the creatures use
       const pl = a.mp > 0 ? planApproach(a, foe, ABILITIES[0]) : null;
       if (pl && pl.cut > 0){ a.mp -= pl.cost; startWalk(a, pl.path, ()=>afterPlayerAction()); }
@@ -2071,7 +2677,9 @@ window.STRATA = {
   place(x,y,z,b=B.STONE){ setBlock(x,y,z,b); forceRemeshAround(x,z,1); if (CB.active) settleFalls(); },
   block(x,y,z){ return getBlock(x,y,z); },
   standable, surfaceY, reachable, hasLOS, planApproach,
-  attack: resolveAttack, abilities: ABILITIES,
+  attack: resolveAttack, cast: castSpell, applyBuild, derive, knockback,
+  get abilities(){ return ABILITIES; },
+  WEAPONS, SPELLS, STATS, HOME, LAKE, TOWN,
   teleport(x,z){
     player.pos.set(x+0.5, surfaceY(x,z)+0.2, z+0.5);
     updateStreaming(x,z); drainMeshQueue(2000);
