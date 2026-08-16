@@ -78,6 +78,11 @@
   #coords{position:absolute;right:18px;top:12px;font-size:11px;color:#8b95a5;
     text-align:right;line-height:1.7;font-variant-numeric:tabular-nums;text-shadow:0 2px 6px #000}
 
+  /* low vigour: the screen itself starts to go */
+  #hurtv{position:fixed;inset:0;z-index:19;pointer-events:none;opacity:0;transition:opacity .5s;
+    background:radial-gradient(ellipse at 50% 50%,rgba(0,0,0,0) 42%,rgba(120,16,10,.62) 100%)}
+  #hurtv.on{animation:hpulse 1.9s ease-in-out infinite}
+  @keyframes hpulse{0%,100%{filter:brightness(.85)}50%{filter:brightness(1.25)}}
   #toast{position:absolute;left:50%;top:22%;transform:translateX(-50%);
     font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);
     text-shadow:0 3px 12px #000;opacity:0;transition:opacity .3s}
@@ -314,6 +319,7 @@
   <div id="prompt"></div>
 </div>
 
+<div id="hurtv"></div>
 <div id="tags"></div>
 
 <div id="combat">
@@ -2111,13 +2117,23 @@ function makeBody(kind){
   const sh = K.shape || 'brute';
   const tw = sh === 'brute' ? 0.78 : sh === 'lithe' ? 0.48 : 0.60;
   const td = sh === 'brute' ? 0.50 : sh === 'lithe' ? 0.34 : 0.42;
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(tw,0.78,td), bm); torso.position.y = 0.86;
-  const head  = new THREE.Mesh(new THREE.BoxGeometry(0.46,0.44,0.44), tm); head.position.y = 1.46;
-  const legL  = new THREE.Mesh(new THREE.BoxGeometry(0.20,0.50,0.22), tm); legL.position.set(-0.16,0.24,0);
+  // Tapered torso and limbs. Straight boxes were the last thing on screen still
+  // reading as a prototype now that the trees are real geometry.
+  const torso = new THREE.Mesh(
+    new THREE.CylinderGeometry(tw*0.46, tw*0.60, 0.78, 8).scale(1, 1, td/tw*1.5), bm);
+  torso.position.y = 0.86;
+  const hip = new THREE.Mesh(new THREE.CylinderGeometry(tw*0.42, tw*0.34, 0.22, 8)
+    .scale(1, 1, td/tw*1.5), tm);
+  hip.position.y = 0.50;
+  const head  = new THREE.Mesh(new THREE.BoxGeometry(0.44,0.42,0.42), tm); head.position.y = 1.44;
+  const neck  = new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.15,0.16,6), tm); neck.position.y=1.22;
+  const limb = (r0,r1,len)=> new THREE.CylinderGeometry(r0, r1, len, 6);
+  const legL  = new THREE.Mesh(limb(0.09,0.12,0.50), tm); legL.position.set(-0.16,0.24,0);
   const legR  = legL.clone(); legR.position.x = 0.16;
-  const armL  = new THREE.Mesh(new THREE.BoxGeometry(0.17,0.56,0.20), bm);
-  armL.position.set(-(tw*0.5+0.09), 0.88, 0);
-  const armR  = armL.clone(); armR.position.x = tw*0.5+0.09;
+  const armL  = new THREE.Mesh(limb(0.07,0.10,0.56), bm);
+  armL.position.set(-(tw*0.5+0.06), 0.88, 0);
+  const armR  = armL.clone(); armR.position.x = tw*0.5+0.06;
+  g.add(hip, neck);
   if (sh === 'brute'){                          // heavy pauldrons
     const pl = new THREE.Mesh(new THREE.BoxGeometry(0.26,0.16,0.34), tm);
     pl.position.set(-(tw*0.5+0.04), 1.16, 0);
@@ -2295,12 +2311,26 @@ function tickAnims(dt, list){
         case 'cast':
           up = s*0.22; armLX = armRX = -2.5*s; armZ = s*0.55; yawOff = Math.sin(p*Math.PI*2)*0.12;
           break;
-        case 'hurt':
-          fwd = -s*0.30; tilt = -s*0.38; yawOff = s*0.22; armLX = armRX = s*0.5;
+        case 'guard':                          // brace: crouch, arms in tight
+          up = -s*0.10; armLX = armRX = -0.9*s; armZ = s*0.35; tilt = s*0.10;
           break;
+        case 'hurt': {
+          // recoil AWAY from whoever hit you, not in some fixed direction
+          const hd = a.anim.dir === undefined ? 0 : a.anim.dir;
+          const rel = hd - (a.faceYaw || 0);
+          fwd = -Math.cos(rel)*s*0.34;
+          tilt = -Math.cos(rel)*s*0.40;
+          yawOff = Math.sin(rel)*s*0.34;
+          armLX = armRX = s*0.5;
+          break;
+        }
         case 'die': {
           const e = p*p;                       // accelerate as it topples
-          tilt = -e*(Math.PI/2.1); up = -e*0.38; yawOff = e*0.5;
+          const hd = a.anim.dir === undefined ? 0 : a.anim.dir;
+          const rel = hd - (a.faceYaw || 0);
+          tilt = -Math.cos(rel)*e*(Math.PI/2.1);
+          up = -e*0.38;
+          yawOff = e*(0.5 + Math.sin(rel)*0.8);   // topples the way it was struck
           break;
         }
       }
@@ -2810,14 +2840,23 @@ function applyBuild(refill){
   const bm = new THREE.MeshLambertMaterial({ color:0x4f6f9a });
   const tm = new THREE.MeshLambertMaterial({ color:0x2c3f5c });
   const cm = new THREE.MeshLambertMaterial({ color:0xd8b45a });
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.60,0.80,0.40), bm); torso.position.y=0.88;
-  const head  = new THREE.Mesh(new THREE.BoxGeometry(0.44,0.44,0.44),
-                  new THREE.MeshLambertMaterial({ color:0xd6b48f })); head.position.y=1.48;
-  const hat   = new THREE.Mesh(new THREE.BoxGeometry(0.52,0.14,0.52), cm); hat.position.y=1.76;
-  const legL  = new THREE.Mesh(new THREE.BoxGeometry(0.20,0.52,0.22), tm); legL.position.set(-0.15,0.25,0);
+  const torso = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.27, 0.34, 0.80, 8).scale(1,1,0.72), bm); torso.position.y=0.88;
+  const hip   = new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.20,0.22,8).scale(1,1,0.72), tm);
+  hip.position.y=0.52;
+  const head  = new THREE.Mesh(new THREE.BoxGeometry(0.42,0.42,0.42),
+                  new THREE.MeshLambertMaterial({ color:0xd6b48f })); head.position.y=1.46;
+  const neck  = new THREE.Mesh(new THREE.CylinderGeometry(0.10,0.15,0.16,6), tm); neck.position.y=1.24;
+  const hat   = new THREE.Mesh(new THREE.ConeGeometry(0.34,0.24,8), cm); hat.position.y=1.76;
+  const cloak = new THREE.Mesh(new THREE.CylinderGeometry(0.30,0.44,0.78,8,1,true)
+    .scale(1,1,0.62), new THREE.MeshLambertMaterial({ color:0x2c3f5c, side:THREE.DoubleSide }));
+  cloak.position.set(0,0.84,-0.06);
+  const limb = (r0,r1,len)=> new THREE.CylinderGeometry(r0,r1,len,6);
+  const legL  = new THREE.Mesh(limb(0.09,0.12,0.52), tm); legL.position.set(-0.15,0.25,0);
   const legR  = legL.clone(); legR.position.x=0.15;
-  const armL  = new THREE.Mesh(new THREE.BoxGeometry(0.17,0.58,0.20), bm); armL.position.set(-0.39,0.90,0);
-  const armR  = armL.clone(); armR.position.x=0.39;
+  const armL  = new THREE.Mesh(limb(0.07,0.10,0.58), bm); armL.position.set(-0.36,0.90,0);
+  const armR  = armL.clone(); armR.position.x=0.36;
+  g.add(hip, neck, cloak);
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 14).rotateX(-Math.PI/2),
     new THREE.MeshBasicMaterial({ color:0x0a0d12, transparent:true, opacity:0.26, depthWrite:false }));
   shadow.position.y = 0.03; shadow.renderOrder = 1;
@@ -3305,14 +3344,18 @@ function damage(t, amt, note){
   sparks(t.x, t.y, t.z, t.isPlayer ? 0xff7a6a : 0xffd27a, 10);
   shake(t.isPlayer ? 0.55 : 0.22);
   (amt >= 15 ? SFX.crit : SFX.hit)();
+  if (CB.lastAttacker && CB.lastAttacker !== t)   // which way to recoil / topple
+    CB.hitDir = Math.atan2(CB.lastAttacker.x - t.x, CB.lastAttacker.z - t.z);
   t.hp = Math.max(0, t.hp - amt);
   setAnim(t, 'hurt', 0.28);
+  if (t.anim) t.anim.dir = CB.hitDir === undefined ? 0 : CB.hitDir;
   CB.lastDamageRound = CB.round;              // any hit resets the stalemate clock
   fct(t, '−'+amt, t.isPlayer ? '#ff8a7a' : '#ffd27a');
   log(`<b>${t.name}</b> takes <span class="hit">${amt}</span>${note?' <span style="color:#8d97a7">('+note+')</span>':''}`);
   if (t.hp <= 0){
     t.alive = false;
     setAnim(t, 'die', 0.55);
+    if (t.anim) t.anim.dir = CB.hitDir === undefined ? 0 : CB.hitDir;
     SFX.die();
     log(`<b>${t.name}</b> falls.`);
     if (!t.isPlayer){ CB.xpPot += t.K.xp; creditKill(t); }
@@ -3321,6 +3364,7 @@ function damage(t, amt, note){
   drawVitals();
 }
 function resolveAttack(a, t, ab){
+  CB.lastAttacker = a;
   const [lo,hi] = ab.dmg;
   let dmg = lo + Math.floor(Math.random()*(hi-lo+1));
   const notes = [];
@@ -3891,10 +3935,12 @@ function aiStep(){
     a.ap -= 1;
     log(`<b>${a.name}</b> attacks.`);
     faceToward(a, step.target.x, step.target.z);
-    setAnim(a, 'attack', 0.42, a.K.reach > 1 ? 'cast' : (a.K.scale > 1.05 ? 'chop' : 'slash'));
-    resolveAttack(a, step.target, step.ab);
-    if (!player.alive){ endCombat('lose'); return; }
-    CB.phase = 'aithink'; CB.timer = 0.42;
+    const style = a.K.reach > 1 ? 'cast' : (a.K.scale > 1.05 ? 'chop' : 'slash');
+    setAnim(a, 'attack', 0.42, style);
+    // Telegraph: the blow lands PART WAY THROUGH the swing, not on the frame the
+    // decision was made. Without the gap you never see it coming.
+    CB.phase = 'telegraph'; CB.timer = 0.20;
+    CB.pendingHit = { a, t:step.target, ab:step.ab };
   }
 }
 
@@ -4033,6 +4079,16 @@ function updateCombat(dt){
       break;
     }
 
+    case 'telegraph':
+      CB.timer -= dt;
+      if (CB.timer <= 0){
+        const h = CB.pendingHit; CB.pendingHit = null;
+        if (h && h.a.alive) resolveAttack(h.a, h.t, h.ab);
+        if (!player.alive){ endCombat('lose'); break; }
+        CB.phase = 'aithink'; CB.timer = 0.34;
+      }
+      break;
+
     case 'aithink':
       CB.timer -= dt;
       if (CB.timer <= 0){
@@ -4058,6 +4114,9 @@ function setHint(t){ document.getElementById('hint').textContent = t; }
 function drawVitals(){
   document.getElementById('vHp').textContent = `${Math.round(player.hp)} / ${player.maxHp}`;
   document.getElementById('vHpB').style.width = (player.hp/player.maxHp*100) + '%';
+  const frac = player.hp/player.maxHp, hv = document.getElementById('hurtv');
+  hv.style.opacity = frac < 0.45 ? String(Math.min(1, (0.45-frac)/0.35)) : '0';
+  hv.classList.toggle('on', frac < 0.25);
   document.getElementById('vMana').textContent = `${Math.round(player.mana)} / ${player.maxMana}`;
   document.getElementById('vManaB').style.width = (player.mana/player.maxMana*100) + '%';
   document.getElementById('vLvl').textContent = 'Level ' + player.level;
