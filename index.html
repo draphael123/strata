@@ -648,11 +648,34 @@ const ITEMS = {
   lens:    { name:'Scrying Lens',  kind:'trinket', icon:'❖', desc:'+2 Intellect.',  st:{int:2} },
   feather: { name:'Kite Feather',  kind:'trinket', icon:'❖', desc:'+2 Agility.',    st:{agi:2} },
   torc:    { name:'Iron Torc',     kind:'trinket', icon:'❖', desc:'Take 10% less damage.', soak:0.10 },
+  // ── trinkets that change what a turn can DO ──────────────────────────────
+  longarm: { name:'Longarm Knot',  kind:'trinket', icon:'⟐',
+    desc:'Your melee Strike reaches one cell further.', tr:{ reach:1 } },
+  swiftfoot:{ name:'Swiftfoot Band',kind:'trinket', icon:'⟿',
+    desc:'+1 movement every turn.', tr:{ step:1 } },
+  bulwark: { name:'Bulwark Sigil', kind:'trinket', icon:'⛨',
+    desc:'While you Guard, take 30% less damage.', tr:{ bulwark:30 } },
+  huntsman:{ name:'Huntsman Cord', kind:'trinket', icon:'➵',
+    desc:'You shoot at full power with a foe adjacent.', tr:{ hunter:1 } },
+  reaver:  { name:'Reaver Fetish', kind:'trinket', icon:'⚔',
+    desc:'Your blows carry 20% further to others in reach.', tr:{ carry:20 } },
+  vigil:   { name:'Vigil Pendant', kind:'trinket', icon:'✚',
+    desc:'Recover 7 vigour whenever something dies by your hand.', tr:{ vigil:7 } },
   barrowlight: { name:'Barrowlight', kind:'trinket', icon:'✸',
-    desc:'Taken from the barrow. +2 Might, +2 Vitality, 8% less damage taken.',
-    st:{mgt:2, vit:2}, soak:0.08, unique:true },
+    desc:'Taken from the barrow. +2 Might, +2 Vitality, 8% less damage taken, and your blows carry 15% further.',
+    st:{mgt:2, vit:2}, soak:0.08, tr:{ carry:15 }, unique:true },
 };
-const LOOT_TABLE = ['salve','salve','draught','ember','charm','ward','lens','feather','torc'];
+const LOOT_TABLE = ['salve','salve','draught','ember','charm','ward','lens','feather','torc',
+                    'longarm','swiftfoot','bulwark','huntsman','reaver','vigil'];
+// Rolled gear can carry one of these too, so found loot is worth reading.
+const GEAR_TRAITS = [
+  { k:'reach',   v:1,  txt:'melee Strike reaches one cell further' },
+  { k:'step',    v:1,  txt:'+1 movement every turn' },
+  { k:'carry',   v:15, txt:'blows carry 15% further to others in reach' },
+  { k:'bulwark', v:25, txt:'take 25% less damage while guarding' },
+  { k:'vigil',   v:5,  txt:'recover 5 vigour on a kill' },
+  { k:'hunter',  v:1,  txt:'no point-blank penalty' },
+];
 
 // ── procedurally generated gear ─────────────────────────────────────────────
 // Rolled items live on the player, not in ITEMS, so lookups go through itemDef.
@@ -675,12 +698,19 @@ function rollGear(level){
   }
   let soak = 0;
   if (r() < 0.34){ soak = 0.04 + Math.round(r()*level)*0.03; parts.push(`${Math.round(soak*100)}% less damage taken`); }
+  // A trait is the reason to stop and read a drop. Rarer than a stat line, and it
+  // is what makes one piece of loot a decision rather than a bigger number.
+  let tr = null;
+  if (r() < 0.30 + level*0.05){
+    const t = GEAR_TRAITS[Math.floor(r()*GEAR_TRAITS.length)];
+    tr = { [t.k]: t.v }; parts.push(t.txt);
+  }
   const name = `${GEAR_PRE[Math.floor(r()*GEAR_PRE.length)]} `
              + `${GEAR_BASE[Math.floor(r()*GEAR_BASE.length)]} `
              + (r() < 0.55 ? GEAR_SUF[Math.floor(r()*GEAR_SUF.length)] : '');
   const id = 'gear' + (++gearSeq) + '_' + Math.floor(r()*9999);
-  return { id, name:name.trim(), kind:'trinket', icon:'✵', rolled:true, level,
-           desc: parts.join(' · '), st, soak };
+  return { id, name:name.trim(), kind:'trinket', icon: tr ? '✵' : '❖', rolled:true, level,
+           desc: parts.join(' · '), st, soak, tr };
 }
 // every item lookup goes through here so rolled gear behaves like the fixed kind
 function itemDef(id){ return ITEMS[id] || (player.gear && player.gear[id]) || null; }
@@ -3229,6 +3259,13 @@ function despawnEntity(e){
 }
 // ── errand bookkeeping ──────────────────────────────────────────────────────
 function creditKill(e){
+  // Vigil turns "kill the weak one first" into a sustain plan instead of just
+  // arithmetic, which is the sort of thing a trinket should be for.
+  const v = trait('vigil');
+  if (v && player.alive && player.hp < player.maxHp){
+    player.hp = Math.min(player.maxHp, player.hp + v);
+    fct(player, '+'+v, '#a8cf72'); drawVitals();
+  }
   let changed = false;
   for (const q of player.q.active){
     if (q.have >= q.need) continue;
@@ -3413,11 +3450,22 @@ function wornSoak(){
   for (const id of player.worn){ const it = id && itemDef(id); if (it && it.soak) v += it.soak; }
   return v;
 }
+// Gear was +2 Might and 10% soak, forever — a stat stick. Your build diverged at
+// character creation and then never again, which is a strange thing to be true of
+// a game about position. A TRAIT changes what you can DO with a turn instead.
+function trait(k){
+  let v = 0;
+  for (const id of player.worn){
+    const it = id && itemDef(id);
+    if (it && it.tr && it.tr[k]) v += it.tr[k];
+  }
+  return v;
+}
 function applyBuild(refill){
   const d = derive(effStats(), player.weaponId);
   player.maxHp   = d.maxHp   + (player.bonusHp   || 0);
   player.maxMana = d.maxMana + (player.bonusMana || 0);
-  player.mpMax = d.mpMax; player.apMax = d.apMax;
+  player.mpMax = d.mpMax + trait('step'); player.apMax = d.apMax;
   player.soak = Math.min(0.6, d.soak + wornSoak());
   if (refill){ player.hp = player.maxHp; player.mana = player.maxMana; }
   else { player.hp = Math.min(player.hp || player.maxHp, player.maxHp);
@@ -3923,10 +3971,11 @@ function buildAbilities(){
   const pw = powerOf(est, w.scale);
   const dmg = [Math.max(1,Math.round(w.dmg[0]*pw)), Math.max(2,Math.round(w.dmg[1]*pw))];
   ABILITIES = [{
-    id:'strike', name:'Strike', ap:1, mana:0, kind:w.kind, range:w.range, dmg,
-    desc:`${w.kind==='ranged'?'Range '+w.range:'Melee'} · ${dmg[0]}–${dmg[1]}`
+    id:'strike', name:'Strike', ap:1, mana:0, kind:w.kind,
+    range: w.range + (w.kind === 'melee' ? trait('reach') : 0), dmg,
+    desc:`${w.kind==='ranged'?'Range '+w.range:'Melee'+(trait('reach')?' '+(w.range+trait('reach')):'')} · ${dmg[0]}–${dmg[1]}`
       + (FOLLOW_THROUGH[player.weaponId]
-         ? ` · carries ${Math.round(FOLLOW_THROUGH[player.weaponId]*100)}% to others in reach` : ''),
+         ? ` · carries ${Math.round(FOLLOW_THROUGH[player.weaponId]*100 + trait('carry'))}% to others in reach` : ''),
   },{
     // Measured: only 27% of ambushes offered a cell that was both in reach of a
     // foe AND had cover at your back. Without an answer in the open, the flank
@@ -4157,9 +4206,15 @@ function resolveAttack(a, t, ab){
   // winning the barrow 100% of the time against melee's 42-58% because standing
   // still and shooting was never punished -- nothing made them spend an action on
   // position. Now being engaged is the archer's version of being surrounded.
-  if (ab.kind === 'ranged' && CB.order.some(o =>
+  if (ab.kind === 'ranged' && !(a.isPlayer && trait('hunter')) && CB.order.some(o =>
         o.alive && o !== a && o.isPlayer !== a.isPlayer && adjacentTo(o, a))){
     dmg = Math.round(dmg*0.60); notes.push('POINT BLANK −40%');
+  }
+  // Guard is normally only cover-at-your-back. Bulwark makes setting yourself an
+  // actual damage decision rather than a positional one.
+  if (t.isPlayer && t.guarding && trait('bulwark')){
+    dmg = Math.round(dmg * (1 - Math.min(0.45, trait('bulwark')/100)));
+    notes.push('BULWARK');
   }
   faceToward(a, t.x, t.z);
 
@@ -4194,7 +4249,7 @@ function resolveAttack(a, t, ab){
   // OPPORTUNITY instead of its execution, and it needs no new button — it is the
   // same Strike, paying off for standing where the game otherwise punishes you.
   if (a.isPlayer && ab.id === 'strike' && FOLLOW_THROUGH[player.weaponId]){
-    const mult = FOLLOW_THROUGH[player.weaponId];
+    const mult = FOLLOW_THROUGH[player.weaponId] + trait('carry')/100;
     for (const o of CB.order){
       if (o === t || o.isPlayer || !o.alive || !adjacentTo(o, a)) continue;
       damage(o, Math.max(1, Math.round(dmg*mult)), 'FOLLOW-THROUGH');
@@ -5295,8 +5350,14 @@ function applySettings(){
   saveSettings();
 }
 // ── town dialogue ───────────────────────────────────────────────────────────
-const SHOP_STOCK = ['salve','draught','ember','charm','ward','lens','feather','torc'];
-const SHOP_PRICE = { salve:14, draught:12, ember:18, charm:34, ward:34, lens:34, feather:34, torc:44 };
+// The trait trinkets are the interesting half of the shop, and they are priced
+// above the stat sticks because they change what a turn can do rather than how
+// big a number is. Hess stocks them so a build is a choice you can go and BUY,
+// not one you wait for a drop to hand you.
+const SHOP_STOCK = ['salve','draught','ember','charm','ward','lens','feather','torc',
+                    'longarm','swiftfoot','bulwark','huntsman','reaver','vigil'];
+const SHOP_PRICE = { salve:14, draught:12, ember:18, charm:34, ward:34, lens:34, feather:34, torc:44,
+                     longarm:80, swiftfoot:76, bulwark:70, huntsman:66, reaver:74, vigil:72 };
 let townFolk = null;
 function openTown(folk){
   townFolk = folk;
