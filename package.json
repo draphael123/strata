@@ -1,0 +1,6 @@
+{
+  "name": "strata",
+  "private": true,
+  "type": "module",
+  "description": "STRATA — an open-world voxel lamplighter's RPG with freeze-in-place turn combat. The game itself is a single static index.html with no build step; this file exists only so Vercel treats api/ as ES-module serverless functions."
+}

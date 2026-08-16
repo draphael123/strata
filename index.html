@@ -716,11 +716,38 @@ function rollGear(level){
              + `${GEAR_BASE[Math.floor(r()*GEAR_BASE.length)]} `
              + (r() < 0.55 ? GEAR_SUF[Math.floor(r()*GEAR_SUF.length)] : '');
   const id = 'gear' + (++gearSeq) + '_' + Math.floor(r()*9999);
-  return { id, name:name.trim(), kind:'trinket', icon: tr ? '✵' : '❖', rolled:true, level,
-           desc: parts.join(' · '), st, soak, tr };
+  const g = { id, name:name.trim(), kind:'trinket', icon: tr ? '✵' : '❖', rolled:true, level,
+              desc: parts.join(' · '), st, soak, tr };
+  // The word-list name is already on the item and already shown. If the scribe
+  // answers, it quietly replaces it with something tied to where this was found
+  // and what it actually does.
+  nameGear(g);
+  return g;
 }
 // every item lookup goes through here so rolled gear behaves like the fixed kind
 function itemDef(id){ return ITEMS[id] || (player.gear && player.gear[id]) || null; }
+// Where you are standing is the most interesting fact about a piece of loot, and
+// it is the one the word list could never use.
+async function nameGear(g){
+  const where = inBarrow(player.pos.x, player.pos.z) ? 'the barrow, underground'
+    : inTown(player.pos.x, player.pos.z) ? 'inside Fendmere'
+    : Math.hypot(player.pos.x-LAKE.x, player.pos.z-LAKE.z) < LAKE.r+6 ? 'the lakeshore'
+    : Math.hypot(player.pos.x-HOME.x, player.pos.z-HOME.z) < 30 ? 'the old ruins by the campfire'
+    : 'out in the dark of the vale';
+  const n = await scribe('gearname', {
+    foundAt: where,
+    foundAtNight: isNight(),
+    itDoes: g.desc,
+    roughPower: g.level,
+  });
+  if (!n) return;
+  const clean = n.replace(/["'.“”]/g, '').split('\n')[0].trim().slice(0, 42);
+  if (clean.length >= 3){
+    g.name = clean;
+    if (player.gear && player.gear[g.id]) player.gear[g.id].name = clean;
+    drawPause();
+  }
+}
 
 // ── the town: errands, standing, coin ──────────────────────────────────────
 const TOWN_NAME = 'Fendmere';
@@ -779,6 +806,23 @@ function refreshOffers(){
   player.q.offerSeed = (Math.random()*1e9)|0;
   const tier = repIndex();
   player.q.offers = [0,1,2].map(i=> rollErrand(i, player.q.offerSeed, tier));
+  askWhy();
+}
+// The errand itself is still a pure function of (slot, seed, tier) — the board is
+// stable and deterministic exactly as before. All the scribe adds is the REASON
+// Fendmere wants it done, and it arrives after the board is already readable.
+async function askWhy(){
+  const offers = player.q.offers;
+  const state = valeState();
+  offers.forEach(async (q, i)=>{
+    const why = await scribe('contract', {
+      task: q.title, detail: q.desc, pay: q.coin,
+      vale: state,
+      townspeople: TOWNSFOLK.filter(f=>f.role==='idler').map(f=>f.name),
+    });
+    // Guard against a slow reply landing on a board that has since been rerolled.
+    if (why && player.q.offers[i] === q){ q.why = why; drawTown(); }
+  });
 }
 
 // Derived character numbers, all in one place so the creator can preview them live.
@@ -3260,6 +3304,7 @@ function lightBeacon(c){
     toast(`Not enough oil — a beacon takes ${BEACON_COST}.`, 2.6); return false;
   }
   player.q.oil -= BEACON_COST;
+  if (player.run) player.run.lit++;
   player.q.beacons[c.id] = [c.mark.position.x, c.y, c.mark.position.z];
   _beaconKey = ' ';                                 // force the cache to rebuild
   SFX.heal(); boom(c.x, c.y+2, c.z, 0xffb35e);
@@ -3279,6 +3324,7 @@ function nearestChest(){
 }
 function openChest(c){
   player.q.chests[c.id] = 1;
+  if (player.run) player.run.chests++;
   c.mesh.userData.lid.rotation.x = -1.5;
   SFX.ui(); boom(c.x, c.y, c.z, 0xffd27a);
   const coin = 8 + Math.floor(Math.random()*(c.tier>1 ? 46 : 22));
@@ -3389,6 +3435,8 @@ function tickLight(t, dt){
   // Oil only burns when it is doing something — carrying a lit lantern through
   // daylight should not cost you the evening.
   if (q.lantern && q.oil > 0 && daylight() < 0.55){
+    const burn = Math.min(q.oil, OIL_BURN*dt);
+    if (player.run) player.run.oilSpent += burn;
     q.oil = Math.max(0, q.oil - OIL_BURN*dt);
     if (q.oil === 0) toast('Your lantern gutters out.', 3.0);
   }
@@ -3567,6 +3615,7 @@ function despawnEntity(e){
 }
 // ── errand bookkeeping ──────────────────────────────────────────────────────
 function creditKill(e){
+  if (player.run) player.run.killed++;
   // Vigil turns "kill the weak one first" into a sustain plan instead of just
   // arithmetic, which is the sort of thing a trinket should be for.
   const v = trait('vigil');
@@ -3660,6 +3709,9 @@ function acceptErrand(i){
   drawQuestHud(); drawTown();
 }
 function turnInErrands(){
+  // Reporting in closes the book on this trip: the next ledger covers the next one.
+  player.run = { lit:0, killed:0, died:0, fled:0, chests:0, oilSpent:0 };
+  LEDGER.stamp = '';
   let n = 0;
   for (let i=player.q.active.length-1; i>=0; i--){
     const q = player.q.active[i];
@@ -4736,6 +4788,10 @@ function startCombat(trigger){
 function endCombat(result){
   tutEnd();
   clearRoofClip();
+  if (player.run){
+    if (result === 'lose') player.run.died++;
+    else if (result === 'fled') player.run.fled++;
+  }
   CB.active = false;
   CB.phase = 'over';
   CB.result = result;
@@ -5675,7 +5731,7 @@ function updateHudText(){
 //  PAUSE MENU — character sheet, satchel, settings
 // ═══════════════════════════════════════════════════════════════════════
 const SETTINGS = { vol:0.34, sens:1.0, shadows:true, view:7, sfx:true, thirdPerson:false,
-                   music:true, musicVol:0.42, touch:false };
+                   music:true, musicVol:0.42, touch:false, scribe:true };
 try { Object.assign(SETTINGS, JSON.parse(localStorage.getItem('strata-set')||'{}')); } catch(e){}
 function saveSettings(){ try { localStorage.setItem('strata-set', JSON.stringify(SETTINGS)); } catch(e){} }
 function applySettings(){
@@ -5683,6 +5739,67 @@ function applySettings(){
   renderer.shadowMap.enabled = SETTINGS.shadows;
   scene.traverse(o=>{ if (o.isMesh && o.material) o.material.needsUpdate = true; });
   saveSettings();
+}
+// ═══════════════════════════ THE SCRIBE ═══════════════════════════
+// Optional model-written flavour, laid over content the game already generated
+// deterministically. Three rules, and they are the whole design:
+//
+//   1. NOTHING WAITS ON IT. Every call is fire-and-forget with a fallback already
+//      on screen. If it never answers, you cannot tell by playing.
+//   2. It never invents mechanics. The errand, the trinket and its stats all exist
+//      before the scribe is asked; it writes the REASON and the NAME only.
+//   3. With no key configured the endpoint 503s and the game is exactly the game
+//      it was — which is also how it behaves offline, on localhost, and for anyone
+//      who turns it off in settings.
+const SCRIBE = { on:true, tried:false, ok:false, inflight:0, fails:0 };
+async function scribe(kind, data, ms=11000){
+  if (!SETTINGS.scribe || !SCRIBE.on) return null;
+  // Three failures in a row is a configuration problem, not bad luck. Stop asking
+  // rather than burning a request every time you walk into town.
+  if (SCRIBE.fails >= 3) return null;
+  if (SCRIBE.inflight > 2) return null;
+  SCRIBE.inflight++;
+  const ctl = new AbortController();
+  const t = setTimeout(()=>ctl.abort(), ms);
+  try {
+    const r = await fetch('/api/scribe', {
+      method:'POST', signal:ctl.signal,
+      headers:{ 'content-type':'application/json' },
+      body: JSON.stringify({ kind, data }),
+    });
+    SCRIBE.tried = true;
+    if (r.status === 503){ SCRIBE.on = false; return null; }   // no key — stay quiet
+    if (!r.ok){ SCRIBE.fails++; return null; }
+    const j = await r.json();
+    SCRIBE.fails = 0; SCRIBE.ok = true;
+    return (j && typeof j.text === 'string' && j.text.trim()) ? j.text.trim() : null;
+  } catch(e){
+    SCRIBE.fails++; return null;
+  } finally {
+    clearTimeout(t); SCRIBE.inflight--;
+  }
+}
+// What the vale looks like right now, as the scribe sees it. Kept small on purpose:
+// the endpoint caps the payload, and a short brief writes better than a long one.
+function valeState(){
+  const q = player.q;
+  const lit = Object.keys(q.beacons||{}).length;
+  const dark = [];
+  for (const [name, dx, dz] of [['north',0,-1],['east',1,0],['south',0,1],['west',-1,0]]){
+    let anyLit = false;
+    for (const b of litBeacons())
+      if (Math.sign(Math.round((b.x-HOME.x)/60)) === dx && Math.sign(Math.round((b.z-HOME.z)/60)) === dz) anyLit = true;
+    if (!anyLit) dark.push(name);
+  }
+  return {
+    beaconsLit: lit,
+    quartersStillDark: dark,
+    oilLeft: Math.round(q.oil||0),
+    reputation: REP_TIERS[repIndex()] ? REP_TIERS[repIndex()].name : 'unknown',
+    errandsSettled: q.done||0,
+    barrow: q.barrow,
+    level: player.level,
+  };
 }
 // ── town dialogue ───────────────────────────────────────────────────────────
 // The trait trinkets are the interesting half of the shop, and they are priced
@@ -5706,8 +5823,32 @@ function openTown(folk){
     return;
   }
   if (folk.role === 'reeve' && !player.q.offers.length) refreshOffers();
+  if (folk.role === 'reeve') requestChronicle();
   document.getElementById('town').classList.add('on');
   drawTown();
+}
+// The ledger. Asked for once per arrival, and the panel is already on screen and
+// readable before it answers — if it never does, there is simply no ledger today.
+const LEDGER = { text:null, pending:false, stamp:'' };
+function sessionBrief(){
+  const s = valeState(), r = player.run || {};
+  const b = { ...s };
+  if (r.lit)     b.beaconsLitThisTime = r.lit;
+  if (r.killed)  b.creaturesKilled = r.killed;
+  if (r.died)    b.timesYouFell = r.died;
+  if (r.fled)    b.timesYouBrokeOff = r.fled;
+  if (r.chests)  b.cachesOpened = r.chests;
+  if (r.oilSpent) b.oilBurned = Math.round(r.oilSpent);
+  b.timeOfDay = isNight() ? 'night' : 'day';
+  return b;
+}
+async function requestChronicle(){
+  const stamp = JSON.stringify(sessionBrief());
+  if (LEDGER.pending || stamp === LEDGER.stamp) return;   // nothing has changed
+  LEDGER.pending = true;
+  const txt = await scribe('chronicle', sessionBrief());
+  LEDGER.pending = false;
+  if (txt){ LEDGER.text = txt; LEDGER.stamp = stamp; drawTown(); }
 }
 function closeTown(){
   townFolk = null; G.paused = false;
@@ -5722,6 +5863,11 @@ function drawTown(){
     `${t.name} · ${player.q.coin} coin · ${player.q.done} settled`;
 
   if (townFolk.role === 'reeve'){
+    const ledger = LEDGER.text
+      ? `<div class="psec">The ledger</div>
+         <div class="od3" style="font-style:italic;line-height:1.55;white-space:pre-wrap">${
+           LEDGER.text.replace(/[<>&]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</div>`
+      : '';
     const ready = player.q.active.filter(q=>q.have >= q.need).length;
     const act = player.q.active.map(q=>`
       <div class="offer ${q.have>=q.need?'done':''}">
@@ -5734,11 +5880,13 @@ function drawTown(){
       <div class="offer">
         <span style="flex:1"><div class="on3">${q.title}</div>
           <div class="od3">${q.desc}</div>
+          ${q.why ? `<div class="od3" style="font-style:italic;color:#9aa4b4;margin-top:3px">${q.why}</div>` : ''}
           <div class="orw">${q.coin} coin · ${q.xp} xp</div></span>
         <button class="tog" data-take="${i}">Take</button></div>`).join('')
       || `<div class="od3">The board is bare. Come back after you've settled something.</div>`;
     body.innerHTML = `
       <div class="od3" style="font-style:italic;margin-bottom:12px">“${townFolk.line}”</div>
+      ${ledger}
       <div class="psec">In hand ${ready?`— <span style="color:#9ac25c">${ready} ready to settle</span>`:''}</div>
       ${act}
       ${ready?`<button class="btn small" id="tTurnIn" style="margin:4px 0 12px">Settle ${ready} errand${ready>1?'s':''}</button>`:''}
@@ -5926,6 +6074,13 @@ function drawPause(){
       <div class="srow2"><label>Music volume</label>
         <input type="range" min="0" max="100" value="${Math.round(SETTINGS.musicVol*100)}" data-set="musicVol">
         <span class="sv">${Math.round(SETTINGS.musicVol*100)}</span></div>
+      <div class="psec">The Scribe</div>
+      ${t('scribe','Model-written flavour')}
+      <div class="bd" style="font-size:10px;color:#6e7889;margin:-2px 0 8px">
+        ${!SCRIBE.tried ? 'Not yet contacted this session.'
+          : SCRIBE.ok ? 'Writing the reeve’s ledger, the reasons on the board, and the names on what you find.'
+          : 'Offline — the game is using its own written text. Nothing is missing.'}
+      </div>
       <div class="psec">Controls</div>
       ${t('thirdPerson','Third-person view (V)')}
       <div class="srow2"><label>Mouse sensitivity</label>
@@ -6087,6 +6242,9 @@ function newWorld(){
   player.bag = {}; player.worn = [null, null];  // a new run starts empty-handed
   player.q = { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none', chests:{},
                beacons:{}, oil:OIL_MAX, lantern:true };
+  // What happened since you last stood in front of the reeve. Deliberately NOT
+  // saved: the ledger is about this trip out, and it resets when you report in.
+  player.run = { lit:0, killed:0, died:0, fled:0, chests:0, oilSpent:0 };
   player.gear = {};
   // The waymark is a second mesh per cache and it has to go too. Starting a new
   // world used to leave the old one's chests in the scene — invisible while they
