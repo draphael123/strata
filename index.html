@@ -266,6 +266,8 @@
   .intent.attack{color:#ff9a86;border-color:rgba(207,90,76,.7);background:rgba(60,18,14,.86)}
   .intent.attack.high{color:#ffcf7a;border-color:rgba(216,180,90,.8)}
   .intent.attack.low{color:#a8cf9a;border-color:rgba(120,180,110,.6)}
+  .intent.attack.flank{color:#fff;background:rgba(150,26,20,.92);
+    border-color:#ff6a52;box-shadow:0 0 12px rgba(255,90,60,.5)}
   .intent.move{color:#8fb6e8}
   .intent.wait{color:#7d8798}
   .fct{position:absolute;transform:translate(-50%,-50%);font-size:19px;font-weight:700;
@@ -2141,7 +2143,15 @@ function makeBody(kind){
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 14).rotateX(-Math.PI/2),
     new THREE.MeshBasicMaterial({ color:0x0a0d12, transparent:true, opacity:0.26, depthWrite:false }));
   shadow.position.y = 0.03; shadow.renderOrder = 1;
-  g.add(torso, head, legL, legR, armL, armR, eye, eye2, shadow);
+  // A facing wedge on the ground. The flank rule is worthless if you can't see
+  // which way something is looking.
+  const wedge = new THREE.Mesh(
+    new THREE.RingGeometry(0.44, 0.72, 12, 1, -0.62, 1.24).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({ color:0xff8a6a, transparent:true, opacity:0.55,
+      depthWrite:false, side:THREE.DoubleSide }));
+  wedge.position.set(0, 0.05, 0); wedge.renderOrder = 2; wedge.visible = false;
+  g.add(torso, head, legL, legR, armL, armR, eye, eye2, shadow, wedge);
+  g.userData.wedge = wedge;
   g.scale.setScalar(K.scale);
   g.userData.legs = [legL, legR];
   g.userData.arms = [armL, armR];
@@ -2808,7 +2818,13 @@ function applyBuild(refill){
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 14).rotateX(-Math.PI/2),
     new THREE.MeshBasicMaterial({ color:0x0a0d12, transparent:true, opacity:0.26, depthWrite:false }));
   shadow.position.y = 0.03; shadow.renderOrder = 1;
-  g.add(torso, head, hat, legL, legR, armL, armR, shadow);
+  const wedge = new THREE.Mesh(
+    new THREE.RingGeometry(0.44, 0.72, 12, 1, -0.62, 1.24).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({ color:0x7fc8ff, transparent:true, opacity:0.55,
+      depthWrite:false, side:THREE.DoubleSide }));
+  wedge.position.set(0, 0.05, 0); wedge.renderOrder = 2; wedge.visible = false;
+  g.add(torso, head, hat, legL, legR, armL, armR, shadow, wedge);
+  g.userData.wedge = wedge;
   g.userData.legs = [legL, legR];
   g.userData.arms = [armL, armR];
   g.visible = false;
@@ -3195,6 +3211,57 @@ function hasCover(a, t){
   return false;
 }
 
+// ═══════════════════ POSITIONING ═══════════════════
+// Facing changes ONLY on your own turn. That single rule is what makes the whole
+// thing a game: step around something after it has acted and its back is to you
+// until it spends its next turn turning round.
+const adjacentTo = (a, t)=>
+  Math.max(Math.abs(a.x-t.x), Math.abs(a.z-t.z)) <= 1 && Math.abs(a.y-t.y) <= 1;
+function hostilesAdjacent(t){
+  let n = 0;
+  for (const o of CB.order){
+    if (!o.alive || o === t || o.isPlayer === t.isPlayer) continue;
+    if (adjacentTo(o, t)) n++;
+  }
+  return n;
+}
+// Is there something solid at your back? Putting a wall, a boulder or a ruin
+// behind you is THE counter to being flanked — which makes terrain the
+// defensive tool in a fight you are always outnumbered in.
+function backCovered(t){
+  const fy = t.faceYaw === undefined ? 0 : t.faceYaw;
+  for (const s of [-1, -0.7, 0.7]){             // directly behind, and both rear corners
+    const bx = Math.round(t.x - Math.sin(fy + s*0.9));
+    const bz = Math.round(t.z - Math.cos(fy + s*0.9));
+    if (isSolid(bx, t.y, bz)) return true;
+  }
+  return false;
+}
+// Where an attacker stands relative to where the target is looking.
+function flankOf(ax, az, t){
+  const fy = t.faceYaw === undefined ? 0 : t.faceYaw;
+  const fx = Math.sin(fy), fz = Math.cos(fy);
+  const dx = ax - t.x, dz = az - t.z;
+  const len = Math.hypot(dx, dz) || 1;
+  const dot = (fx*dx + fz*dz) / len;          // +1 dead ahead, −1 dead behind
+  const covered = backCovered(t);
+  // Measured: without a counter, enemies flanked the player on 99% of swings —
+  // that is a tax, not a decision. Rear attacks are denied outright by cover at
+  // your back, and it takes THREE on you to count as swarmed, so holding a line
+  // against two is a real and reachable choice.
+  if (dot < -0.30) return covered ? { m:1, label:null } : { m:1.85, label:'BACKSTAB ×1.85' };
+  if (dot <  0.45) return covered ? { m:1.20, label:'FLANK ×1.2' } : { m:1.45, label:'FLANK ×1.45' };
+  if (hostilesAdjacent(t) >= 3 && !covered) return { m:1.30, label:'SURROUNDED ×1.3' };
+  return { m:1, label:null };
+}
+// face the way you just moved / the thing you just hit — on your turn only
+function setFacing(a, tx, tz){
+  const dx = tx - a.x, dz = tz - a.z;
+  if (!dx && !dz) return;
+  a.faceYaw = Math.atan2(dx, dz);
+  if (a.mesh) a.mesh.rotation.y = a.faceYaw;
+}
+
 // ── log / floating text ──
 const clogEl = document.getElementById('clog');
 function log(html){
@@ -3249,10 +3316,13 @@ function resolveAttack(a, t, ab){
   const dy = a.y - t.y;
   if (dy >= 1){ dmg = Math.round(dmg*1.25); notes.push('HIGH GROUND +25%'); }
   else if (dy <= -1){ dmg = Math.round(dmg*0.85); notes.push('LOW GROUND −15%'); }
+  // where you stand relative to where they're looking — the biggest lever there is
+  const fl = flankOf(a.x, a.z, t);
+  if (fl.m !== 1){ dmg = Math.round(dmg*fl.m); notes.push(fl.label); }
   if (a.status && a.status.dread){ dmg = Math.round(dmg*0.70); notes.push('DREAD −30%'); }
   const ignoresCover = ab.spell && ab.spell.id === 'pierce';
   if (ab.kind === 'ranged' && !ignoresCover && hasCover(a, t)){
-    dmg = Math.round(dmg*0.75); notes.push('COVER −25%');
+    dmg = Math.round(dmg*0.55); notes.push('COVER −45%');
   }
   faceToward(a, t.x, t.z);
 
@@ -3279,10 +3349,7 @@ function resolveAttack(a, t, ab){
   if (t.alive && K.onHit) applyStatus(t, K.onHit.kind, K.onHit.turns);
   if (t.alive && K.knock){ knockback(t, a, K.knock); ring(a.x, a.y, a.z, 0xcfe0ea, 2.4); }
 }
-function faceToward(a, tx, tz){
-  a.faceYaw = Math.atan2((tx+0.5)-a.px, (tz+0.5)-a.pz);
-  if (a.mesh) a.mesh.rotation.y = a.faceYaw;
-}
+function faceToward(a, tx, tz){ setFacing(a, tx, tz); }
 // push a creature away from `from`, letting terrain decide where it lands
 function knockback(t, from, cells){
   let dx = Math.sign(t.x-from.x), dz = Math.sign(t.z-from.z);
@@ -3570,12 +3637,14 @@ function computeIntents(){
       let lo = ab.dmg[0], hi = ab.dmg[1];
       const dy = cell[1] - player.y;
       let mul = dy >= 1 ? 1.25 : dy <= -1 ? 0.85 : 1;
+      const fl = flankOf(cell[0], cell[2], player);      // the honest number
+      mul *= fl.m;
       if (e.status && e.status.dread) mul *= 0.70;
-      if (ab.kind === 'ranged' && hasCover({x:cell[0],y:cell[1],z:cell[2]}, player)) mul *= 0.75;
+      if (ab.kind === 'ranged' && hasCover({x:cell[0],y:cell[1],z:cell[2]}, player)) mul *= 0.55;
       const soak = player.soak || 0;
       lo = Math.max(1, Math.round(lo*mul*(1-soak)));
       hi = Math.max(1, Math.round(hi*mul*(1-soak)));
-      e.intent = { type:'attack', lo, hi, high: dy >= 1, low: dy <= -1 };
+      e.intent = { type:'attack', lo, hi, high: dy >= 1, low: dy <= -1, flank: fl.m > 1 };
     } else if (plan.some(s => s.t === 'move')){
       e.intent = { type:'move' };
     } else {
@@ -3698,8 +3767,39 @@ function afterPlayerAction(){
   CB.phase = 'idle';
   recomputeReach();
 }
+// Anything with a melee reach threatens the ring around it. Breaking away from
+// that ring gives it a free swing — so walking past a Warden costs you, and
+// movement becomes a commitment instead of a free repositioning phase.
+function threateners(a){
+  return CB.order.filter(o => o.alive && o !== a && o.isPlayer !== a.isPlayer
+    && abilityOf(o).kind === 'melee' && adjacentTo(o, a));
+}
+function opportunityAttacks(a, before, after){
+  if (!a.alive) return 0;
+  let n = 0;
+  for (const o of before){
+    if (!o.alive) continue;
+    const stillAdj = Math.max(Math.abs(o.x-after[0]), Math.abs(o.z-after[2])) <= 1
+                  && Math.abs(o.y-after[1]) <= 1;
+    if (stillAdj) continue;
+    // resolve from where they were standing when you broke away
+    const saved = { x:a.x, y:a.y, z:a.z };
+    a.x = before.startCell[0]; a.y = before.startCell[1]; a.z = before.startCell[2];
+    log(`<b>${o.name}</b> strikes as ${a.isPlayer?'you break':'it breaks'} away.`);
+    setAnim(o, 'attack', 0.38, 'slash');
+    resolveAttack(o, a, abilityOf(o));
+    a.x = saved.x; a.y = saved.y; a.z = saved.z;
+    n++;
+    if (!a.alive) break;
+  }
+  return n;
+}
+
 function startWalk(a, path, done){
   if (!path || path.length < 2){ if (done) done(); return; }
+  const th = threateners(a);
+  th.startCell = [a.x, a.y, a.z];
+  CB.pendingOA = th;
   CB.walker = a; CB.walkPath = path; CB.walkI = 0; CB.walkT = 0;
   CB.walkDone = done;
   CB.phase = 'walk';
@@ -3719,10 +3819,14 @@ function planApproach(a, target, ab){
   // so it does nothing, forever. The budget limits the walk, not the lookahead.
   const far = reachable(a.x, a.y, a.z, Math.max(a.mp*4, 18), occupiedSet(a));
 
-  let goal = null, goalCost = Infinity;
+  // Among the cells that can reach the target, prefer the ones behind it. This
+  // is what turns the flank rule into pressure rather than a stat on a card.
+  let goal = null, goalScore = Infinity;
   for (const [, n] of far){
     if (n.cost === 0 || !inRangeFrom(n.x, n.y, n.z, target, ab)) continue;
-    if (n.cost < goalCost){ goalCost = n.cost; goal = n; }
+    const fl = flankOf(n.x, n.z, target);
+    const score = n.cost - (fl.m - 1) * 9 - (n.y > target.y ? 2.5 : 0);
+    if (score < goalScore){ goalScore = score; goal = n; }
   }
   if (!goal){                              // can't get in range at all — just close in
     let bs = Infinity;
@@ -3824,6 +3928,19 @@ function updateCombat(dt){
 
   tickAnims(dt, CB.order);
   tickFX(dt);
+  // facing wedges only while a fight is live — that's the only time they mean anything
+  for (const c of CB.order){
+    const w = c.mesh && c.mesh.userData.wedge;
+    if (!w) continue;
+    w.visible = c.alive && CB.active;
+    if (w.visible){
+      // the wedge sits in world space, not the body's, so animation lunges don't drag it
+      w.rotation.y = (c.faceYaw === undefined ? 0 : c.faceYaw) - c.mesh.rotation.y;
+      const flanked = !c.isPlayer && flankOf(player.x, player.z, c).m > 1
+                    && adjacentTo(player, c);
+      w.material.opacity = flanked ? 0.9 : 0.42;
+    }
+  }
 
   switch (CB.phase){
     case 'intro':
@@ -3877,9 +3994,15 @@ function updateCombat(dt){
       if (Bp !== A) w.mesh.rotation.y = Math.atan2(Bp[0]-A[0], Bp[2]-A[2]);
       if (CB.walkI >= p.length-1){
         const last = p[p.length-1];
+        const prev = p[Math.max(0, p.length-2)];
         w.x = last[0]; w.y = last[1]; w.z = last[2];
         w.px = w.x+0.5; w.py = w.y; w.pz = w.z+0.5;
         w.mesh.position.set(w.px, w.py, w.pz);
+        setFacing(w, last[0] + (last[0]-prev[0]), last[2] + (last[2]-prev[2]));
+        if (CB.pendingOA){                       // free swings from anything left behind
+          const th = CB.pendingOA; CB.pendingOA = null;
+          opportunityAttacks(w, th, last);
+        }
         if (w.mesh.userData.legs){ w.mesh.userData.legs[0].rotation.x = 0; w.mesh.userData.legs[1].rotation.x = 0; }
         w.walking = false;
         CB.walker = null; CB.walkPath = null;
@@ -3996,9 +4119,9 @@ function updateTags(dt){
     ic.style.display = showIntent ? '' : 'none';
     if (showIntent){
       const it = a.intent;
-      ic.className = 'intent ' + it.type + (it.high ? ' high' : it.low ? ' low' : '');
+      ic.className = 'intent ' + it.type + (it.flank ? ' flank' : it.high ? ' high' : it.low ? ' low' : '');
       ic.textContent = it.type === 'attack'
-        ? `${INTENT_ICON.attack} ${it.lo}–${it.hi}${it.high?' ▲':it.low?' ▼':''}`
+        ? `${INTENT_ICON.attack} ${it.lo}–${it.hi}${it.flank?' ⟳':it.high?' ▲':it.low?' ▼':''}`
         : INTENT_ICON[it.type];
     }
   }
@@ -4621,6 +4744,16 @@ window.STRATA = {
   shot(q=0.72){ renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', q); },
   start(){ if (!loadGame()) newWorld(); enterWorld(); },
   fresh(){ localStorage.removeItem(SAVE_KEY); newWorld(); enterWorld(); },
+  // fixed-seed world so two policies can be compared on the same terrain
+  freshSeeded(seed){
+    localStorage.removeItem(SAVE_KEY);
+    newWorld(); SEED = seed|0; _hCache.clear(); CHUNKS.clear(); _structs = null;
+    treeChunkKey = null;
+    const sy = surfaceY(HOME.x+3, HOME.z+2);
+    player.pos.set(HOME.x+3.5, sy+0.2, HOME.z+2.5);
+    player.spawn.copy(player.pos);
+    enterWorld();
+  },
   step(dt=1/60){ step(dt); },
   sim(seconds, dt=1/60){
     const n = Math.round(seconds/dt);
@@ -4652,7 +4785,10 @@ window.STRATA = {
     return this.state();
   },
   // drive a whole fight headlessly; the player uses a simple greedy policy
-  autoFight(maxRounds=60){
+  // `smart` plays positionally: seeks flanks, values high ground, and refuses to
+  // break away from a threatener. Comparing it against the naive Strike-only
+  // policy is how we tell DEPTH (a skill gradient) from mere DIFFICULTY.
+  autoFight(maxRounds=60, smart=false){
     let guard = 0, turns = 0;
     const hp0 = player.hp;
     // endCombat parks on 'over' waiting for the banner — G.mode is still 'combat'
@@ -4669,6 +4805,36 @@ window.STRATA = {
       if (a.ap > 0 && canHit(a, foe, ABILITIES[0])){ CB.selAbility = 0;
         a.ap--; setAnim(a,'attack',0.35); resolveAttack(a, foe, ABILITIES[0]);
         afterPlayerAction(); continue; }
+      if (smart && a.mp > 0){
+        // The real skill expression when you are always outnumbered is DEFENSIVE:
+        // get your back to something, don't let them ring you, take the high
+        // ground, and don't hand out free swings by disengaging.
+        const threats = threateners(a);
+        const foes = CB.order.filter(o=>!o.isPlayer && o.alive);
+        let best = null, bestScore = -Infinity;
+        for (const [, nde] of CB.reach){
+          if (!inRangeFrom(nde.x, nde.y, nde.z, foe, ABILITIES[0])) continue;
+          const saved = { x:a.x, y:a.y, z:a.z };
+          a.x = nde.x; a.y = nde.y; a.z = nde.z;
+          const covered = backCovered(a);
+          let ring = 0;
+          for (const f of foes) if (adjacentTo(f, a)) ring++;
+          a.x = saved.x; a.y = saved.y; a.z = saved.z;
+
+          const fl = flankOf(nde.x, nde.z, foe);
+          let sc = (covered ? 9 : 0) - ring*4
+                 + fl.m*4 + (nde.y > foe.y ? 3 : nde.y < foe.y ? -2 : 0) - nde.cost*0.25;
+          for (const th of threats)
+            if (Math.max(Math.abs(th.x-nde.x), Math.abs(th.z-nde.z)) > 1) sc -= 7;
+          if (sc > bestScore){ bestScore = sc; best = nde; }
+        }
+        if (best && best.cost > 0){
+          a.mp -= best.cost;
+          startWalk(a, pathFrom(CB.reach, best.x, best.y, best.z), ()=>afterPlayerAction());
+          continue;
+        }
+        if (best) { endPlayerTurn(); continue; }     // already in the best spot
+      }
       // else close the distance, using the SAME planner the creatures use
       const pl = a.mp > 0 ? planApproach(a, foe, ABILITIES[0]) : null;
       if (pl && pl.cut > 0){ a.mp -= pl.cost; startWalk(a, pl.path, ()=>afterPlayerAction()); }
@@ -4715,6 +4881,7 @@ window.STRATA = {
   tickStatus, applyStatus, KINDS, STATUS, AUD, SFX, audioInit, rebuildTrees, WIND,
   isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,
   openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
+  flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners,
   TOWNSFOLK, openTown, closeTown, acceptErrand, turnInErrands, refreshOffers,
   populateSites, repTier, buildTownsfolk, creditKill,
   get abilities(){ return ABILITIES; },
