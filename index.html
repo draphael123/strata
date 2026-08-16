@@ -4147,6 +4147,14 @@ function resolveAttack(a, t, ab){
   if (ab.kind === 'ranged' && !ignoresCover && concealed(t.x, t.y, t.z)){
     dmg = Math.round(dmg*0.75); notes.push('CONCEALED −25%');
   }
+  // Drawing a bow with something already inside your guard. Ranged builds were
+  // winning the barrow 100% of the time against melee's 42-58% because standing
+  // still and shooting was never punished -- nothing made them spend an action on
+  // position. Now being engaged is the archer's version of being surrounded.
+  if (ab.kind === 'ranged' && CB.order.some(o =>
+        o.alive && o !== a && o.isPlayer !== a.isPlayer && adjacentTo(o, a))){
+    dmg = Math.round(dmg*0.60); notes.push('POINT BLANK −40%');
+  }
   faceToward(a, t.x, t.z);
 
   // visuals: a swing arc up close, a travelling shot at range
