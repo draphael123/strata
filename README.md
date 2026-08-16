@@ -101,6 +101,17 @@ world sends — above palette or content. So:
 - **Golden hour**: a low raking sun, warm key against cool bounce, real cast
   shadows, warm horizon haze, soft cloud banks.
 
+**Ground character** — moisture, wear and slope are sampled once per column and
+tint the terrain: strawy where it's exposed, deep green where it's sheltered,
+worn through to bare earth on slopes and hard ground. One flat green across the
+whole vale reads as carpet; this costs nothing (it's the existing vertex colour).
+
+**Wind** — a `sway` attribute is emitted alongside every vertex: 0 on solid block
+faces, rising toward the tip of each blade. It's displaced in a vertex shader
+injected into the standard Lambert material via `onBeforeCompile`, so shadows,
+fog and lighting all keep working, and the depth pass gets the same patch so
+shadows don't detach from the grass. Terrain is rock-still; only vegetation moves.
+
 **Sound** — fully procedural WebAudio, no assets. Swings, impacts, bowstrings,
 casts, deaths, footfalls paced to ground speed, turn chimes, victory and defeat
 stings, a wind bed, distance-driven campfire crackle, and occasional birdsong.
