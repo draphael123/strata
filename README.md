@@ -155,16 +155,36 @@ STRATA.fresh()                 // new world, skip the title
 STRATA.sim(seconds)            // run N seconds of simulation
 STRATA.step(dt)                // single tick
 STRATA.state()                 // snapshot: mode, pos, hp, chunks, combat, tris
-STRATA.teleport(x, z)
+STRATA.teleport(x, z)          // SURFACE only — cannot put you in the barrow
+STRATA.placeAt(x, y, z)        // streams chunks first, then places; use this underground
 STRATA.ambush()                // trigger a real fight (walks you up to the pack first)
-STRATA.autoFight(maxRounds)    // drive a whole fight; returns {result, turns, hpLost}
+STRATA.autoFight(rounds, mode) // mode: false | true (positional) | 'player' (full kit)
 STRATA.dig(x,y,z) / .place(x,y,z,block) / .block(x,y,z)
 STRATA.planApproach(a, target, ability)   // the shared movement planner
 ```
 
 `autoFight` drives the player with **`planApproach` — the exact same planner the
 creature AI uses.** A hand-rolled mirror of the real policy measures the mirror, not
-the game.
+the game. `'player'` mode additionally focus-fires the weakest thing it can reach,
+drinks when a single round could kill it, cleaves when surrounded, and spends a
+leftover action on Guard. Plain `true` is Strike-only and is a FLOOR, not a verdict.
+
+### ⚠️ Four ways this harness has silently measured nothing
+
+Every one of these produced confident, plausible, completely wrong numbers.
+
+1. **`player.pos.set()` is not a teleport.** The chunks aren't streamed, collision
+   reads unloaded space as solid, and the next `sim()` ejects you to the surface. A
+   whole afternoon of "boss fights" ran with the player on the hillside 29 blocks
+   above the dungeon. Use `placeAt`, then assert `y` didn't move after a tick.
+2. **`sim()` repopulates the world.** Clear the entities, stage your encounter, call
+   `sim()` to settle, and the ambush hands you a passing wolf. Settle *first*, then
+   stage — and assert your boss is actually in `CB.order`.
+3. **Aggro has a gather radius, so where you stand decides who joins.** Same room,
+   same spawns: 2 foes from the entrance, 1 mid-hall, all 3 only from the middle.
+   Report the mean `CB.order.length` or encounter size is an unmeasured variable.
+4. **Check consumables cost an action.** They didn't, once — free healing every
+   round makes every number meaningless in both directions.
 
 ### Last regression (25 ambushes across all six builds, level 1)
 
@@ -179,6 +199,32 @@ the game.
 at all — it never takes high ground, never uses cover, never digs. A human who plays
 well should find this much easier, and the numbers say nothing about whether it's
 *fun*. Do not tune from sim runs.
+
+### The barrow, level 5, three foes, `'player'` policy (n=12 per build)
+
+Fought on even ground, after the melee follow-through pass:
+
+| build | win % | HP left on a win |
+|---|---|---|
+| Elm Staff / Fireball | 100% | 47% |
+| Hunting Bow / Piercing Shot | 100% | 37% |
+| Greataxe / Cleave | 58% | 44% |
+| Sword & Shield / Second Wind | 42% | 53% |
+
+**Ranged is still untouchable and that is the open problem.** The barrow does have an
+answer — the Wisp has reach 8 — but at 16 hp an archer deletes it in one shot and
+then kites the two brutes freely. Wants a human at the controls before guessing.
+
+Two findings here were **positional, not statistical**, and they matter more than any
+stat tweak:
+
+- **The dais is decisive.** With the barrow-lord standing on it the greataxe wins
+  **8%**; pulled down onto the flagstones it wins **58%**. High ground (+25%/−15%) is
+  doing exactly what it should — the correct play is to make him come down.
+- **The hall pulls in pieces** — two at the entrance, one mid-hall, all three only if
+  you barge to the middle — so a careful approach is already rewarded. Count the
+  standable neighbours of a cell and you get the melee tax directly: the two-wide
+  throat exposes 3–4, the open hall 7–8.
 
 ---
 
