@@ -3501,14 +3501,29 @@ function tickTownsfolk(dt, t){
         const a = Math.random()*Math.PI*2;
         const nx = Math.round((night ? f.hx : f.hx) + Math.cos(a)*r);
         const nz = Math.round((night ? f.hz : f.hz) + Math.sin(a)*r);
+        // Don't adopt the destination's height while still standing at the old
+        // spot — that combination is briefly inside the world. Height follows the
+        // ground under their own feet, below.
         const ny = spawnGroundY(nx, nz);
-        if (ny !== null && Math.abs(ny - f.y) < 3){ f.tx = nx; f.tz = nz; f.y = ny; }
+        if (ny !== null && Math.abs(ny - f.y) < 3){ f.tx = nx; f.tz = nz; }
       }
       const dx = (f.tx+0.5) - f.px, dz = (f.tz+0.5) - f.pz;
       const d = Math.hypot(dx, dz);
       if (d > 0.08){
         const sp = Math.min(d, dt*1.5);
-        f.px += dx/d*sp; f.pz += dz/d*sp;
+        // Only the DESTINATION was ever checked, so the straight line to it went
+        // through house walls. Test the cell actually being stepped into, per axis,
+        // so a walker slides along a wall instead of strolling through it.
+        const nxp = f.px + dx/d*sp, nzp = f.pz + dz/d*sp;
+        const blocked = (px, pz)=>{
+          const cx = Math.floor(px), cz = Math.floor(pz);
+          return isSolid(cx, f.y, cz) || isSolid(cx, f.y+1, cz);
+        };
+        let moved = false;
+        if (!blocked(nxp, nzp)){ f.px = nxp; f.pz = nzp; moved = true; }
+        else if (!blocked(nxp, f.pz)){ f.px = nxp; moved = true; }
+        else if (!blocked(f.px, nzp)){ f.pz = nzp; moved = true; }
+        if (!moved) f.wait = 0;                 // walled in — pick somewhere else
         f.mesh.rotation.y = Math.atan2(dx, dz);
         const sw = Math.sin(f.bob*2.6)*0.38;
         const lg = f.mesh.userData && f.mesh.userData.legs;
@@ -3521,6 +3536,10 @@ function tickTownsfolk(dt, t){
       f.mesh.rotation.y = Math.atan2(player.pos.x-f.px, player.pos.z-f.pz);
     }
     f.x = Math.floor(f.px); f.z = Math.floor(f.pz);
+    // Track the ground actually underfoot, so they walk up a step instead of
+    // holding the height of wherever they were headed.
+    const gy = groundAt(f.x, f.y + 1, f.z, 3);
+    if (gy !== null) f.y = gy;
     f.mesh.position.set(f.px, f.y + Math.sin(f.bob)*0.03, f.pz);
   }
 }
