@@ -1065,7 +1065,12 @@ function structures(){
       brazier(put, D.x-1, D.z+13, FY);
       // ── burial hall ──
       carve(put, D.x-7, D.z+17, D.x+7, D.z+29, FY, 7, true);   // tall enough to see in
-      for (const [px,pz] of [[-5,20],[5,20],[-5,26],[5,26],[-2,23],[2,23]])
+      // The old ring left a clear lane straight down x=0 — the exact line from the
+      // throat to the dais. That made the hall a shooting gallery: a bow build won
+      // the boss 100% of the time without being touched, while a greataxe won 20%.
+      // Staggering the pillars across the centre line costs the archer actions to
+      // find an angle and gives a melee approach something to walk behind.
+      for (const [px,pz] of [[-5,20],[5,20],[-5,26],[5,26],[0,22],[-3,24],[3,24]])
         pillar(put, D.x+px, D.z+pz, FY, 7);
       brazier(put, D.x-7, D.z+18, FY); brazier(put, D.x+7, D.z+18, FY);
       brazier(put, D.x-7, D.z+28, FY); brazier(put, D.x+7, D.z+28, FY);
@@ -3235,12 +3240,13 @@ function populateSites(){
       // the fights use the architecture: pillars to break line, a two-wide
       // throat, then a hall wide enough to be surrounded in.
       const D = BARROW, F = BARROW_FLOOR;
+      // Thinned from eight: the antechamber and throat still cost you, but the
+      // boss room no longer opens with four heavies stacked on top of Aelthwyn.
       const guards = [
         ['husk',   D.x-3, D.z+3], ['husk',   D.x+3, D.z+5],
-        ['warden', D.x,   D.z+7],
         ['nightjar', D.x, D.z+12],
-        ['barrowkin', D.x-4, D.z+21], ['barrowkin', D.x+4, D.z+21],
-        ['wisp',   D.x-5, D.z+25], ['wisp',   D.x+5, D.z+25],
+        ['barrowkin', D.x-4, D.z+21],
+        ['wisp',   D.x+5, D.z+25],
       ];
       for (const [k,x,z] of guards){
         const e = spawnEntity(k, x, F+1, z);
@@ -3249,10 +3255,13 @@ function populateSites(){
       const boss = spawnEntity('barrowkin', D.x, F+2, D.z+28);
       boss.name = 'Aelthwyn, the Barrow-Lord';
       boss.eliteFor = q.id;
-      boss.maxHp = 190; boss.hp = 190;
+      // Measured at the original 190hp / 30% armour / 13-21: a level SIX
+      // character needed ~29 hits to kill it and died in 8. Zero wins in ten
+      // trials across two levels. A boss should be a fight, not a wall.
+      boss.maxHp = 105; boss.hp = 105;
       boss.mesh.scale.multiplyScalar(1.5);
-      boss.K = { ...boss.K, atk:[13,21], mp:4, xp:220, soak:0.30,
-                 onHit:{ kind:'dread', turns:3 } };
+      boss.K = { ...boss.K, atk:[9,15], mp:4, xp:220, soak:0.12,
+                 onHit:{ kind:'dread', turns:2 } };
       q.spawned = true;
       toast('Something below is awake', 3.4);
       continue;
@@ -4659,6 +4668,14 @@ function handleCombatClick(){
   a.mp -= node.cost;
   startWalk(a, path, ()=>{ tutAdvance('moved'); afterPlayerAction(); });
 }
+// Spending a leftover action on Guard beats throwing it away, and it is what a
+// person does when they cannot reach anyone. Benchmark policy only.
+function tryGuard(a, smart){
+  if (smart !== 'player' || !a || a.ap < 1 || a.guarding) return false;
+  const g = ABILITIES.find(x => x.kind === 'guard'); if (!g) return false;
+  a.ap -= g.ap; a.guarding = true; setAnim(a, 'guard', 0.5);
+  afterPlayerAction(); return true;
+}
 function afterPlayerAction(){
   const act = actor();
   if (act){ act.mp = Math.max(0, act.mp); act.ap = Math.max(0, act.ap); }
@@ -5060,6 +5077,14 @@ function drawActs(){
       <span class="ak">${i+1}</span>${cost}
       <div class="an">${ab.name}</div><div class="ad">${ab.desc}</div></div>`;
   }).join('')
+    // The belt. Consumables used to live only in the pause panel, so drinking in a
+    // fight meant opening a menu — and cost nothing. Now they sit with the abilities
+    // and read like what they are: one of the things you can spend your action on.
+    + Object.keys(player.bag).filter(id => (itemDef(id)||{}).kind === 'use')
+        .map(id => { const it = itemDef(id);
+          return `<div class="act belt ${yours && a.ap >= 1 ? '' : 'off'}" data-use="${id}">
+            <span class="ak">${it.icon}</span><span class="mc bq">${player.bag[id]}</span>
+            <div class="an">${it.name}</div><div class="ad">${it.desc}</div></div>`; }).join('')
     + `<div class="act ${yours?'':'off'}" data-flee="1"><div class="an">Withdraw</div>
        <div class="ad">Break off · they get a swing</div></div>`
     + `<div class="act" data-end="1"><div class="an">End Turn</div><div class="ad">SPACE</div></div>`;
@@ -5067,6 +5092,7 @@ function drawActs(){
     n.onclick = ()=>{
       if (n.dataset.end) endPlayerTurn();
       else if (n.dataset.flee){ if (!n.classList.contains('off')) fleeCombat(); }
+      else if (n.dataset.use){ if (!n.classList.contains('off')) useItem(n.dataset.use); }
       else if (!n.classList.contains('off')) selectAbility(+n.dataset.i);
     };
   });
@@ -5428,9 +5454,19 @@ function giveGear(g){
   toast(`Found: ${g.name}`, 3.4);
   log(`<b>${g.name}</b> — ${g.desc}`);
 }
+// A drink is an ACTION. This was free and openable from the bag panel on anyone's
+// turn, which meant unlimited healing mid-fight: 48 -> 108 hp for zero cost, every
+// round. It made every balance number meaningless in both directions, so the boss
+// read as unwinnable to a bot that never drinks and trivial to a human who chugs.
 function useItem(id){
   const it = itemDef(id);
   if (!it || !player.bag[id]) return;
+  if (G.mode === 'combat'){
+    const a = actor();
+    if (!a || !a.isPlayer || CB.phase !== 'idle'){ toast('Not your turn'); return; }
+    if (a.ap < 1){ toast('No action left'); return; }
+    a.ap -= 1;
+  }
   if (id === 'salve'){ player.hp = Math.min(player.maxHp, player.hp + 26); SFX.heal(); }
   else if (id === 'draught'){ player.mana = Math.min(player.maxMana, player.mana + 18); SFX.heal(); }
   else if (id === 'ember'){
@@ -5443,6 +5479,7 @@ function useItem(id){
   player.bag[id]--;
   if (player.bag[id] <= 0) delete player.bag[id];
   drawVitals(); drawPause();
+  if (G.mode === 'combat'){ fct(player, it.name, '#a8cf72'); afterPlayerAction(); }
 }
 function equipItem(id){
   const slot = player.worn.indexOf(null);
@@ -5966,10 +6003,39 @@ window.STRATA = {
       turns++;
       const a = actor();
       if (!a || !a.isPlayer) continue;
-      const foe = CB.order.find(o => !o.isPlayer && o.alive);
+      const alive = CB.order.filter(o => !o.isPlayer && o.alive);
+      // Strike-only bots FOCUS NOTHING: order.find picks whoever is first in
+      // initiative, often the far-off boss, so the swing is skipped and the turn
+      // wasted. A person kills the closest thing they can reach.
+      const hittable = alive.filter(o => canHit(a, o, ABILITIES[0]));
+      const foe = (smart === 'player'
+        ? (hittable.sort((x,y)=>x.hp-y.hp)[0] || alive.sort((x,y)=>
+            Math.hypot(x.x-a.x,x.z-a.z) - Math.hypot(y.x-a.x,y.z-a.z))[0])
+        : CB.order.find(o => !o.isPlayer && o.alive));
       if (!foe){ endPlayerTurn(); continue; }
-      // Strike only. Spells vary in shape (self-target, ground-target, no damage
-      // at all), so driving them here would measure the harness, not the loop.
+
+      // ── the full kit, so the benchmark measures the GAME and not the harness ──
+      if (smart === 'player' && a.ap > 0){
+        const ring = alive.filter(o => adjacentTo(o, a)).length;
+        const spell = ABILITIES[2];            // the one spell the build chose
+        const afford = ab => ab && a.ap >= ab.ap && ab.mana <= player.mana;
+        // 1. drink when a single round could kill you
+        const incoming = alive.reduce((s,o)=> s + (adjacentTo(o,a) ? (o.K.atk[0]+o.K.atk[1])/2 : 0), 0);
+        if (player.bag.salve && player.hp <= Math.max(28, incoming*1.15)
+            && player.hp < player.maxHp - 20){ useItem('salve'); continue; }
+        // 2. being surrounded is the CASE FOR cleaving, not against it
+        if (spell && spell.spell && spell.spell.id === 'cleave' && ring >= 2 && afford(spell)){
+          a.ap -= spell.ap; castSpell(a, spell, null, null); afterPlayerAction(); continue; }
+        // 3. otherwise the biggest hit that reaches
+        if (spell && spell.dmg && afford(spell) && canHit(a, foe, spell)
+            && spell.dmg[0] > ABILITIES[0].dmg[0]){
+          a.ap -= spell.ap; castSpell(a, spell, foe, null); afterPlayerAction(); continue; }
+        if (spell && spell.kind === 'self' && afford(spell) && player.hp < player.maxHp*0.45){
+          a.ap -= spell.ap; castSpell(a, spell, null, null); afterPlayerAction(); continue; }
+      }
+
+      // Spells vary in shape (self-target, ground-target, no damage at all), so the
+      // plain 'smart' policy still drives Strike alone as a stable floor.
       if (a.ap > 0 && canHit(a, foe, ABILITIES[0])){ CB.selAbility = 0;
         a.ap--; setAnim(a,'attack',0.35); resolveAttack(a, foe, ABILITIES[0]);
         afterPlayerAction(); continue; }
@@ -6008,7 +6074,7 @@ window.STRATA = {
           startWalk(a, pathFrom(CB.reach, best.x, best.y, best.z), ()=>afterPlayerAction());
           continue;
         }
-        if (best) { endPlayerTurn(); continue; }     // already in the best spot
+        if (best) { if (!tryGuard(a, smart)) endPlayerTurn(); continue; }  // in the best spot already
       }
       // else close the distance, using the SAME planner the creatures use
       const pl = budget(a) > 0 ? planApproach(a, foe, ABILITIES[0]) : null;
@@ -6016,7 +6082,7 @@ window.STRATA = {
         if (a.mp <= 0){ a.ap -= 1; a.mp = a.mpPool; }
         a.mp -= pl.cost;
         startWalk(a, pl.path, ()=>afterPlayerAction());
-      } else endPlayerTurn();
+      } else if (!tryGuard(a, smart)) endPlayerTurn();
     }
     return { result: CB.result, guard, turns, hpLost: hp0 - player.hp,
              hp: player.hp, foes: CB.order.length-1, mode: G.mode,
@@ -6059,6 +6125,7 @@ window.STRATA = {
   tickStatus, applyStatus, KINDS, STATUS, AUD, SFX, audioInit, rebuildTrees, WIND,
   MUSIC, musicInit, tickMusic, IS_TOUCH, TOUCH, initTouch,
   threatOf, drawThreat, tReach, tThreat, save:saveGame, load:loadGame,
+  keys, get pendingClick(){ return pendingClick; },
   isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,
   openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
   flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners, backCovered, isSolid,
@@ -6074,6 +6141,17 @@ window.STRATA = {
   teleport(x,z){
     player.pos.set(x+0.5, surfaceY(x,z)+0.2, z+0.5);
     updateStreaming(x,z); drainMeshQueue(2000);
+  },
+  // teleport() snaps to the SURFACE, so it cannot put you in the barrow — and
+  // setting player.pos by hand is worse: the chunks are not streamed yet, collision
+  // reads unloaded space as solid, and the next sim() ejects you to the hilltop.
+  // Every barrow benchmark run that way silently measured a player standing 29
+  // blocks above the fight. Stream first, then place, and verify you stayed put.
+  placeAt(x,y,z){
+    updateStreaming(x,z); drainMeshQueue(4000);
+    player.pos.set(x+0.5, y+0.2, z+0.5);
+    player.vel && player.vel.set(0,0,0);
+    return { y: player.pos.y, solid: isSolid(x,y,z) };
   },
   state(){
     return {
