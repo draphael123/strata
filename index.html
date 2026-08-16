@@ -1,0 +1,2054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>STRATA</title>
+<style>
+  :root{
+    --ink:#0d0f14; --paper:#e8e2d4; --gold:#d8b45a; --blood:#a8433a;
+    --moss:#6d8f4e; --sky:#8fb8d8; --steel:#8a93a3;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:#0d0f14;color:var(--paper);
+    font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;user-select:none;-webkit-user-select:none}
+  canvas{display:block}
+  #app{position:fixed;inset:0}
+
+  /* ---------- shared chrome ---------- */
+  .panel{background:rgba(13,15,20,.86);border:1px solid rgba(216,180,90,.34);
+    border-radius:6px;backdrop-filter:blur(7px);box-shadow:0 8px 28px rgba(0,0,0,.55)}
+  .lbl{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#9aa2b0}
+
+  /* ---------- title ---------- */
+  #title{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:20px;
+    background:radial-gradient(ellipse at 50% 35%,#26313f 0%,#10141b 55%,#080a0e 100%)}
+  #title h1{font-size:clamp(52px,11vw,124px);letter-spacing:.30em;font-weight:700;
+    text-indent:.30em;color:#efe8d8;
+    text-shadow:0 0 30px rgba(216,180,90,.30),0 5px 0 #3c3222,0 7px 16px rgba(0,0,0,.8)}
+  #title .sub{font-size:12px;letter-spacing:.42em;text-transform:uppercase;color:var(--gold);margin-top:-14px}
+  #title .ver{position:absolute;bottom:16px;font-size:10px;letter-spacing:.2em;color:#5c6674}
+  .btn{padding:11px 30px;font-size:13px;letter-spacing:.2em;text-transform:uppercase;
+    background:linear-gradient(#2b3442,#1a2029);color:#efe8d8;cursor:pointer;
+    border:1px solid rgba(216,180,90,.42);border-radius:4px;transition:.14s;font-family:inherit}
+  .btn:hover{background:linear-gradient(#3a4657,#232b36);border-color:var(--gold);transform:translateY(-1px)}
+  .btn:active{transform:translateY(1px)}
+  .btn.small{padding:7px 15px;font-size:11px;letter-spacing:.14em}
+  .btn.ghost{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.14)}
+  #keyhelp{font-size:11px;line-height:1.9;color:#98a2b2;text-align:center;max-width:560px}
+  #keyhelp b{color:var(--gold);font-weight:600}
+
+  /* ---------- explore hud ---------- */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:20}
+  #cross{position:absolute;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;opacity:.72}
+  #cross:before,#cross:after{content:"";position:absolute;background:#fff;box-shadow:0 0 2px #000}
+  #cross:before{left:7px;top:0;width:2px;height:16px}
+  #cross:after{top:7px;left:0;height:2px;width:16px}
+
+  #vitals{position:absolute;left:18px;bottom:16px;width:230px;padding:10px 12px}
+  .bar{height:11px;border-radius:2px;background:rgba(255,255,255,.09);overflow:hidden;margin-top:4px;
+    border:1px solid rgba(0,0,0,.5)}
+  .bar>i{display:block;height:100%;width:100%;transition:width .22s ease}
+  .bar.hp>i{background:linear-gradient(90deg,#8e3630,#cf5a4c)}
+  .bar.xp>i{background:linear-gradient(90deg,#5c7c3a,#9ac25c)}
+  .row{display:flex;justify-content:space-between;align-items:baseline}
+  .val{font-size:12px;color:#dfd8c8;font-variant-numeric:tabular-nums}
+
+  #hotbar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:6px}
+  .slot{width:46px;height:46px;border-radius:5px;border:1px solid rgba(255,255,255,.15);
+    background:rgba(13,15,20,.8);display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:3px;position:relative}
+  .slot.on{border-color:var(--gold);box-shadow:0 0 0 1px rgba(216,180,90,.4),0 0 16px rgba(216,180,90,.25)}
+  .slot .sw{width:22px;height:22px;border-radius:3px;border:1px solid rgba(0,0,0,.45)}
+  .slot .k{position:absolute;top:1px;left:4px;font-size:9px;color:#7d8798}
+
+  #compass{position:absolute;left:50%;top:12px;transform:translateX(-50%);
+    font-size:11px;letter-spacing:.24em;color:#b9c2d0;text-shadow:0 2px 6px #000}
+  #coords{position:absolute;right:18px;top:12px;font-size:11px;color:#8b95a5;
+    text-align:right;line-height:1.7;font-variant-numeric:tabular-nums;text-shadow:0 2px 6px #000}
+
+  #toast{position:absolute;left:50%;top:22%;transform:translateX(-50%);
+    font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);
+    text-shadow:0 3px 12px #000;opacity:0;transition:opacity .3s}
+  #toast.on{opacity:1}
+
+  #lockmsg{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
+    background:rgba(8,10,14,.55);cursor:pointer;font-size:13px;letter-spacing:.24em;
+    text-transform:uppercase;color:#cfd6e2}
+
+  /* ---------- combat ---------- */
+  #combat{position:fixed;inset:0;pointer-events:none;z-index:25;display:none}
+  #combat.on{display:block}
+
+  #order{position:absolute;left:50%;top:12px;transform:translateX(-50%);display:flex;gap:5px}
+  .chip{width:74px;padding:5px 6px;border-radius:5px;background:rgba(13,15,20,.88);
+    border:1px solid rgba(255,255,255,.14);opacity:.62;transition:.18s}
+  .chip.act{opacity:1;border-color:var(--gold);transform:translateY(3px);
+    box-shadow:0 0 18px rgba(216,180,90,.3)}
+  .chip.dead{opacity:.22;filter:grayscale(1)}
+  .chip .nm{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:#cbd3e0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chip .hb{height:4px;margin-top:3px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden}
+  .chip .hb>i{display:block;height:100%;background:#cf5a4c}
+  .chip.you .hb>i{background:#9ac25c}
+
+  #acts{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);
+    display:flex;gap:7px;pointer-events:auto}
+  .act{width:96px;padding:8px 6px 7px;border-radius:6px;cursor:pointer;text-align:center;
+    background:linear-gradient(rgba(43,52,66,.92),rgba(22,27,34,.94));
+    border:1px solid rgba(255,255,255,.15);transition:.14s}
+  .act:hover{border-color:var(--gold);transform:translateY(-2px)}
+  .act.sel{border-color:var(--gold);background:linear-gradient(rgba(72,60,30,.95),rgba(40,33,17,.95));
+    box-shadow:0 0 20px rgba(216,180,90,.34)}
+  .act.off{opacity:.34;cursor:not-allowed;transform:none!important;border-color:rgba(255,255,255,.1)}
+  .act .an{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#efe8d8}
+  .act .ad{font-size:9px;color:#8d97a7;margin-top:2px;line-height:1.35}
+  .act .ak{position:absolute;margin-top:-22px;margin-left:-42px;font-size:9px;color:#6e7889}
+  .act.probe{border-style:dashed;border-color:rgba(216,180,90,.42)}
+
+  #pips{position:absolute;left:50%;bottom:78px;transform:translateX(-50%);display:flex;gap:14px;
+    align-items:center;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#98a2b2}
+  .pipset{display:flex;gap:3px;align-items:center}
+  .pip{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.13);
+    border:1px solid rgba(0,0,0,.5)}
+  .pip.on{background:var(--gold);box-shadow:0 0 7px rgba(216,180,90,.7)}
+  .pip.ap.on{background:#cf5a4c;box-shadow:0 0 7px rgba(207,90,76,.7)}
+
+  #clog{position:absolute;right:16px;bottom:16px;width:268px;max-height:190px;overflow:hidden;
+    padding:8px 10px;font-size:11px;line-height:1.62;color:#b7c0cf;display:flex;
+    flex-direction:column-reverse}
+  #clog b{color:var(--gold);font-weight:600}
+  #clog .hit{color:#e2867a}
+  #clog .good{color:#a8cf72}
+
+  #hint{position:absolute;left:50%;bottom:104px;transform:translateX(-50%);font-size:11px;
+    letter-spacing:.14em;text-transform:uppercase;color:#c8d0dd;text-shadow:0 2px 8px #000;
+    background:rgba(13,15,20,.6);padding:5px 14px;border-radius:20px}
+
+  /* floating world labels */
+  #tags{position:fixed;inset:0;pointer-events:none;z-index:22;overflow:hidden}
+  .tag{position:absolute;transform:translate(-50%,-100%);text-align:center;
+    font-size:10px;letter-spacing:.08em;text-shadow:0 2px 5px #000;white-space:nowrap}
+  .tag .tn{color:#dfe5ef}
+  .tag .tb{width:52px;height:4px;margin:2px auto 0;border-radius:2px;
+    background:rgba(0,0,0,.6);overflow:hidden;border:1px solid rgba(0,0,0,.7)}
+  .tag .tb>i{display:block;height:100%;background:#cf5a4c}
+  .tag.you .tb>i{background:#9ac25c}
+  .fct{position:absolute;transform:translate(-50%,-50%);font-size:19px;font-weight:700;
+    text-shadow:0 3px 8px #000,0 0 14px rgba(0,0,0,.9);pointer-events:none}
+
+  /* banners */
+  #banner{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;
+    flex-direction:column;gap:16px;background:rgba(8,10,14,.72)}
+  #banner.on{display:flex}
+  #banner h2{font-size:clamp(30px,7vw,66px);letter-spacing:.24em;text-indent:.24em;color:#efe8d8;
+    text-shadow:0 4px 22px rgba(0,0,0,.9)}
+  #banner .bs{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:#a8b2c2}
+  #banner.win h2{color:var(--gold);text-shadow:0 0 34px rgba(216,180,90,.45)}
+  #banner.lose h2{color:var(--blood)}
+
+  @media (max-width:820px){ #clog{display:none} .act{width:78px} }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud">
+  <div id="compass">N</div>
+  <div id="coords"></div>
+  <div id="cross"></div>
+  <div id="vitals" class="panel">
+    <div class="row"><span class="lbl">Vigour</span><span class="val" id="vHp">60 / 60</span></div>
+    <div class="bar hp"><i id="vHpB"></i></div>
+    <div class="row" style="margin-top:7px"><span class="lbl" id="vLvl">Level 1</span><span class="val" id="vXp">0 / 40</span></div>
+    <div class="bar xp"><i id="vXpB" style="width:0%"></i></div>
+  </div>
+  <div id="hotbar"></div>
+  <div id="toast"></div>
+</div>
+
+<div id="tags"></div>
+
+<div id="combat">
+  <div id="order"></div>
+  <div id="hint"></div>
+  <div id="pips">
+    <span class="pipset"><span style="margin-right:5px">Move</span><span id="mpPips"></span></span>
+    <span class="pipset"><span style="margin-right:5px">Action</span><span id="apPips"></span></span>
+  </div>
+  <div id="acts"></div>
+  <div id="clog" class="panel"></div>
+</div>
+
+<div id="lockmsg">Click to look around</div>
+
+<div id="banner">
+  <h2 id="bTitle">VICTORY</h2>
+  <div class="bs" id="bSub"></div>
+  <button class="btn" id="bBtn">Continue</button>
+</div>
+
+<div id="title">
+  <h1>STRATA</h1>
+  <div class="sub">an open world of blocks &amp; turns</div>
+  <div id="keyhelp">
+    <b>WASD</b> move &nbsp;·&nbsp; <b>SPACE</b> jump &nbsp;·&nbsp; <b>MOUSE</b> look &nbsp;·&nbsp; <b>SHIFT</b> sprint<br>
+    <b>LEFT CLICK</b> mine &nbsp;·&nbsp; <b>RIGHT CLICK</b> place &nbsp;·&nbsp; <b>1–5</b> pick block &nbsp;·&nbsp; <b>F</b> pick block you look at<br>
+    <b>E</b> or walk close to a creature to start a fight &nbsp;·&nbsp; <b>ESC</b> release mouse<br>
+    <span style="color:#6f7889">In combat: click a blue tile to move, pick an action, click a target.</span>
+  </div>
+  <div style="display:flex;gap:10px;margin-top:6px">
+    <button class="btn" id="btnPlay">Enter the world</button>
+    <button class="btn ghost small" id="btnNew">New world</button>
+  </div>
+  <div class="ver">prototype · M0–M1 · hook undecided</div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ═══════════════════════════════════════════════════════════════════════
+   STRATA — open-world voxel RPG with freeze-in-place turn-based combat.
+   Prototype scope: M0 (world + traversal + mining) and M1 (turn combat).
+   The hook is deliberately NOT chosen yet — see README. The dig/raise
+   combat actions are a PROBE for the "terrain is the tactics grid" idea.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// ───────────────────────────── constants ─────────────────────────────
+const CX = 16, CZ = 16, CY = 80;          // chunk dims (Y is full column)
+const SEA = 26;                            // sea level
+const VIEW = 5;                            // chunk render radius
+const GEN = VIEW + 2;                      // data-gen radius (meshing needs neighbours)
+const MESH_BUDGET = 7;                     // ms/frame spent building chunk meshes
+const SAVE_KEY = 'strata-save-v1';
+
+const B = { AIR:0, GRASS:1, DIRT:2, STONE:3, SAND:4, WATER:5, WOOD:6, LEAF:7, SNOW:8, SLATE:9 };
+const SOLID = [0,1,1,1,1,0,1,1,1,1];       // blocks movement + line of sight
+const OPAQUE= [0,1,1,1,1,0,1,1,1,1];       // blocks light for AO
+
+// per-block face colours: [top, side, bottom]
+const COL = {
+  // Grass SIDES are green, not brown. The terrain detail octave produces a great
+  // many 1-block steps; with brown sides every little terrace corner reads as
+  // litter scattered across the lawn. Only the top block of a column is grass,
+  // so a real cliff still shows one green lip over honest dirt and stone.
+  [B.GRASS]: [0x6f9b4e, 0x5d8a45, 0x6b5137],
+  [B.DIRT ]: [0x7d6242, 0x775c3e, 0x6b5137],
+  [B.STONE]: [0x82868f, 0x7a7e87, 0x6e727a],
+  [B.SAND ]: [0xd6c68d, 0xcdbc83, 0xc0af78],
+  [B.WATER]: [0x2f6f9e, 0x2a6592, 0x255b85],
+  [B.WOOD ]: [0x6d4f31, 0x5e432a, 0x503a24],
+  [B.LEAF ]: [0x54823c, 0x4b7635, 0x426a2f],
+  [B.SNOW ]: [0xeef3fa, 0xe3e9f2, 0xd6dde8],
+  [B.SLATE]: [0x5d636e, 0x565c66, 0x4c525b],
+};
+const BLOCK_NAME = {[B.GRASS]:'Turf',[B.DIRT]:'Loam',[B.STONE]:'Stone',
+  [B.SAND]:'Sand',[B.WOOD]:'Timber',[B.LEAF]:'Bough',[B.SNOW]:'Snow',[B.SLATE]:'Slate'};
+const HOTBAR = [B.STONE, B.DIRT, B.WOOD, B.LEAF, B.SAND];
+
+// ───────────────────────────── noise ─────────────────────────────
+let SEED = 1337;
+function hash2(x, y, s){
+  let h = Math.imul(x|0, 374761393) ^ Math.imul(y|0, 668265263) ^ Math.imul(s|0, 1442695041);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function hash3(x, y, z){
+  let h = Math.imul(x|0,374761393) ^ Math.imul(y|0,2246822519) ^ Math.imul(z|0,668265263);
+  h = Math.imul(h ^ (h>>>13), 1274126177);
+  return ((h ^ (h>>>16))>>>0) / 4294967296;
+}
+function vnoise(x, y, s){
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = xf*xf*(3-2*xf), v = yf*yf*(3-2*yf);
+  const a = hash2(xi,yi,s), b = hash2(xi+1,yi,s);
+  const c = hash2(xi,yi+1,s), d = hash2(xi+1,yi+1,s);
+  return (a+(b-a)*u) + ((c+(d-c)*u) - (a+(b-a)*u)) * v;
+}
+function fbm(x, y, oct, s){
+  let sum = 0, amp = 0.5, frq = 1, norm = 0;
+  for (let i=0;i<oct;i++){ sum += amp*vnoise(x*frq, y*frq, s+i*7919); norm += amp; amp*=0.5; frq*=2; }
+  return sum/norm;
+}
+const clamp = (v,a,b)=> v<a?a:(v>b?b:v);
+const lerp  = (a,b,t)=> a + (b-a)*t;
+
+// ───────────────────────────── terrain ─────────────────────────────
+// Height is a PURE function of (x,z) — this is what lets trees cross chunk
+// borders seamlessly and lets us regenerate any chunk from the seed alone.
+const _hCache = new Map();
+function heightAt(x, z){
+  const k = (x+32768)*65536 + (z+32768);      // collision-free over the playable range
+  const hit = _hCache.get(k); if (hit !== undefined) return hit;
+  let c = fbm(x*0.0030, z*0.0030, 5, SEED);
+  c = clamp((c - 0.34) / 0.34, 0, 1);                 // continentalness, contrast-stretched
+  const d = fbm(x*0.0120, z*0.0120, 4, SEED+511) - 0.5;
+  const m = Math.max(0, c - 0.55) / 0.45;             // mountain mask
+  let h = 18 + c*22 + d*9 + m*m*26;
+  h = clamp(h, 4, CY-8);
+  const v = Math.floor(h);
+  if (_hCache.size > 400000) _hCache.clear();
+  _hCache.set(k, v);
+  return v;
+}
+function biomeTop(topY, x, z){
+  if (topY <= SEA+1) return B.SAND;
+  if (topY > 54) return B.SNOW;
+  if (topY > 46) return B.STONE;
+  return B.GRASS;
+}
+// deterministic tree test for a column
+function treeAt(x, z){
+  const topY = heightAt(x, z);
+  if (topY <= SEA+1 || topY > 46) return null;
+  if (hash2(x, z, SEED+31337) > 0.022) return null;
+  // thin them out on steep slopes so trees don't hang off cliffs
+  const slope = Math.abs(heightAt(x+1,z)-topY) + Math.abs(heightAt(x,z+1)-topY);
+  if (slope > 2) return null;
+  const trunk = 4 + Math.floor(hash2(x,z,SEED+777)*4);
+  return { topY, trunk };
+}
+
+// ───────────────────────────── chunk store ─────────────────────────────
+const CHUNKS = new Map();                  // "cx,cz" -> {data, maxY, mesh, wmesh, dirty}
+const EDITS  = new Map();                  // "cx,cz" -> Map("lx,ly,lz" -> block)   ← diffs vs seed
+const ckey = (cx,cz)=> cx + ',' + cz;
+const idx  = (lx,ly,lz)=> (ly*CZ + lz)*CX + lx;
+
+function genChunk(cx, cz){
+  const data = new Uint8Array(CX*CZ*CY);
+  const ox = cx*CX, oz = cz*CZ;
+  let maxY = 0;
+  for (let lz=0; lz<CZ; lz++) for (let lx=0; lx<CX; lx++){
+    const wx = ox+lx, wz = oz+lz;
+    const topY = heightAt(wx, wz);
+    const top  = biomeTop(topY, wx, wz);
+    for (let y=0; y<=topY; y++){
+      let b;
+      if (y === topY) b = top;
+      else if (y > topY-4) b = (top===B.SAND) ? B.SAND : B.DIRT;
+      else if (y < 6) b = B.SLATE;
+      else b = B.STONE;
+      data[idx(lx,y,lz)] = b;
+    }
+    for (let y=topY+1; y<=SEA; y++) data[idx(lx,y,lz)] = B.WATER;
+    if (Math.max(topY, SEA) > maxY) maxY = Math.max(topY, SEA);
+  }
+  // trees — scan a padded column range so canopies spill across chunk seams
+  const PAD = 3;
+  for (let lz=-PAD; lz<CZ+PAD; lz++) for (let lx=-PAD; lx<CX+PAD; lx++){
+    const t = treeAt(ox+lx, oz+lz); if (!t) continue;
+    const base = t.topY + 1, topT = t.topY + t.trunk;
+    for (let y=base; y<=topT; y++)
+      if (lx>=0&&lx<CX&&lz>=0&&lz<CZ&&y<CY){ data[idx(lx,y,lz)] = B.WOOD; if(y>maxY) maxY=y; }
+    for (let dy=-2; dy<=1; dy++){
+      const r = (dy<=-1) ? 2 : 1;
+      for (let dz=-r; dz<=r; dz++) for (let dx=-r; dx<=r; dx++){
+        if (Math.abs(dx)===r && Math.abs(dz)===r && r>1) continue;
+        if (dx===0 && dz===0 && dy<=0) continue;
+        const px = lx+dx, pz = lz+dz, py = topT+dy;
+        if (px<0||px>=CX||pz<0||pz>=CZ||py<0||py>=CY) continue;
+        if (data[idx(px,py,pz)] === B.AIR){ data[idx(px,py,pz)] = B.LEAF; if(py>maxY) maxY=py; }
+      }
+    }
+  }
+  // apply saved player edits on top of the generated seed world
+  const ed = EDITS.get(ckey(cx,cz));
+  if (ed) for (const [k,v] of ed){
+    const [lx,ly,lz] = k.split(',').map(Number);
+    data[idx(lx,ly,lz)] = v;
+    if (v !== B.AIR && ly > maxY) maxY = ly;
+  }
+  return { data, maxY: Math.min(maxY+1, CY-1), mesh:null, wmesh:null, dirty:true };
+}
+function ensureChunk(cx, cz){
+  const k = ckey(cx,cz);
+  let c = CHUNKS.get(k);
+  if (!c){ c = genChunk(cx,cz); CHUNKS.set(k,c); }
+  return c;
+}
+function getBlock(x, y, z){
+  if (y < 0) return B.SLATE;
+  if (y >= CY) return B.AIR;
+  const cx = x>>4, cz = z>>4;
+  return ensureChunk(cx,cz).data[idx(x-(cx<<4), y, z-(cz<<4))];
+}
+const isSolid  = (x,y,z)=> SOLID[getBlock(x,y,z)] === 1;
+const isOpaque = (x,y,z)=> OPAQUE[getBlock(x,y,z)] === 1;
+
+function setBlock(x, y, z, b){
+  if (y < 0 || y >= CY) return;
+  const cx = x>>4, cz = z>>4, lx = x-(cx<<4), lz = z-(cz<<4);
+  const c = ensureChunk(cx,cz);
+  if (c.data[idx(lx,y,lz)] === b) return;
+  c.data[idx(lx,y,lz)] = b;
+  if (b !== B.AIR && y >= c.maxY) c.maxY = Math.min(y+1, CY-1);
+  const k = ckey(cx,cz);
+  let ed = EDITS.get(k); if (!ed){ ed = new Map(); EDITS.set(k, ed); }
+  ed.set(lx+','+y+','+lz, b);
+  c.dirty = true;
+  // neighbouring chunks need remeshing when we touch a shared border
+  if (lx === 0)    markDirty(cx-1, cz);
+  if (lx === CX-1) markDirty(cx+1, cz);
+  if (lz === 0)    markDirty(cx, cz-1);
+  if (lz === CZ-1) markDirty(cx, cz+1);
+}
+function markDirty(cx,cz){ const c = CHUNKS.get(ckey(cx,cz)); if (c) c.dirty = true; }
+
+// ───────────────────────────── meshing ─────────────────────────────
+// Face corner lists are wound CCW as seen from outside. AO is the classic
+// 3-neighbour sample; the quad flips its diagonal to keep shading symmetric.
+const FACES = [
+  { n:[ 1,0,0], v:[[1,0,1],[1,0,0],[1,1,0],[1,1,1]], shade:0.84, ci:1 },
+  { n:[-1,0,0], v:[[0,0,0],[0,0,1],[0,1,1],[0,1,0]], shade:0.84, ci:1 },
+  { n:[0, 1,0], v:[[0,1,1],[1,1,1],[1,1,0],[0,1,0]], shade:1.00, ci:0 },
+  { n:[0,-1,0], v:[[0,0,0],[1,0,0],[1,0,1],[0,0,1]], shade:0.55, ci:2 },
+  { n:[0,0, 1], v:[[0,0,1],[1,0,1],[1,1,1],[0,1,1]], shade:0.72, ci:1 },
+  { n:[0,0,-1], v:[[1,0,0],[0,0,0],[0,1,0],[1,1,0]], shade:0.72, ci:1 },
+];
+const AO_LEVEL = [0.50, 0.68, 0.84, 1.0];
+
+function buildChunkGeometry(cx, cz){
+  const c = ensureChunk(cx, cz);
+  const ox = cx*CX, oz = cz*CZ;
+  const P=[], N=[], C=[], I=[];            // opaque
+  const wP=[], wN=[], wC=[], wI=[];        // water
+  const tmp = new THREE.Color();
+
+  for (let y=0; y<=c.maxY; y++)
+  for (let lz=0; lz<CZ; lz++)
+  for (let lx=0; lx<CX; lx++){
+    const b = c.data[idx(lx,y,lz)];
+    if (b === B.AIR) continue;
+    const wx = ox+lx, wz = oz+lz;
+    const water = (b === B.WATER);
+    const jit = 0.94 + hash3(wx, y, wz) * 0.12;
+
+    for (let f=0; f<6; f++){
+      const F = FACES[f];
+      const nx = wx+F.n[0], ny = y+F.n[1], nz = wz+F.n[2];
+      const nb = getBlock(nx, ny, nz);
+      if (water){ if (nb !== B.AIR) continue; }        // water shows only where it meets air
+      else      { if (nb !== B.AIR && nb !== B.WATER) continue; }
+
+      const base = COL[b][F.ci];
+      const arrP = water?wP:P, arrN = water?wN:N, arrC = water?wC:C, arrI = water?wI:I;
+      const vStart = arrP.length/3;
+      const ao = [0,0,0,0];
+
+      for (let i=0;i<4;i++){
+        const V = F.v[i];
+        // which two axes are tangent to this face
+        let s1=0,s2=0,cn=0;
+        if (F.n[0] !== 0){
+          const dy = V[1]?1:-1, dz = V[2]?1:-1;
+          s1 = isOpaque(nx, ny+dy, nz)?1:0;
+          s2 = isOpaque(nx, ny, nz+dz)?1:0;
+          cn = isOpaque(nx, ny+dy, nz+dz)?1:0;
+        } else if (F.n[1] !== 0){
+          const dx = V[0]?1:-1, dz = V[2]?1:-1;
+          s1 = isOpaque(nx+dx, ny, nz)?1:0;
+          s2 = isOpaque(nx, ny, nz+dz)?1:0;
+          cn = isOpaque(nx+dx, ny, nz+dz)?1:0;
+        } else {
+          const dx = V[0]?1:-1, dy = V[1]?1:-1;
+          s1 = isOpaque(nx+dx, ny, nz)?1:0;
+          s2 = isOpaque(nx, ny+dy, nz)?1:0;
+          cn = isOpaque(nx+dx, ny+dy, nz)?1:0;
+        }
+        ao[i] = (s1 && s2) ? 0 : 3 - (s1+s2+cn);
+
+        const vy = water && F.n[1] === 1 ? y + 0.88 : y + V[1];
+        arrP.push(wx+V[0], vy, wz+V[2]);
+        arrN.push(F.n[0], F.n[1], F.n[2]);
+        const k = F.shade * jit * (water ? 1 : AO_LEVEL[ao[i]]);
+        tmp.setHex(base);
+        arrC.push(tmp.r*k, tmp.g*k, tmp.b*k);
+      }
+      // flip the diagonal so AO gradients read symmetrically
+      if (ao[0] + ao[2] > ao[1] + ao[3])
+        arrI.push(vStart+1, vStart+2, vStart+3, vStart+1, vStart+3, vStart+0);
+      else
+        arrI.push(vStart+0, vStart+1, vStart+2, vStart+0, vStart+2, vStart+3);
+    }
+  }
+  const mk = (p,n,col,ind)=>{
+    if (!ind.length) return null;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(p,3));
+    g.setAttribute('normal',   new THREE.Float32BufferAttribute(n,3));
+    g.setAttribute('color',    new THREE.Float32BufferAttribute(col,3));
+    g.setIndex(ind);
+    g.computeBoundingSphere();
+    return g;
+  };
+  return { solid: mk(P,N,C,I), water: mk(wP,wN,wC,wI) };
+}
+
+// ───────────────────────────── voxel DDA raycast ─────────────────────────────
+// Amanatides & Woo. Returns the hit voxel and the neighbour face for placement.
+function raycastVoxel(orig, dir, maxDist){
+  let x = Math.floor(orig.x), y = Math.floor(orig.y), z = Math.floor(orig.z);
+  const sx = dir.x>0?1:-1, sy = dir.y>0?1:-1, sz = dir.z>0?1:-1;
+  // An exactly-axis-aligned ray gives 0 * Infinity = NaN and silently kills the
+  // traversal, so a zero component is forced to "never crosses a boundary".
+  const dx = dir.x !== 0 ? Math.abs(1/dir.x) : Infinity;
+  const dy = dir.y !== 0 ? Math.abs(1/dir.y) : Infinity;
+  const dz = dir.z !== 0 ? Math.abs(1/dir.z) : Infinity;
+  let tx = dir.x !== 0 ? (dir.x>0 ? (x+1-orig.x) : (orig.x-x)) * dx : Infinity;
+  let ty = dir.y !== 0 ? (dir.y>0 ? (y+1-orig.y) : (orig.y-y)) * dy : Infinity;
+  let tz = dir.z !== 0 ? (dir.z>0 ? (z+1-orig.z) : (orig.z-z)) * dz : Infinity;
+  let t = 0, fx=0, fy=0, fz=0;
+  while (t <= maxDist){
+    const b = getBlock(x,y,z);
+    if (b !== B.AIR && b !== B.WATER)
+      return { hit:true, x, y, z, nx:x+fx, ny:y+fy, nz:z+fz, block:b, dist:t };
+    if (tx < ty && tx < tz){ x += sx; t = tx; tx += dx; fx=-sx; fy=0; fz=0; }
+    else if (ty < tz)      { y += sy; t = ty; ty += dy; fx=0; fy=-sy; fz=0; }
+    else                   { z += sz; t = tz; tz += dz; fx=0; fy=0; fz=-sz; }
+  }
+  return { hit:false };
+}
+// clear line between two world points (used for combat LOS)
+function hasLOS(ax, ay, az, bx, by, bz){
+  const dx = bx-ax, dy = by-ay, dz = bz-az;
+  const len = Math.hypot(dx,dy,dz);
+  if (len < 0.001) return true;
+  const steps = Math.ceil(len / 0.22);
+  const oc = [Math.floor(ax), Math.floor(ay), Math.floor(az)];
+  const tc = [Math.floor(bx), Math.floor(by), Math.floor(bz)];
+  for (let i=1; i<steps; i++){
+    const s = i/steps;
+    const px = Math.floor(ax+dx*s), py = Math.floor(ay+dy*s), pz = Math.floor(az+dz*s);
+    if ((px===oc[0]&&py===oc[1]&&pz===oc[2]) || (px===tc[0]&&py===tc[1]&&pz===tc[2])) continue;
+    if (isSolid(px,py,pz)) return false;
+  }
+  return true;
+}
+
+// ───────────────────────────── renderer & scene ─────────────────────────────
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const SKY_COL = 0x9dc0dc;
+scene.background = new THREE.Color(SKY_COL);
+scene.fog = new THREE.Fog(SKY_COL, VIEW*CX*0.52, VIEW*CX*0.98);
+
+const camera = new THREE.PerspectiveCamera(74, innerWidth/innerHeight, 0.1, 600);
+
+const sun = new THREE.DirectionalLight(0xfff2d8, 1.55);
+sun.position.set(0.42, 1, 0.28).normalize();
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xbcd8f0, 0x4a4433, 0.72));
+scene.add(new THREE.AmbientLight(0xffffff, 0.16));
+
+const matSolid = new THREE.MeshLambertMaterial({ vertexColors:true });
+const matWater = new THREE.MeshLambertMaterial({
+  vertexColors:true, transparent:true, opacity:0.74, depthWrite:false, side:THREE.DoubleSide });
+
+const chunkRoot = new THREE.Group(); scene.add(chunkRoot);
+const fxRoot    = new THREE.Group(); scene.add(fxRoot);
+
+// block highlight box (explore mining + combat terrain targeting)
+const hlGeo = new THREE.BoxGeometry(1.008, 1.008, 1.008);
+const highlight = new THREE.LineSegments(
+  new THREE.EdgesGeometry(hlGeo),
+  new THREE.LineBasicMaterial({ color:0x101318, transparent:true, opacity:0.85 }));
+highlight.visible = false; scene.add(highlight);
+
+// ───────────────────────────── chunk streaming ─────────────────────────────
+const meshQueue = [];
+function updateStreaming(px, pz){
+  const pcx = Math.floor(px/CX), pcz = Math.floor(pz/CZ);
+  // ensure data exists a little wider than we draw
+  for (let dz=-GEN; dz<=GEN; dz++) for (let dx=-GEN; dx<=GEN; dx++)
+    if (dx*dx+dz*dz <= GEN*GEN) ensureChunk(pcx+dx, pcz+dz);
+
+  meshQueue.length = 0;
+  for (let dz=-VIEW; dz<=VIEW; dz++) for (let dx=-VIEW; dx<=VIEW; dx++){
+    const d2 = dx*dx+dz*dz; if (d2 > VIEW*VIEW) continue;
+    const c = CHUNKS.get(ckey(pcx+dx, pcz+dz));
+    if (c && c.dirty) meshQueue.push({ cx:pcx+dx, cz:pcz+dz, d2 });
+  }
+  meshQueue.sort((a,b)=> a.d2 - b.d2);
+
+  // unload far chunk meshes
+  const far = [];
+  for (const [k, c] of CHUNKS){
+    const [cx, cz] = k.split(',').map(Number);
+    const d = Math.max(Math.abs(cx-pcx), Math.abs(cz-pcz));
+    if (d > VIEW+1 && (c.mesh || c.wmesh)){
+      if (c.mesh){ chunkRoot.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh = null; }
+      if (c.wmesh){ chunkRoot.remove(c.wmesh); c.wmesh.geometry.dispose(); c.wmesh = null; }
+      c.dirty = true;
+    }
+    if (d > GEN+2 && !c.mesh && !c.wmesh) far.push([k, d]);
+  }
+  // Drop far chunk DATA too, not just meshes. Roaming an open world otherwise
+  // grows CHUNKS without bound (~20KB each — a few thousand is tens of MB).
+  // Eviction is lossless: terrain is a pure function of the seed and every
+  // player change lives in EDITS, so a revisited chunk rebuilds identically.
+  if (CHUNKS.size > 700){
+    far.sort((a,b)=> b[1] - a[1]);
+    for (let i=0; i<far.length && CHUNKS.size > 600; i++) CHUNKS.delete(far[i][0]);
+  }
+}
+function drainMeshQueue(budgetMs){
+  const t0 = performance.now();
+  while (meshQueue.length){
+    const job = meshQueue.shift();
+    const c = CHUNKS.get(ckey(job.cx, job.cz));
+    if (!c || !c.dirty) continue;
+    const g = buildChunkGeometry(job.cx, job.cz);
+    if (c.mesh){ chunkRoot.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh = null; }
+    if (c.wmesh){ chunkRoot.remove(c.wmesh); c.wmesh.geometry.dispose(); c.wmesh = null; }
+    if (g.solid){ c.mesh = new THREE.Mesh(g.solid, matSolid); c.mesh.frustumCulled = true; chunkRoot.add(c.mesh); }
+    if (g.water){ c.wmesh = new THREE.Mesh(g.water, matWater); c.wmesh.renderOrder = 2; chunkRoot.add(c.wmesh); }
+    c.dirty = false;
+    if (performance.now() - t0 > budgetMs) break;
+  }
+}
+function forceRemeshAround(x, z, r=1){
+  const cx = Math.floor(x/CX), cz = Math.floor(z/CZ);
+  for (let dz=-r; dz<=r; dz++) for (let dx=-r; dx<=r; dx++){
+    const c = CHUNKS.get(ckey(cx+dx, cz+dz)); if (!c) continue;
+    const g = buildChunkGeometry(cx+dx, cz+dz);
+    if (c.mesh){ chunkRoot.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh = null; }
+    if (c.wmesh){ chunkRoot.remove(c.wmesh); c.wmesh.geometry.dispose(); c.wmesh = null; }
+    if (g.solid){ c.mesh = new THREE.Mesh(g.solid, matSolid); chunkRoot.add(c.mesh); }
+    if (g.water){ c.wmesh = new THREE.Mesh(g.water, matWater); c.wmesh.renderOrder = 2; chunkRoot.add(c.wmesh); }
+    c.dirty = false;
+  }
+}
+
+// ───────────────────────────── grid helpers ─────────────────────────────
+// A cell is standable if it has air for feet + head and something solid below.
+function standable(x, y, z){
+  if (y <= 0 || y >= CY-1) return false;
+  return !isSolid(x,y,z) && !isSolid(x,y+1,z) && isSolid(x,y-1,z);
+}
+// drop to the first standable cell at or below y
+function groundAt(x, y, z, maxDrop=64){
+  for (let i=0; i<=maxDrop; i++){ const yy = y-i; if (yy<1) break; if (standable(x,yy,z)) return yy; }
+  return null;
+}
+function surfaceY(x, z){
+  for (let y=CY-2; y>=1; y--) if (standable(x,y,z)) return y;
+  return SEA+1;
+}
+const DIRS4 = [[1,0],[-1,0],[0,1],[0,-1]];
+
+// BFS over standable cells. Returns Map("x,y,z" -> {cost, px,py,pz}).
+function reachable(sx, sy, sz, maxCost, blocked){
+  const out = new Map();
+  const start = sx+','+sy+','+sz;
+  out.set(start, { cost:0, x:sx, y:sy, z:sz, px:null });
+  let frontier = [[sx,sy,sz]];
+  for (let step=0; step<maxCost && frontier.length; step++){
+    const next = [];
+    for (const [cx,cy,cz] of frontier){
+      const cur = out.get(cx+','+cy+','+cz);
+      for (const [dx,dz] of DIRS4){
+        const nx = cx+dx, nz = cz+dz;
+        // prefer stepping up 1, else level, else fall up to 3
+        let ny = null;
+        for (const cand of [cy+1, cy, cy-1, cy-2, cy-3]){
+          if (cand === cy+1 && isSolid(cx, cy+2, cz)) continue;   // no headroom to climb
+          if (standable(nx, cand, nz)){ ny = cand; break; }
+        }
+        if (ny === null) continue;
+        const extra = (ny > cy) ? 1 : 0;
+        const cost = cur.cost + 1 + extra;
+        if (cost > maxCost) continue;
+        const k = nx+','+ny+','+nz;
+        if (blocked && blocked.has(k)) continue;
+        const prev = out.get(k);
+        if (prev && prev.cost <= cost) continue;
+        out.set(k, { cost, x:nx, y:ny, z:nz, px:cx, py:cy, pz:cz });
+        next.push([nx,ny,nz]);
+      }
+    }
+    frontier = next;
+  }
+  return out;
+}
+function pathFrom(map, x, y, z){
+  const path = []; let k = x+','+y+','+z;
+  let guard = 0;
+  while (map.has(k) && guard++ < 400){
+    const n = map.get(k);
+    path.push([n.x, n.y, n.z]);
+    if (n.px === null) break;
+    k = n.px+','+n.py+','+n.pz;
+  }
+  return path.reverse();
+}
+
+// ───────────────────────────── entities ─────────────────────────────
+const KINDS = {
+  husk:    { name:'Husk',     hp:32, mp:4, atk:[6,11],  reach:1, init:8,  xp:16,
+             body:0x6b5f4a, trim:0x3f3627, scale:1.00, aggro:11 },
+  sprig:   { name:'Sprig',    hp:19, mp:6, atk:[4,8],   reach:1, init:14, xp:12,
+             body:0x5b8a46, trim:0x2f5227, scale:0.82, aggro:13 },
+  slinger: { name:'Slinger',  hp:22, mp:4, atk:[5,10],  reach:8, init:11, xp:18,
+             body:0x7a4a52, trim:0x40262b, scale:0.94, aggro:15 },
+};
+const KIND_KEYS = Object.keys(KINDS);
+const entities = [];        // living creatures in the world (not the player)
+
+function makeBody(kind){
+  const K = KINDS[kind];
+  const g = new THREE.Group();
+  const bm = new THREE.MeshLambertMaterial({ color:K.body });
+  const tm = new THREE.MeshLambertMaterial({ color:K.trim });
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.62,0.78,0.42), bm); torso.position.y = 0.86;
+  const head  = new THREE.Mesh(new THREE.BoxGeometry(0.46,0.44,0.44), tm); head.position.y = 1.46;
+  const legL  = new THREE.Mesh(new THREE.BoxGeometry(0.20,0.50,0.22), tm); legL.position.set(-0.16,0.24,0);
+  const legR  = legL.clone(); legR.position.x = 0.16;
+  const armL  = new THREE.Mesh(new THREE.BoxGeometry(0.17,0.56,0.20), bm); armL.position.set(-0.40,0.88,0);
+  const armR  = armL.clone(); armR.position.x = 0.40;
+  const eye   = new THREE.Mesh(new THREE.BoxGeometry(0.09,0.09,0.03),
+                  new THREE.MeshBasicMaterial({ color:0xffe9a8 }));
+  eye.position.set(-0.11,1.50,0.23);
+  const eye2 = eye.clone(); eye2.position.x = 0.11;
+  g.add(torso, head, legL, legR, armL, armR, eye, eye2);
+  g.scale.setScalar(K.scale);
+  g.userData.legs = [legL, legR];
+  g.userData.arms = [armL, armR];
+  return g;
+}
+let nextId = 1;
+function spawnEntity(kind, x, y, z){
+  const K = KINDS[kind];
+  const e = {
+    id: nextId++, kind, name: K.name, K,
+    hp: K.hp, maxHp: K.hp, alive: true,
+    x, y, z,                                   // integer cell
+    px: x+0.5, py: y, pz: z+0.5,               // render position
+    yaw: Math.random()*6.28, wander: 0, bob: Math.random()*6.28,
+    mesh: makeBody(kind),
+    mp:0, ap:0, init:0, isPlayer:false, fallTo:null,
+  };
+  e.mesh.position.set(e.px, e.py, e.pz);
+  scene.add(e.mesh);
+  entities.push(e);
+  return e;
+}
+function despawnEntity(e){
+  scene.remove(e.mesh);
+  const i = entities.indexOf(e); if (i >= 0) entities.splice(i,1);
+}
+// keep a light population of creatures around the player
+function populate(px, pz){
+  const want = 16;
+  for (let i=entities.length-1; i>=0; i--){
+    const e = entities[i];
+    if (Math.hypot(e.px-px, e.pz-pz) > VIEW*CX*1.25) despawnEntity(e);
+  }
+  let guard = 0;
+  while (entities.length < want && guard++ < 60){
+    const a = Math.random()*Math.PI*2;
+    const r = 26 + Math.random()*44;
+    const x = Math.round(px + Math.cos(a)*r), z = Math.round(pz + Math.sin(a)*r);
+    const y = surfaceY(x, z);
+    if (y <= SEA+1) continue;                 // no spawning in the sea
+    if (Math.hypot(x-px, z-pz) < 20) continue;
+    // Spawn in PACKS. Scattering creatures uniformly makes every ambush a 1v1,
+    // which is the least interesting thing a tactics grid can do.
+    const size = 1 + Math.floor(Math.random()*3);
+    for (let i=0; i<size && entities.length<want; i++){
+      const ox = x + (i ? Math.round((Math.random()-0.5)*5) : 0);
+      const oz = z + (i ? Math.round((Math.random()-0.5)*5) : 0);
+      const oy = surfaceY(ox, oz);
+      if (oy <= SEA+1 || Math.abs(oy-y) > 4) continue;
+      const kind = KIND_KEYS[Math.floor(Math.random()*KIND_KEYS.length)];
+      spawnEntity(kind, ox, oy, oz);
+    }
+  }
+}
+
+// ───────────────────────────── player ─────────────────────────────
+const player = {
+  isPlayer:true, id:0, name:'You', alive:true,
+  pos: new THREE.Vector3(0, 40, 0),
+  vel: new THREE.Vector3(),
+  yaw: 0, pitch: 0,
+  onGround: false, inWater: false,
+  hp: 60, maxHp: 60, level: 1, xp: 0, xpNext: 40,
+  mp: 6, ap: 2, init: 0,
+  mpMax: 6, apMax: 2,
+  atk: [8,14], reach: 1,
+  x:0, y:0, z:0,            // combat cell
+  px:0, py:0, pz:0,         // combat render pos
+  mesh: null, K: { name:'You', scale:1 },
+  hotbar: 0,
+  spawn: new THREE.Vector3(0, 40, 0),
+};
+// third-person avatar, only shown during combat
+{
+  const g = new THREE.Group();
+  const bm = new THREE.MeshLambertMaterial({ color:0x4f6f9a });
+  const tm = new THREE.MeshLambertMaterial({ color:0x2c3f5c });
+  const cm = new THREE.MeshLambertMaterial({ color:0xd8b45a });
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.60,0.80,0.40), bm); torso.position.y=0.88;
+  const head  = new THREE.Mesh(new THREE.BoxGeometry(0.44,0.44,0.44),
+                  new THREE.MeshLambertMaterial({ color:0xd6b48f })); head.position.y=1.48;
+  const hat   = new THREE.Mesh(new THREE.BoxGeometry(0.52,0.14,0.52), cm); hat.position.y=1.76;
+  const legL  = new THREE.Mesh(new THREE.BoxGeometry(0.20,0.52,0.22), tm); legL.position.set(-0.15,0.25,0);
+  const legR  = legL.clone(); legR.position.x=0.15;
+  const armL  = new THREE.Mesh(new THREE.BoxGeometry(0.17,0.58,0.20), bm); armL.position.set(-0.39,0.90,0);
+  const armR  = armL.clone(); armR.position.x=0.39;
+  g.add(torso, head, hat, legL, legR, armL, armR);
+  g.userData.legs = [legL, legR];
+  g.userData.arms = [armL, armR];
+  g.visible = false;
+  scene.add(g);
+  player.mesh = g;
+}
+
+const PW = 0.60, PH = 1.80, EYE = 1.62;      // player AABB + eye height
+function boxFree(cx, cy, cz){
+  const h = PW/2;
+  const x0 = Math.floor(cx-h), x1 = Math.floor(cx+h);
+  const y0 = Math.floor(cy),   y1 = Math.floor(cy+PH-0.001);
+  const z0 = Math.floor(cz-h), z1 = Math.floor(cz+h);
+  for (let y=y0;y<=y1;y++) for (let z=z0;z<=z1;z++) for (let x=x0;x<=x1;x++)
+    if (isSolid(x,y,z)) return false;
+  return true;
+}
+function movePlayer(dx, dy, dz, dt){
+  const p = player.pos;
+  // Y first so landing is clean
+  if (dy !== 0){
+    const ny = p.y + dy;
+    if (boxFree(p.x, ny, p.z)) p.y = ny;
+    else {
+      if (dy < 0){ p.y = Math.ceil(p.y) - 1 + 0.0001; player.onGround = true; }
+      else        { p.y = Math.floor(p.y) + 0.0001; }
+      player.vel.y = 0;
+    }
+  }
+  // X / Z with a 1-block auto-step (without this, hills are misery)
+  for (const [ax, d] of [['x',dx], ['z',dz]]){
+    if (d === 0) continue;
+    const old = p[ax];
+    p[ax] = old + d;
+    if (!boxFree(p.x, p.y, p.z)){
+      p[ax] = old;
+      if (player.onGround || player.inWater){
+        const oy = p.y;
+        p.y = oy + 1.02; p[ax] = old + d;
+        if (boxFree(p.x, p.y, p.z) && boxFree(p.x, p.y + 0.4, p.z)){ /* stepped up */ }
+        else { p.y = oy; p[ax] = old; }
+      }
+    }
+  }
+}
+
+// ───────────────────────────── input ─────────────────────────────
+const keys = Object.create(null);
+const mouseDown = [false, false, false];
+let mouseDX = 0, mouseDY = 0, locked = false;
+const mouseNDC = new THREE.Vector2(0,0);
+let pendingClick = null;                       // {button} consumed by the active mode
+
+addEventListener('keydown', e=>{
+  if (e.repeat) { keys[e.code] = true; return; }
+  keys[e.code] = true;
+  if (G.mode === 'title') return;
+  if (e.code === 'Escape' && locked) document.exitPointerLock();
+  if (G.mode === 'explore'){
+    const n = ['Digit1','Digit2','Digit3','Digit4','Digit5'].indexOf(e.code);
+    if (n >= 0){ player.hotbar = n; drawHotbar(); }
+    if (e.code === 'KeyF') pickBlock();
+    if (e.code === 'KeyE') tryEngage();
+  } else if (G.mode === 'combat'){
+    const n = ['Digit1','Digit2','Digit3','Digit4'].indexOf(e.code);
+    if (n >= 0) selectAbility(n);
+    if (e.code === 'Space'){ e.preventDefault(); endPlayerTurn(); }
+    if (e.code === 'KeyQ'){ CB.selAbility = -1; refreshTargets(); drawActs(); }
+  }
+});
+addEventListener('keyup', e=>{ keys[e.code] = false; });
+addEventListener('blur', ()=>{
+  for (const k in keys) keys[k] = false;
+  mouseDown[0] = mouseDown[1] = mouseDown[2] = false;
+});
+
+renderer.domElement.addEventListener('mousedown', e=>{
+  mouseDown[e.button] = true;
+  if (G.mode === 'explore'){
+    if (!locked){ renderer.domElement.requestPointerLock(); return; }
+    pendingClick = { button:e.button };
+  } else if (G.mode === 'combat'){
+    if (e.button === 0) pendingClick = { button:0 };
+    if (e.button === 2){ CB.dragging = true; CB.lastX = e.clientX; CB.lastY = e.clientY; }
+  }
+});
+addEventListener('mouseup', e=>{
+  mouseDown[e.button] = false;
+  if (e.button === 2) CB.dragging = false;
+});
+addEventListener('contextmenu', e=> e.preventDefault());
+addEventListener('mousemove', e=>{
+  if (locked){ mouseDX += e.movementX; mouseDY += e.movementY; }
+  mouseNDC.x = (e.clientX/innerWidth)*2 - 1;
+  mouseNDC.y = -(e.clientY/innerHeight)*2 + 1;
+  if (CB.dragging){
+    CB.orbit -= (e.clientX - CB.lastX) * 0.007;
+    CB.tilt   = clamp(CB.tilt + (e.clientY - CB.lastY) * 0.005, 0.18, 1.15);
+    CB.lastX = e.clientX; CB.lastY = e.clientY;
+  }
+});
+addEventListener('wheel', e=>{
+  if (G.mode === 'combat') CB.dist = clamp(CB.dist + Math.sign(e.deltaY)*1.4, 6, 30);
+}, { passive:true });
+document.addEventListener('pointerlockchange', ()=>{
+  locked = (document.pointerLockElement === renderer.domElement);
+  document.getElementById('lockmsg').style.display =
+    (!locked && G.mode === 'explore') ? 'flex' : 'none';
+});
+document.getElementById('lockmsg').addEventListener('click',
+  ()=> renderer.domElement.requestPointerLock());
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ───────────────────────────── explore mode ─────────────────────────────
+const _fwd = new THREE.Vector3(), _right = new THREE.Vector3();
+let digCooldown = 0;
+
+function updateExplore(dt){
+  // look
+  if (locked){
+    player.yaw   -= mouseDX * 0.0022;
+    player.pitch = clamp(player.pitch - mouseDY * 0.0022, -1.53, 1.53);
+  }
+  mouseDX = 0; mouseDY = 0;
+
+  const p = player.pos;
+  const feet = getBlock(Math.floor(p.x), Math.floor(p.y+0.3), Math.floor(p.z));
+  player.inWater = (feet === B.WATER);
+
+  // walk
+  _fwd.set(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+  _right.set(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+  let ix = 0, iz = 0;
+  if (keys.KeyW) iz += 1; if (keys.KeyS) iz -= 1;
+  if (keys.KeyD) ix += 1; if (keys.KeyA) ix -= 1;
+  const sprint = keys.ShiftLeft || keys.ShiftRight;
+  const speed = (player.inWater ? 3.6 : (sprint ? 8.4 : 5.2));
+  let wx = _fwd.x*iz + _right.x*ix, wz = _fwd.z*iz + _right.z*ix;
+  const wl = Math.hypot(wx, wz);
+  if (wl > 0){ wx = wx/wl*speed; wz = wz/wl*speed; }
+
+  // gravity + jump
+  const grav = player.inWater ? 9 : 26;
+  player.vel.y -= grav*dt;
+  if (player.inWater) player.vel.y = Math.max(player.vel.y, -2.6);
+  if (keys.Space){
+    if (player.onGround && !player.inWater) player.vel.y = 8.4;
+    else if (player.inWater) player.vel.y = 3.4;
+  }
+  player.vel.y = clamp(player.vel.y, -46, 12);
+
+  player.onGround = false;
+  movePlayer(wx*dt, player.vel.y*dt, wz*dt, dt);
+  if (p.y < -10){ p.copy(player.spawn); player.vel.set(0,0,0); }
+
+  // camera
+  camera.position.set(p.x, p.y + EYE, p.z);
+  camera.rotation.set(0,0,0);
+  camera.rotateY(player.yaw); camera.rotateX(player.pitch);
+
+  // mine / place
+  digCooldown -= dt;
+  const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  const rc = raycastVoxel(camera.position, dir, 6.2);
+  if (rc.hit){ highlight.visible = true; highlight.position.set(rc.x+0.5, rc.y+0.5, rc.z+0.5); }
+  else highlight.visible = false;
+
+  // click OR hold — holding to mine is the difference between a toy and a tool
+  const wantDig   = locked && (mouseDown[0] || (pendingClick && pendingClick.button === 0));
+  const wantPlace = locked && (mouseDown[2] || (pendingClick && pendingClick.button === 2));
+  if (rc.hit && digCooldown <= 0){
+    if (wantDig){
+      setBlock(rc.x, rc.y, rc.z, B.AIR);
+      forceRemeshAround(rc.x, rc.z, 1);
+      digCooldown = 0.16;
+    } else if (wantPlace){
+      const b = HOTBAR[player.hotbar];
+      // never brick yourself into the block you are standing in
+      if (!(Math.floor(p.x)===rc.nx && Math.floor(p.z)===rc.nz &&
+            (Math.floor(p.y)===rc.ny || Math.floor(p.y+1)===rc.ny))){
+        setBlock(rc.nx, rc.ny, rc.nz, b);
+        forceRemeshAround(rc.nx, rc.nz, 1);
+        digCooldown = 0.22;
+      }
+    }
+  }
+  pendingClick = null;
+
+  // creature wander + aggro
+  for (const e of entities){
+    e.bob += dt*2.2;
+    e.wander -= dt;
+    if (e.wander <= 0){
+      e.wander = 1.4 + Math.random()*2.6;
+      e.yaw = Math.random()*Math.PI*2;
+      const nx = e.x + Math.round(Math.cos(e.yaw)), nz = e.z + Math.round(Math.sin(e.yaw));
+      const ny = groundAt(nx, e.y+1, nz, 3);
+      if (ny !== null && surfaceY(nx,nz) > SEA+1){ e.x = nx; e.y = ny; e.z = nz; }
+    }
+    e.px = lerp(e.px, e.x+0.5, Math.min(1, dt*4));
+    e.py = lerp(e.py, e.y,     Math.min(1, dt*4));
+    e.pz = lerp(e.pz, e.z+0.5, Math.min(1, dt*4));
+    e.mesh.position.set(e.px, e.py + Math.sin(e.bob)*0.045, e.pz);
+    e.mesh.rotation.y = Math.atan2(p.x-e.px, p.z-e.pz);
+    // aggro: sees you and you are close
+    const d = Math.hypot(p.x-e.px, p.z-e.pz);
+    if (d < e.K.aggro && Math.abs(p.y-e.py) < 6 &&
+        hasLOS(p.x, p.y+1.4, p.z, e.px, e.py+1.2, e.pz)){
+      startCombat(e);
+      break;
+    }
+  }
+}
+function pickBlock(){
+  const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  const rc = raycastVoxel(camera.position, dir, 6.2);
+  if (!rc.hit) return;
+  const i = HOTBAR.indexOf(rc.block);
+  if (i >= 0){ player.hotbar = i; drawHotbar(); }
+}
+function tryEngage(){
+  let best = null, bd = 9;
+  for (const e of entities){
+    const d = Math.hypot(player.pos.x-e.px, player.pos.z-e.pz);
+    if (d < bd){ bd = d; best = e; }
+  }
+  if (best) startCombat(best);
+  else toast('Nothing within reach');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  COMBAT — freeze-in-place. The world you were standing in IS the board.
+// ═══════════════════════════════════════════════════════════════════════
+const ABILITIES = [
+  { id:'strike', name:'Strike', desc:'Melee · 8–14',      ap:1, kind:'melee',  range:1, dmg:[8,14] },
+  { id:'sling',  name:'Sling',  desc:'Ranged 8 · 5–9',    ap:1, kind:'ranged', range:8, dmg:[5,9]  },
+  { id:'quarry', name:'Quarry', desc:'Break a block · 5', ap:1, kind:'dig',    range:5, probe:true },
+  { id:'raise',  name:'Raise',  desc:'Set a block · 4',   ap:1, kind:'build',  range:4, probe:true },
+];
+
+const CB = {
+  active:false, order:[], turn:0, phase:'idle',
+  selAbility:-1, reach:new Map(), hoverKey:null, hoverPath:[],
+  orbit:0.7, tilt:0.62, dist:14, dragging:false, lastX:0, lastY:0,
+  focus:new THREE.Vector3(), camPos:new THREE.Vector3(),
+  timer:0, walkPath:null, walkI:0, walkT:0, walker:null,
+  aiQueue:[], xpPot:0, digTarget:null,
+};
+
+// ── highlight layers ──
+const TILE_MAX = 600;
+const tileGeo = new THREE.PlaneGeometry(0.88, 0.88).rotateX(-Math.PI/2);
+function mkTiles(color, opacity){
+  const m = new THREE.InstancedMesh(tileGeo,
+    new THREE.MeshBasicMaterial({ color, transparent:true, opacity,
+      depthWrite:false, side:THREE.DoubleSide }), TILE_MAX);
+  m.frustumCulled = false;              // instanced meshes cull by origin — never let them
+  m.count = 0; m.renderOrder = 3;
+  fxRoot.add(m); return m;
+}
+const tMove = mkTiles(0x5fa8e8, 0.30);
+const tPath = mkTiles(0xd8b45a, 0.62);
+const tHit  = mkTiles(0xd05a4a, 0.42);
+const _m4 = new THREE.Matrix4();
+const _camDir = new THREE.Vector3();
+function setTiles(mesh, cells, yOff=0.035){
+  let n = 0;
+  for (const c of cells){
+    if (n >= TILE_MAX) break;
+    _m4.makeTranslation(c[0]+0.5, c[1]+yOff, c[2]+0.5);
+    mesh.setMatrixAt(n++, _m4);
+  }
+  mesh.count = n;
+  mesh.instanceMatrix.needsUpdate = true;
+}
+
+// ── helpers ──
+const occKey = a => a.x+','+a.y+','+a.z;
+function occupiedSet(except){
+  const s = new Set();
+  for (const a of CB.order) if (a.alive && a !== except) s.add(occKey(a));
+  return s;
+}
+function abilityOf(a){
+  if (a.isPlayer) return ABILITIES[0];
+  return a.K.reach > 1
+    ? { name:a.name, ap:1, kind:'ranged', range:a.K.reach, dmg:a.K.atk }
+    : { name:a.name, ap:1, kind:'melee',  range:1,          dmg:a.K.atk };
+}
+function inRangeFrom(x, y, z, tgt, ab){
+  if (ab.kind === 'melee')
+    return Math.max(Math.abs(x-tgt.x), Math.abs(z-tgt.z)) <= 1 && Math.abs(y-tgt.y) <= 1;
+  if (ab.kind === 'ranged'){
+    const d = Math.hypot(x-tgt.x, y-tgt.y, z-tgt.z);
+    return d <= ab.range && hasLOS(x+0.5, y+1.35, z+0.5, tgt.x+0.5, tgt.y+1.15, tgt.z+0.5);
+  }
+  return false;
+}
+const canHit = (a, t, ab) => inRangeFrom(a.x, a.y, a.z, t, ab);
+function hasCover(a, t){
+  const dx = Math.sign(a.x-t.x), dz = Math.sign(a.z-t.z);
+  if (dx && isSolid(t.x+dx, t.y, t.z)) return true;
+  if (dz && isSolid(t.x, t.y, t.z+dz)) return true;
+  return false;
+}
+
+// ── log / floating text ──
+const clogEl = document.getElementById('clog');
+function log(html){
+  const d = document.createElement('div'); d.innerHTML = html;
+  clogEl.prepend(d);
+  while (clogEl.children.length > 22) clogEl.lastChild.remove();
+}
+const FCTS = [];
+function fct(a, text, color){
+  const el = document.createElement('div');
+  el.className = 'fct'; el.textContent = text; el.style.color = color;
+  document.getElementById('tags').appendChild(el);
+  FCTS.push({ el, x:a.px !== undefined ? a.px : a.x+0.5, y:(a.py !== undefined ? a.py : a.y)+1.9,
+              z:a.pz !== undefined ? a.pz : a.z+0.5, t:0 });
+}
+function toast(msg, secs=1.9){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toast._h); toast._h = setTimeout(()=> t.classList.remove('on'), secs*1000);
+}
+
+// ── damage & death ──
+function damage(t, amt, note){
+  t.hp = Math.max(0, t.hp - amt);
+  CB.lastDamageRound = CB.round;              // any hit resets the stalemate clock
+  fct(t, '−'+amt, t.isPlayer ? '#ff8a7a' : '#ffd27a');
+  log(`<b>${t.name}</b> takes <span class="hit">${amt}</span>${note?' <span style="color:#8d97a7">('+note+')</span>':''}`);
+  if (t.hp <= 0){
+    t.alive = false;
+    log(`<b>${t.name}</b> falls.`);
+    if (t.isPlayer){ t.mesh.visible = false; }
+    else {
+      t.mesh.rotation.x = -Math.PI/2.1;
+      t.mesh.position.y = t.py + 0.15;
+      CB.xpPot += t.K.xp;
+    }
+  }
+  drawOrder();
+  drawVitals();
+}
+function resolveAttack(a, t, ab){
+  const [lo,hi] = ab.dmg;
+  let dmg = lo + Math.floor(Math.random()*(hi-lo+1));
+  const notes = [];
+  const dy = a.y - t.y;
+  if (dy >= 1){ dmg = Math.round(dmg*1.25); notes.push('HIGH GROUND +25%'); }
+  else if (dy <= -1){ dmg = Math.round(dmg*0.85); notes.push('LOW GROUND −15%'); }
+  if (ab.kind === 'ranged' && hasCover(a, t)){ dmg = Math.round(dmg*0.75); notes.push('COVER −25%'); }
+  // face the target
+  a.mesh.rotation.y = Math.atan2((t.x+0.5)-(a.px), (t.z+0.5)-(a.pz));
+  damage(t, dmg, notes.join(' · '));
+}
+
+// gravity check after the ground changes — the whole point of the terrain probe
+function settleFalls(){
+  for (const a of CB.order){
+    if (!a.alive) continue;
+    if (standable(a.x, a.y, a.z)) continue;
+    const g = groundAt(a.x, a.y, a.z, 48);
+    if (g === null || g === a.y) continue;
+    const drop = a.y - g;
+    a.y = g;
+    if (drop >= 3){
+      const d = (drop-2)*4;
+      log(`<b>${a.name}</b> falls ${drop} blocks.`);
+      damage(a, d, 'FALL');
+    } else if (drop > 0){
+      log(`<b>${a.name}</b> drops ${drop}.`);
+    }
+  }
+}
+
+// ── start / end ──
+function startCombat(trigger){
+  if (CB.active) return;
+  if (locked) document.exitPointerLock();
+
+  // snap the player onto the grid they were standing on
+  const px = Math.floor(player.pos.x), pz = Math.floor(player.pos.z);
+  let py = groundAt(px, Math.floor(player.pos.y + 0.6), pz, 6);
+  if (py === null) py = surfaceY(px, pz);
+  player.x = px; player.y = py; player.z = pz;
+  player.px = px+0.5; player.py = py; player.pz = pz+0.5;
+  player.mesh.position.set(player.px, player.py, player.pz);
+  player.mesh.rotation.set(0,0,0);
+  player.mesh.visible = true;
+  player.alive = true;
+
+  // Only drag in creatures that can actually SEE you — otherwise a fight can
+  // open with participants on the far side of a hill who never join in.
+  let foes = entities.filter(e =>
+    e.alive && Math.hypot(e.px-player.px, e.pz-player.pz) < 22 &&
+    Math.abs(e.py-player.py) < 12 &&
+    hasLOS(player.px, player.py+1.4, player.pz, e.px, e.py+1.2, e.pz));
+  // nearest first, capped — packs can stack to 8+ and the turn strip can't read that
+  foes.sort((a,b)=> Math.hypot(a.px-player.px, a.pz-player.pz)
+                  - Math.hypot(b.px-player.px, b.pz-player.pz));
+  foes = foes.slice(0, 5);
+  if (!foes.includes(trigger)) foes.push(trigger);
+
+  const roll = a => (a.isPlayer ? 12 : a.K.init) + Math.random()*6;
+  player.init = roll(player);
+  for (const f of foes){
+    f.init = roll(f);
+    f.px = f.x+0.5; f.py = f.y; f.pz = f.z+0.5;
+    f.mesh.position.set(f.px, f.py, f.pz);
+    f.mesh.rotation.x = 0;
+  }
+  CB.order = [player, ...foes].sort((a,b)=> b.init - a.init);
+  CB.turn = -1; CB.xpPot = 0; CB.active = true;
+  CB.round = 0; CB.lastDamageRound = 0; CB.result = null; CB.elapsed = 0;
+  CB.orbit = player.yaw + Math.PI; CB.tilt = 0.80; CB.dist = 13;
+  CB.focus.set(player.px, player.py, player.pz);
+  CB.camPos.copy(camera.position);
+  CB.phase = 'intro'; CB.timer = 0.85;
+
+  G.mode = 'combat';
+  document.getElementById('combat').classList.add('on');
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('lockmsg').style.display = 'none';
+  clogEl.innerHTML = '';
+  log(`<b>Ambush.</b> ${foes.length} creature${foes.length>1?'s':''} close in.`);
+  drawActs(); drawOrder();
+  setHint('Combat — the ground you were standing on is the board.');
+}
+function endCombat(result){
+  CB.active = false;
+  CB.phase = 'over';
+  CB.result = result;
+  tMove.count = tPath.count = tHit.count = 0;
+  highlight.visible = false;
+
+  for (let i=entities.length-1; i>=0; i--) if (!entities[i].alive) despawnEntity(entities[i]);
+
+  const TXT = {
+    win:  ['VICTORY',   `+${CB.xpPot} experience`,                    'Continue', 'on win'],
+    lose: ['YOU FALL',  'You wake at your waystone, weakened.',       'Rise',     'on lose'],
+    draw: ['THEY LOSE INTEREST', 'Nothing could reach anything. The pack drifts away.',
+                                                                     'Continue', 'on'],
+  }[result];
+  document.getElementById('bTitle').textContent = TXT[0];
+  document.getElementById('bSub').textContent   = TXT[1];
+  document.getElementById('bBtn').textContent   = TXT[2];
+  document.getElementById('banner').className   = TXT[3];
+}
+function leaveCombat(result){
+  const victory = (result === 'win');
+  document.getElementById('banner').className = '';
+  document.getElementById('combat').classList.remove('on');
+  document.getElementById('hud').style.display = '';
+  player.mesh.visible = false;
+
+  if (result !== 'lose'){
+    if (victory) gainXp(CB.xpPot);
+    player.pos.set(player.px, player.py + 0.02, player.pz);
+    // a draw means the pack gave up — clear them so you aren't instantly re-jumped
+    if (result === 'draw') for (let i=entities.length-1;i>=0;i--) despawnEntity(entities[i]);
+  } else {
+    player.pos.copy(player.spawn);
+    player.pos.y = surfaceY(Math.floor(player.spawn.x), Math.floor(player.spawn.z)) + 0.1;
+    player.hp = Math.max(1, Math.round(player.maxHp*0.5));
+    player.alive = true;
+    // clear the ambush so you don't get re-jumped on the spot
+    for (let i=entities.length-1; i>=0; i--) despawnEntity(entities[i]);
+  }
+  player.vel.set(0,0,0);
+  G.mode = 'explore';
+  CB.phase = 'idle';
+  drawVitals();
+  saveGame();
+  document.getElementById('lockmsg').style.display = 'flex';
+}
+function gainXp(n){
+  player.xp += n;
+  while (player.xp >= player.xpNext){
+    player.xp -= player.xpNext;
+    player.level++;
+    player.xpNext = Math.round(player.xpNext*1.55);
+    player.maxHp += 8; player.hp = player.maxHp;
+    player.mpMax = 6 + Math.floor(player.level/3);
+    toast('Level ' + player.level);
+  }
+  drawVitals();
+}
+
+// ── turn flow ──
+function actor(){ return CB.order[CB.turn]; }
+const STALE_ROUNDS = 4;    // rounds with zero damage before the pack gives up
+const HARD_ROUNDS  = 40;   // absolute backstop
+function nextTurn(){
+  const foesLeft = CB.order.some(a => !a.isPlayer && a.alive);
+  if (!player.alive){ endCombat('lose'); return; }
+  if (!foesLeft){ endCombat('win'); return; }
+  const prev = CB.turn;
+  let guard = 0;
+  do { CB.turn = (CB.turn+1) % CB.order.length; } while (!CB.order[CB.turn].alive && guard++ < 40);
+
+  // Nobody can reach anybody (you pillared up; melee creatures mill about).
+  // Watch DAMAGE, not positions — a creature shuffling between two cells changes
+  // the board every round while achieving precisely nothing, which is exactly
+  // the case a position signature fails to catch.
+  if (CB.turn <= prev){
+    CB.round++;
+    if (CB.round - CB.lastDamageRound >= STALE_ROUNDS || CB.round > HARD_ROUNDS){
+      endCombat('draw'); return;
+    }
+  }
+  beginTurn(actor());
+}
+function beginTurn(a){
+  a.mp = a.isPlayer ? player.mpMax : a.K.mp;
+  a.ap = a.isPlayer ? player.apMax : 1;
+  CB.selAbility = -1;
+  CB.walkPath = null; CB.walker = null;
+  CB.hoverPath = []; tPath.count = 0;
+  CB.aiQueue = []; CB.aiPlanned = false;
+  if (a.isPlayer){
+    CB.phase = 'idle';
+    recomputeReach();
+    log(`— <b>Your turn</b> —`);
+    setHint('Click a blue tile to move · pick an action · click a target');
+  } else {
+    CB.phase = 'aithink'; CB.timer = 0.45;
+    tMove.count = 0; tHit.count = 0;
+    CB.reach = new Map();
+    log(`— <b>${a.name}</b> —`);
+    setHint(`${a.name} is acting…`);
+  }
+  drawOrder(); drawPips(); drawActs();
+}
+function recomputeReach(){
+  const a = actor();
+  if (!a || !a.isPlayer){ tMove.count = 0; return; }
+  CB.reach = reachable(a.x, a.y, a.z, a.mp, occupiedSet(a));
+  const cells = [];
+  for (const [k, n] of CB.reach){ if (n.cost > 0) cells.push([n.x, n.y, n.z]); }
+  setTiles(tMove, cells);
+  refreshTargets();
+}
+function refreshTargets(){
+  const a = actor();
+  if (!a || !a.isPlayer || CB.selAbility < 0){ tHit.count = 0; return; }
+  const ab = ABILITIES[CB.selAbility];
+  if (ab.kind !== 'melee' && ab.kind !== 'ranged'){ tHit.count = 0; return; }
+  const cells = [];
+  for (const t of CB.order){
+    if (!t.alive || t.isPlayer) continue;
+    if (canHit(a, t, ab)) cells.push([t.x, t.y, t.z]);
+  }
+  setTiles(tHit, cells, 0.05);
+}
+function endPlayerTurn(){
+  if (CB.phase !== 'idle' || !actor() || !actor().isPlayer) return;
+  tMove.count = 0; tHit.count = 0; tPath.count = 0;
+  nextTurn();
+}
+function selectAbility(i){
+  const a = actor();
+  if (!a || !a.isPlayer || CB.phase !== 'idle') return;
+  if (i >= ABILITIES.length) return;
+  CB.selAbility = (CB.selAbility === i) ? -1 : i;
+  if (CB.selAbility >= 0 && a.ap < ABILITIES[CB.selAbility].ap){ CB.selAbility = -1; toast('No action left'); }
+  refreshTargets(); drawActs();
+  const ab = ABILITIES[CB.selAbility];
+  if (!ab) setHint('Click a blue tile to move · pick an action · click a target');
+  else if (ab.kind === 'dig')   setHint('QUARRY — click a block within 5 to break it');
+  else if (ab.kind === 'build') setHint('RAISE — click a face within 4 to set stone');
+  else setHint(`${ab.name.toUpperCase()} — click a highlighted enemy`);
+}
+
+// ── player actions ──
+const rayc = new THREE.Raycaster();
+function pickEnemyUnderMouse(){
+  rayc.setFromCamera(mouseNDC, camera);
+  const live = CB.order.filter(a => a.alive && !a.isPlayer);
+  const hits = rayc.intersectObjects(live.map(a => a.mesh), true);
+  if (!hits.length) return null;
+  let o = hits[0].object;
+  while (o && !live.some(a => a.mesh === o)) o = o.parent;
+  return live.find(a => a.mesh === o) || null;
+}
+function mouseVoxel(maxDist){
+  rayc.setFromCamera(mouseNDC, camera);
+  return raycastVoxel(rayc.ray.origin, rayc.ray.direction, maxDist);
+}
+function tileUnderMouse(){
+  const rc = mouseVoxel(60);
+  if (!rc.hit) return null;
+  return { x:rc.x, y:rc.y+1, z:rc.z };            // stand on top of the block you clicked
+}
+function handleCombatClick(){
+  const a = actor();
+  if (!a || !a.isPlayer || CB.phase !== 'idle') return;
+  const ab = ABILITIES[CB.selAbility];
+
+  // 1) an ability is armed
+  if (ab){
+    if (a.ap < ab.ap){ toast('No action left'); return; }
+    if (ab.kind === 'melee' || ab.kind === 'ranged'){
+      const t = pickEnemyUnderMouse();
+      if (!t) return;
+      if (!canHit(a, t, ab)){
+        const tooFar = Math.hypot(a.x-t.x, a.y-t.y, a.z-t.z) > ab.range;
+        toast(tooFar ? 'Out of range' : 'No line of sight');
+        return;
+      }
+      a.ap -= ab.ap;
+      log(`You use <b>${ab.name}</b> on ${t.name}.`);
+      resolveAttack(a, t, ab);
+      CB.selAbility = -1;
+      afterPlayerAction();
+      return;
+    }
+    if (ab.kind === 'dig'){
+      const rc = mouseVoxel(40);
+      if (!rc.hit) return;
+      if (Math.hypot(rc.x+0.5-a.px, rc.y-a.py, rc.z+0.5-a.pz) > ab.range + 0.9){ toast('Too far'); return; }
+      a.ap -= ab.ap;
+      setBlock(rc.x, rc.y, rc.z, B.AIR);
+      forceRemeshAround(rc.x, rc.z, 1);
+      log(`You <b>quarry</b> the ground away.`);
+      settleFalls();
+      CB.selAbility = -1;
+      afterPlayerAction();
+      return;
+    }
+    if (ab.kind === 'build'){
+      const rc = mouseVoxel(40);
+      if (!rc.hit) return;
+      const bx = rc.nx, by = rc.ny, bz = rc.nz;
+      if (Math.hypot(bx+0.5-a.px, by-a.py, bz+0.5-a.pz) > ab.range + 0.9){ toast('Too far'); return; }
+      const clash = CB.order.some(o => o.alive && o.x===bx && o.z===bz && (o.y===by || o.y+1===by));
+      if (clash){ toast('Someone is standing there'); return; }
+      a.ap -= ab.ap;
+      setBlock(bx, by, bz, B.STONE);
+      forceRemeshAround(bx, bz, 1);
+      log(`You <b>raise</b> a block of stone.`);
+      settleFalls();
+      CB.selAbility = -1;
+      afterPlayerAction();
+      return;
+    }
+  }
+
+  // 2) no ability armed → move
+  const cell = tileUnderMouse();
+  if (!cell) return;
+  const k = cell.x+','+cell.y+','+cell.z;
+  const node = CB.reach.get(k);
+  if (!node || node.cost === 0) return;
+  const path = pathFrom(CB.reach, cell.x, cell.y, cell.z);
+  a.mp -= node.cost;
+  startWalk(a, path, ()=>{ afterPlayerAction(); });
+}
+function afterPlayerAction(){
+  drawPips(); drawActs(); drawOrder();
+  if (!player.alive){ endCombat('lose'); return; }
+  if (!CB.order.some(o => !o.isPlayer && o.alive)){ endCombat('win'); return; }
+  const a = actor();
+  if (a.mp <= 0 && a.ap <= 0){ nextTurn(); return; }
+  CB.phase = 'idle';
+  recomputeReach();
+}
+function startWalk(a, path, done){
+  if (!path || path.length < 2){ if (done) done(); return; }
+  CB.walker = a; CB.walkPath = path; CB.walkI = 0; CB.walkT = 0;
+  CB.walkDone = done;
+  CB.phase = 'walk';
+  tMove.count = 0; tPath.count = 0; tHit.count = 0;
+  highlight.visible = false;
+  drawActs();
+}
+
+// ── AI ──
+// Shared by the creature AI and the headless test player, deliberately: a
+// benchmark run against a hand-rolled mirror of the real policy measures the
+// mirror, not the game.
+function planApproach(a, target, ab){
+  // Search WIDE, walk short. Capping the search at the movement budget makes a
+  // creature blind to any route longer than one turn — stand it at the foot of
+  // a 3-block ledge and every neighbouring cell scores worse than staying put,
+  // so it does nothing, forever. The budget limits the walk, not the lookahead.
+  const far = reachable(a.x, a.y, a.z, Math.max(a.mp*4, 18), occupiedSet(a));
+
+  let goal = null, goalCost = Infinity;
+  for (const [, n] of far){
+    if (n.cost === 0 || !inRangeFrom(n.x, n.y, n.z, target, ab)) continue;
+    if (n.cost < goalCost){ goalCost = n.cost; goal = n; }
+  }
+  if (!goal){                              // can't get in range at all — just close in
+    let bs = Infinity;
+    for (const [, n] of far){
+      const s = Math.hypot(n.x-target.x, n.y-target.y, n.z-target.z) + n.cost*0.02;
+      if (s < bs){ bs = s; goal = n; }
+    }
+    if (!goal || goal.cost === 0) return null;
+  }
+
+  const path = pathFrom(far, goal.x, goal.y, goal.z);
+  let cost = 0, cut = 0;
+  for (let i=1; i<path.length; i++){
+    const stepCost = 1 + (path[i][1] > path[i-1][1] ? 1 : 0);
+    if (cost + stepCost > a.mp) break;
+    cost += stepCost; cut = i;
+  }
+  const end = cut > 0 ? path[cut] : [a.x, a.y, a.z];
+  return { path: path.slice(0, cut+1), cost, cut,
+           endsInRange: inRangeFrom(end[0], end[1], end[2], target, ab) };
+}
+function aiPlan(a){
+  const ab = abilityOf(a);
+  const target = player;
+  const q = [];
+  if (canHit(a, target, ab)){ q.push({ t:'attack', ab, target }); return q; }
+  const pl = planApproach(a, target, ab);
+  if (!pl) return q;
+  if (pl.cut > 0) q.push({ t:'move', path: pl.path, cost: pl.cost });
+  if (pl.endsInRange) q.push({ t:'attack', ab, target });
+  return q;
+}
+function aiStep(){
+  const a = actor();
+  if (!a || !a.alive){ nextTurn(); return; }
+  if (!CB.aiQueue.length){ nextTurn(); return; }
+  const step = CB.aiQueue.shift();
+  if (step.t === 'move'){
+    a.mp -= step.cost;
+    startWalk(a, step.path, ()=>{ CB.phase = 'aithink'; CB.timer = 0.28; });
+  } else if (step.t === 'attack'){
+    a.ap -= 1;
+    log(`<b>${a.name}</b> attacks.`);
+    resolveAttack(a, step.target, step.ab);
+    if (!player.alive){ endCombat('lose'); return; }
+    CB.phase = 'aithink'; CB.timer = 0.42;
+  }
+}
+
+// ── combat update ──
+function updateCombat(dt){
+  const a = actor();
+  // a click that lands mid-animation must not fire once the turn resumes
+  if (CB.phase !== 'idle') pendingClick = null;
+
+  // Last-resort backstop. The round counter only advances through nextTurn(), so
+  // anything that wedges a PHASE never reaches the round cap. An unresolvable
+  // fight is unrecoverable for the player, so bound it on elapsed time too.
+  if (CB.phase !== 'over'){
+    CB.elapsed = (CB.elapsed || 0) + dt;
+    if (CB.elapsed > 180){
+      console.warn('STRATA: combat wedged in phase', CB.phase, '— forcing a draw');
+      endCombat('draw'); return;
+    }
+  }
+
+  // camera orbit around the active combatant
+  if (a){
+    CB.focus.set(
+      a.px !== undefined ? a.px : a.x+0.5,
+      (a.py !== undefined ? a.py : a.y) + 0.9,
+      a.pz !== undefined ? a.pz : a.z+0.5);
+  }
+  const ct = CB.tilt, co = CB.orbit;
+  let ux = Math.sin(co)*Math.cos(ct), uy = Math.sin(ct), uz = Math.cos(co)*Math.cos(ct);
+  const ul = Math.hypot(ux,uy,uz) || 1; ux/=ul; uy/=ul; uz/=ul;
+
+  // Pull the camera in when terrain (or a tree canopy) sits between it and the
+  // active fighter. Without this, any fight under a forest points the tactical
+  // camera at the inside of a leaf block and you cannot see your own character.
+  _camDir.set(ux, uy, uz);
+  const hit = raycastVoxel(CB.focus, _camDir, CB.dist);
+  const cd = hit.hit ? Math.max(3.0, hit.dist - 0.5) : CB.dist;
+
+  const tx = CB.focus.x + ux*cd, ty = CB.focus.y + uy*cd, tz = CB.focus.z + uz*cd;
+  const k = 1 - Math.pow(0.0016, dt);
+  camera.position.x = lerp(camera.position.x, tx, k);
+  camera.position.y = lerp(camera.position.y, ty, k);
+  camera.position.z = lerp(camera.position.z, tz, k);
+  camera.lookAt(CB.focus.x, CB.focus.y, CB.focus.z);
+
+  // idle bob
+  for (const c of CB.order){
+    if (!c.alive || c === CB.walker) continue;
+    c.bob = (c.bob || 0) + dt*2;
+    c.mesh.position.set(c.px, c.py + Math.sin(c.bob)*0.035, c.pz);
+  }
+
+  switch (CB.phase){
+    case 'intro':
+      CB.timer -= dt;
+      if (CB.timer <= 0) nextTurn();
+      break;
+
+    case 'idle': {
+      // hover preview: path to the tile under the cursor
+      const cell = tileUnderMouse();
+      const ab = ABILITIES[CB.selAbility];
+      if (ab && (ab.kind === 'dig' || ab.kind === 'build')){
+        const rc = mouseVoxel(40);
+        if (rc.hit){
+          highlight.visible = true;
+          if (ab.kind === 'dig') highlight.position.set(rc.x+0.5, rc.y+0.5, rc.z+0.5);
+          else highlight.position.set(rc.nx+0.5, rc.ny+0.5, rc.nz+0.5);
+        } else highlight.visible = false;
+        tPath.count = 0;
+      } else {
+        highlight.visible = false;
+        if (cell){
+          const kk = cell.x+','+cell.y+','+cell.z;
+          if (kk !== CB.hoverKey){
+            CB.hoverKey = kk;
+            const n = CB.reach.get(kk);
+            if (n && n.cost > 0) setTiles(tPath, pathFrom(CB.reach, cell.x, cell.y, cell.z).slice(1), 0.055);
+            else tPath.count = 0;
+          }
+        } else { tPath.count = 0; CB.hoverKey = null; }
+      }
+      if (pendingClick){ pendingClick = null; handleCombatClick(); }
+      break;
+    }
+
+    case 'walk': {
+      const w = CB.walker, p = CB.walkPath;
+      if (!w || !p){ CB.phase = 'idle'; break; }
+      CB.walkT += dt * 6.0;
+      while (CB.walkT >= 1 && CB.walkI < p.length-1){ CB.walkT -= 1; CB.walkI++; }
+      const i = Math.min(CB.walkI, p.length-1);
+      const j = Math.min(i+1, p.length-1);
+      const A = p[i], Bp = p[j];
+      const t = (i === j) ? 0 : CB.walkT;
+      w.px = lerp(A[0]+0.5, Bp[0]+0.5, t);
+      w.py = lerp(A[1],     Bp[1],     t);
+      w.pz = lerp(A[2]+0.5, Bp[2]+0.5, t);
+      const sw = Math.sin(performance.now()*0.014)*0.42;
+      if (w.mesh.userData.legs){
+        w.mesh.userData.legs[0].rotation.x =  sw;
+        w.mesh.userData.legs[1].rotation.x = -sw;
+      }
+      w.mesh.position.set(w.px, w.py, w.pz);
+      if (Bp !== A) w.mesh.rotation.y = Math.atan2(Bp[0]-A[0], Bp[2]-A[2]);
+      if (CB.walkI >= p.length-1){
+        const last = p[p.length-1];
+        w.x = last[0]; w.y = last[1]; w.z = last[2];
+        w.px = w.x+0.5; w.py = w.y; w.pz = w.z+0.5;
+        w.mesh.position.set(w.px, w.py, w.pz);
+        if (w.mesh.userData.legs){ w.mesh.userData.legs[0].rotation.x = 0; w.mesh.userData.legs[1].rotation.x = 0; }
+        CB.walker = null; CB.walkPath = null;
+        const done = CB.walkDone; CB.walkDone = null;
+        CB.phase = 'idle';
+        if (done) done();
+      }
+      break;
+    }
+
+    case 'aithink':
+      CB.timer -= dt;
+      if (CB.timer <= 0){
+        const cur = actor();
+        if (!cur || !cur.alive){ nextTurn(); break; }
+        // Plan ONCE per turn. Re-planning each tick would let a creature that
+        // is already in range attack forever — its plan never becomes empty.
+        if (!CB.aiPlanned){ CB.aiQueue = aiPlan(cur); CB.aiPlanned = true; }
+        if (!CB.aiQueue.length){ nextTurn(); break; }
+        aiStep();
+      }
+      break;
+
+    case 'over':
+      break;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  UI
+// ═══════════════════════════════════════════════════════════════════════
+function setHint(t){ document.getElementById('hint').textContent = t; }
+function drawVitals(){
+  document.getElementById('vHp').textContent = `${Math.round(player.hp)} / ${player.maxHp}`;
+  document.getElementById('vHpB').style.width = (player.hp/player.maxHp*100) + '%';
+  document.getElementById('vLvl').textContent = 'Level ' + player.level;
+  document.getElementById('vXp').textContent = `${player.xp} / ${player.xpNext}`;
+  document.getElementById('vXpB').style.width = (player.xp/player.xpNext*100) + '%';
+}
+function drawHotbar(){
+  const el = document.getElementById('hotbar');
+  el.innerHTML = HOTBAR.map((b,i)=>{
+    const c = '#' + COL[b][0].toString(16).padStart(6,'0');
+    return `<div class="slot ${i===player.hotbar?'on':''}"><span class="k">${i+1}</span>
+      <span class="sw" style="background:${c}"></span>
+      <span style="font-size:8px;letter-spacing:.06em;color:#98a2b2">${BLOCK_NAME[b]}</span></div>`;
+  }).join('');
+}
+function drawOrder(){
+  const el = document.getElementById('order');
+  el.innerHTML = CB.order.map((a,i)=>{
+    const cls = [a === actor() ? 'act':'', !a.alive ? 'dead':'', a.isPlayer ? 'you':''].join(' ');
+    return `<div class="chip ${cls}"><div class="nm">${a.name}</div>
+      <div class="hb"><i style="width:${Math.max(0,a.hp/a.maxHp*100)}%"></i></div></div>`;
+  }).join('');
+}
+function drawPips(){
+  const a = actor();
+  const mp = a && a.isPlayer ? a.mp : 0, mpM = player.mpMax;
+  const ap = a && a.isPlayer ? a.ap : 0, apM = player.apMax;
+  document.getElementById('mpPips').innerHTML =
+    Array.from({length:mpM}, (_,i)=>`<span class="pip ${i<mp?'on':''}"></span>`).join('');
+  document.getElementById('apPips').innerHTML =
+    Array.from({length:apM}, (_,i)=>`<span class="pip ap ${i<ap?'on':''}"></span>`).join('');
+}
+function drawActs(){
+  const a = actor();
+  const yours = a && a.isPlayer && CB.phase === 'idle';
+  const el = document.getElementById('acts');
+  el.innerHTML = ABILITIES.map((ab,i)=>{
+    const off = !yours || a.ap < ab.ap;
+    return `<div class="act ${CB.selAbility===i?'sel':''} ${off?'off':''} ${ab.probe?'probe':''}" data-i="${i}">
+      <span class="ak">${i+1}</span>
+      <div class="an">${ab.name}</div><div class="ad">${ab.desc}</div></div>`;
+  }).join('') + `<div class="act" data-end="1"><div class="an">End Turn</div><div class="ad">SPACE</div></div>`;
+  el.querySelectorAll('.act').forEach(n=>{
+    n.onclick = ()=>{
+      if (n.dataset.end) endPlayerTurn();
+      else if (!n.classList.contains('off')) selectAbility(+n.dataset.i);
+    };
+  });
+  drawPips();
+}
+
+// world-space name tags + floating combat text
+const tagPool = [];
+const _pv = new THREE.Vector3();
+function updateTags(dt){
+  const host = document.getElementById('tags');
+  const list = CB.active
+    ? CB.order.filter(a => a.alive)
+    : entities.filter(e => Math.hypot(e.px-player.pos.x, e.pz-player.pos.z) < 34);
+  while (tagPool.length < list.length){
+    const d = document.createElement('div');
+    d.className = 'tag';
+    d.innerHTML = '<div class="tn"></div><div class="tb"><i></i></div>';
+    host.appendChild(d); tagPool.push(d);
+  }
+  for (let i=0;i<tagPool.length;i++){
+    const d = tagPool[i];
+    if (i >= list.length){ d.style.display = 'none'; continue; }
+    const a = list[i];
+    if (a.isPlayer && !CB.active){ d.style.display = 'none'; continue; }
+    _pv.set(a.px, a.py + 2.05, a.pz).project(camera);
+    if (_pv.z > 1 || _pv.z < -1){ d.style.display = 'none'; continue; }
+    d.style.display = '';
+    d.className = 'tag' + (a.isPlayer ? ' you' : '');
+    d.style.left = ((_pv.x*0.5+0.5)*innerWidth) + 'px';
+    d.style.top  = ((-_pv.y*0.5+0.5)*innerHeight) + 'px';
+    d.children[0].textContent = a.name;
+    d.children[1].firstChild.style.width = Math.max(0, a.hp/a.maxHp*100) + '%';
+  }
+  for (let i=FCTS.length-1; i>=0; i--){
+    const f = FCTS[i];
+    f.t += dt;
+    if (f.t > 1.15){ f.el.remove(); FCTS.splice(i,1); continue; }
+    _pv.set(f.x, f.y + f.t*0.95, f.z).project(camera);
+    f.el.style.left = ((_pv.x*0.5+0.5)*innerWidth) + 'px';
+    f.el.style.top  = ((-_pv.y*0.5+0.5)*innerHeight) + 'px';
+    f.el.style.opacity = String(clamp(1 - f.t/1.15, 0, 1));
+  }
+}
+const COMPASS = ['N','NE','E','SE','S','SW','W','NW'];
+function updateHudText(){
+  const deg = ((-player.yaw * 180/Math.PI) % 360 + 360) % 360;
+  document.getElementById('compass').textContent = COMPASS[Math.round(deg/45) % 8];
+  const p = player.pos;
+  document.getElementById('coords').innerHTML =
+    `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}<br>
+     <span style="color:#5f6a7a">${entities.length} creatures · ${CHUNKS.size} chunks</span>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  SAVE / LOAD — we persist the SEED plus a diff list, never the world.
+// ═══════════════════════════════════════════════════════════════════════
+function saveGame(){
+  try {
+    const ed = [];
+    for (const [k, m] of EDITS) ed.push([k, [...m]]);
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      seed: SEED, edits: ed,
+      p: { x:player.pos.x, y:player.pos.y, z:player.pos.z, yaw:player.yaw,
+           hp:player.hp, maxHp:player.maxHp, lvl:player.level, xp:player.xp, xpNext:player.xpNext },
+      spawn: { x:player.spawn.x, y:player.spawn.y, z:player.spawn.z },
+    }));
+  } catch(e){ /* quota — not fatal for a prototype */ }
+}
+function loadGame(){
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    SEED = s.seed;
+    EDITS.clear(); _hCache.clear(); CHUNKS.clear();
+    for (const [k, arr] of s.edits) EDITS.set(k, new Map(arr));
+    player.pos.set(s.p.x, s.p.y, s.p.z);
+    player.yaw = s.p.yaw || 0;
+    player.hp = s.p.hp; player.maxHp = s.p.maxHp;
+    player.level = s.p.lvl; player.xp = s.p.xp; player.xpNext = s.p.xpNext;
+    player.mpMax = 6 + Math.floor(player.level/3);
+    player.spawn.set(s.spawn.x, s.spawn.y, s.spawn.z);
+    return true;
+  } catch(e){ return false; }
+}
+function newWorld(){
+  SEED = (Math.random()*1e9)|0;
+  EDITS.clear(); _hCache.clear();
+  for (const [,c] of CHUNKS){
+    if (c.mesh){ chunkRoot.remove(c.mesh); c.mesh.geometry.dispose(); }
+    if (c.wmesh){ chunkRoot.remove(c.wmesh); c.wmesh.geometry.dispose(); }
+  }
+  CHUNKS.clear();
+  for (let i=entities.length-1;i>=0;i--) despawnEntity(entities[i]);
+  // walk outward from the origin until we find dry, gentle land
+  let sx = 0, sz = 0;
+  for (let r=0; r<400; r++){
+    const a = r*2.399, rr = r*1.7;
+    const x = Math.round(Math.cos(a)*rr), z = Math.round(Math.sin(a)*rr);
+    const h = heightAt(x,z);
+    if (h > SEA+2 && h < 44){ sx = x; sz = z; break; }
+  }
+  const sy = surfaceY(sx, sz);
+  player.pos.set(sx+0.5, sy+0.2, sz+0.5);
+  player.spawn.copy(player.pos);
+  player.hp = 60; player.maxHp = 60; player.level = 1;
+  player.xp = 0; player.xpNext = 40; player.mpMax = 6;
+  player.yaw = 0; player.pitch = 0; player.vel.set(0,0,0);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  MAIN LOOP
+// ═══════════════════════════════════════════════════════════════════════
+const G = { mode:'title', time:0, streamT:0, saveT:0, frames:0 };
+window.G = G;
+
+function step(dt){
+  dt = Math.min(dt, 0.05);                     // clamp so a stalled tab can't teleport you
+  G.time += dt;
+  if (G.mode === 'explore'){
+    updateExplore(dt);
+    G.streamT -= dt;
+    if (G.streamT <= 0){
+      G.streamT = 0.35;
+      updateStreaming(player.pos.x, player.pos.z);
+      populate(player.pos.x, player.pos.z);
+    }
+    G.saveT -= dt;
+    if (G.saveT <= 0){ G.saveT = 20; saveGame(); }
+    drawVitals();
+    updateHudText();
+  } else if (G.mode === 'combat'){
+    updateCombat(dt);
+  }
+  drainMeshQueue(MESH_BUDGET);
+  updateTags(dt);
+}
+function render(){
+  renderer.render(scene, camera);
+  G.frames++;
+  lastRender = performance.now();
+}
+let lastT = performance.now(), lastRender = 0, rafOK = 0;
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt = (now - lastT)/1000; lastT = now;
+  rafOK = now;
+  if (G.mode === 'title'){ render(); return; }
+  step(dt);
+  render();
+}
+requestAnimationFrame(frame);
+
+// Watchdog: a hidden/backgrounded panel stops RAF entirely. Without this the
+// canvas can composite as a black rectangle and read as "the game is broken".
+setInterval(()=>{
+  if (performance.now() - rafOK > 400){
+    lastT = performance.now();
+    render();
+  }
+}, 250);
+
+// ═══════════════════════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════════════════════
+function enterWorld(){
+  document.getElementById('title').style.display = 'none';
+  G.mode = 'explore';
+  updateStreaming(player.pos.x, player.pos.z);
+  drainMeshQueue(400);                         // build the first ring synchronously
+  // make sure we are standing on something
+  if (!boxFree(player.pos.x, player.pos.y, player.pos.z))
+    player.pos.y = surfaceY(Math.floor(player.pos.x), Math.floor(player.pos.z)) + 0.1;
+  populate(player.pos.x, player.pos.z);
+  drawHotbar(); drawVitals();
+  document.getElementById('lockmsg').style.display = 'flex';
+  toast('Find something to fight', 3);
+}
+document.getElementById('btnPlay').onclick = ()=>{
+  if (!loadGame()) newWorld();
+  enterWorld();
+};
+document.getElementById('btnNew').onclick = ()=>{
+  localStorage.removeItem(SAVE_KEY);
+  newWorld();
+  enterWorld();
+};
+document.getElementById('bBtn').onclick = ()=> leaveCombat(CB.result || 'win');
+newWorld();                                     // prime a world so the title screen has state
+
+// ═══════════════════════════════════════════════════════════════════════
+//  HEADLESS API — every loop must be drivable without a visible tab.
+// ═══════════════════════════════════════════════════════════════════════
+window.STRATA = {
+  G, CB, player, entities, CHUNKS, EDITS,
+  THREE, camera, scene,
+  start(){ if (!loadGame()) newWorld(); enterWorld(); },
+  fresh(){ localStorage.removeItem(SAVE_KEY); newWorld(); enterWorld(); },
+  step(dt=1/60){ step(dt); },
+  sim(seconds, dt=1/60){
+    const n = Math.round(seconds/dt);
+    for (let i=0;i<n;i++) step(dt);
+    return this.state();
+  },
+  // Force a fight with the nearest creature, placed on a cell that is actually
+  // adjacent on the grid — dropping it blindly at +2 can land it under a ledge.
+  fight(kind){
+    if (!entities.length) populate(player.pos.x, player.pos.z);
+    let best=null, bd=1e9;
+    for (const e of entities){
+      if (kind && e.kind !== kind) continue;
+      const d = Math.hypot(e.px-player.pos.x, e.pz-player.pos.z);
+      if (d<bd){ bd=d; best=e; }
+    }
+    if (!best) best = spawnEntity(kind || 'husk', 0, 0, 0);
+    const px = Math.floor(player.pos.x), pz = Math.floor(player.pos.z);
+    let py = groundAt(px, Math.floor(player.pos.y+0.6), pz, 6);
+    if (py === null) py = surfaceY(px, pz);
+    let placed = false;
+    for (const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[2,0],[0,2]]){
+      const g = groundAt(px+dx, py+1, pz+dz, 3);
+      if (g !== null){ best.x=px+dx; best.y=g; best.z=pz+dz; placed = true; break; }
+    }
+    if (!placed){ best.x=px+1; best.z=pz; best.y=surfaceY(best.x,best.z); }
+    best.px=best.x+0.5; best.py=best.y; best.pz=best.z+0.5;
+    startCombat(best);
+    return this.state();
+  },
+  // drive a whole fight headlessly; the player uses a simple greedy policy
+  autoFight(maxRounds=60){
+    let guard = 0, turns = 0;
+    const hp0 = player.hp;
+    // endCombat parks on 'over' waiting for the banner — G.mode is still 'combat'
+    while (CB.phase !== 'over' && G.mode === 'combat' && guard++ < maxRounds*40){
+      step(1/30);
+      if (CB.phase !== 'idle') continue;
+      turns++;
+      const a = actor();
+      if (!a || !a.isPlayer) continue;
+      const foe = CB.order.find(o => !o.isPlayer && o.alive);
+      if (!foe){ endPlayerTurn(); continue; }
+      if (a.ap > 0 && canHit(a, foe, ABILITIES[0])){ CB.selAbility = 0;
+        a.ap--; resolveAttack(a, foe, ABILITIES[0]); afterPlayerAction(); continue; }
+      if (a.ap > 0 && canHit(a, foe, ABILITIES[1])){ CB.selAbility = 1;
+        a.ap--; resolveAttack(a, foe, ABILITIES[1]); afterPlayerAction(); continue; }
+      // else close the distance, using the SAME planner the creatures use
+      const pl = a.mp > 0 ? planApproach(a, foe, ABILITIES[0]) : null;
+      if (pl && pl.cut > 0){ a.mp -= pl.cost; startWalk(a, pl.path, ()=>afterPlayerAction()); }
+      else endPlayerTurn();
+    }
+    return { result: CB.result, guard, turns, hpLost: hp0 - player.hp,
+             hp: player.hp, foes: CB.order.length-1, mode: G.mode,
+             log: [...clogEl.children].slice(0,4).map(n=>n.textContent) };
+  },
+  endTurn(){ endPlayerTurn(); },
+  // Ambush = what aggro actually does. The player must be WALKED UP to the pack
+  // first: triggering from 40 units away puts every packmate outside the gather
+  // radius and silently makes each test a 1v1, which is not the real geometry.
+  ambush(){
+    if (!entities.length) populate(player.pos.x, player.pos.z);
+    let best=null, bd=1e9;
+    for (const e of entities){
+      const d = Math.hypot(e.px-player.pos.x, e.pz-player.pos.z);
+      if (d<bd){ bd=d; best=e; }
+    }
+    if (!best) return 0;
+    // stand where a player who had walked over would be: ~5 cells out, on ground
+    for (let r=4; r<=9; r++){
+      let done = false;
+      for (let a=0; a<12; a++){
+        const th = a*Math.PI/6;
+        const x = best.x + Math.round(Math.cos(th)*r), z = best.z + Math.round(Math.sin(th)*r);
+        const y = groundAt(x, best.y+4, z, 8);
+        if (y === null || y <= SEA+1) continue;
+        if (!hasLOS(x+0.5, y+1.4, z+0.5, best.px, best.py+1.2, best.pz)) continue;
+        player.pos.set(x+0.5, y+0.1, z+0.5); done = true; break;
+      }
+      if (done) break;
+    }
+    startCombat(best);
+    return CB.order.length - 1;
+  },
+  // terrain hooks — these are how the dig/raise PROBE gets exercised headlessly
+  dig(x,y,z){ setBlock(x,y,z,B.AIR); forceRemeshAround(x,z,1); if (CB.active) settleFalls(); },
+  place(x,y,z,b=B.STONE){ setBlock(x,y,z,b); forceRemeshAround(x,z,1); if (CB.active) settleFalls(); },
+  block(x,y,z){ return getBlock(x,y,z); },
+  standable, surfaceY, reachable, hasLOS, planApproach,
+  attack: resolveAttack, abilities: ABILITIES,
+  teleport(x,z){
+    player.pos.set(x+0.5, surfaceY(x,z)+0.2, z+0.5);
+    updateStreaming(x,z); drainMeshQueue(2000);
+  },
+  state(){
+    return {
+      mode: G.mode, phase: CB.phase, time: +G.time.toFixed(2), frames: G.frames,
+      pos: [Math.floor(player.pos.x), Math.floor(player.pos.y), Math.floor(player.pos.z)],
+      hp: player.hp, maxHp: player.maxHp, level: player.level, xp: player.xp,
+      chunks: CHUNKS.size, meshed: [...CHUNKS.values()].filter(c=>c.mesh).length,
+      queued: meshQueue.length, entities: entities.length,
+      combat: CB.active ? {
+        turn: CB.turn, actor: (actor()||{}).name,
+        order: CB.order.map(a=>`${a.name} ${a.hp}/${a.maxHp}`),
+        mp: (actor()||{}).mp, ap: (actor()||{}).ap,
+        moveTiles: tMove.count,
+      } : null,
+      tris: renderer.info.render.triangles,
+    };
+  },
+};
+</script>
+</body>
+</html>
