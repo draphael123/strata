@@ -214,6 +214,41 @@
     padding:7px 16px;border-radius:20px;display:none}
   #prompt.on{display:block}
 
+  /* ---------- touch controls ---------- */
+  #touch{position:fixed;inset:0;z-index:34;display:none;pointer-events:none;
+    touch-action:none;-webkit-user-select:none;user-select:none}
+  #touch.on{display:block}
+  #stick{position:absolute;left:26px;bottom:26px;width:132px;height:132px;border-radius:50%;
+    background:rgba(13,15,20,.42);border:1px solid rgba(255,255,255,.18);pointer-events:auto}
+  #knob{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;
+    border-radius:50%;background:rgba(216,180,90,.55);border:1px solid rgba(255,255,255,.3)}
+  #tbtns{position:absolute;right:20px;bottom:26px;display:grid;
+    grid-template-columns:repeat(2,64px);gap:10px;pointer-events:auto}
+  /* NOT .tb — that class is already the name-tag health bar */
+  .tbtn{width:64px;height:64px;border-radius:50%;font-size:18px;font-family:inherit;
+    background:rgba(13,15,20,.62);color:#efe8d8;border:1px solid rgba(216,180,90,.45);
+    -webkit-tap-highlight-color:transparent}
+  .tbtn:active{background:rgba(216,180,90,.32)}
+  .tbtn.small{width:52px;height:52px;font-size:14px;justify-self:end;align-self:end}
+  body.touch #lockmsg{display:none!important}
+  body.touch #clog{display:none}
+  /* everything reachable on a phone */
+  @media (max-width:820px){
+    .pwrap{width:100%}
+    .pbody{min-height:180px;padding:12px}
+    .act{width:70px;padding:7px 4px}
+    .act .an{font-size:10px} .act .ad{font-size:8px}
+    #acts{gap:5px;bottom:96px}
+    #pips{bottom:162px}
+    #vitals{width:170px;left:10px;bottom:auto;top:64px}
+    #quests{width:150px;font-size:10px;top:44px;right:10px}
+    #order{top:6px} .chip{width:56px}
+    #tut{top:52px;font-size:11px;max-width:88vw;padding:8px 12px}
+    #story{font-size:11.5px;max-width:90vw}
+    #title h1{font-size:14vw}
+    .ccols{grid-template-columns:1fr}
+    #cHero{max-width:150px}
+  }
   #lockmsg{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
     background:rgba(8,10,14,.55);cursor:pointer;font-size:13px;letter-spacing:.24em;
     text-transform:uppercase;color:#cfd6e2}
@@ -414,6 +449,16 @@
       <button class="btn ghost small" id="pQuit">Delete save &amp; start over</button>
       <button class="btn" id="pClose">Resume</button>
     </div>
+  </div>
+</div>
+
+<div id="touch">
+  <div id="stick"><div id="knob"></div></div>
+  <div id="tbtns">
+    <button class="tbtn" data-t="jump">▲</button>
+    <button class="tbtn" data-t="act">E</button>
+    <button class="tbtn small" data-t="view">V</button>
+    <button class="tbtn small" data-t="menu">☰</button>
   </div>
 </div>
 
@@ -2539,8 +2584,42 @@ function tickAudio(dt){
     setTimeoutFX(()=> tone(f*1.1, 0.07, 'sine', 0.04, f*0.8), 0.13);
   }
 }
-addEventListener('pointerdown', audioInit, { once:false });
-addEventListener('keydown', audioInit, { once:false });
+// ── music ───────────────────────────────────────────────────────────────────
+// Streamed via HTMLAudioElement rather than decoded into WebAudio: these are
+// minutes-long tracks and there's no reason to hold them in memory. Three beds,
+// crossfaded — the wood, the barrow, and a fight.
+const MUSIC = { t:{}, want:null, ready:false };
+const MUSIC_SRC = { explore:'audio/explore.ogg', barrow:'audio/barrow.ogg', battle:'audio/battle.mp3' };
+function musicInit(){
+  if (MUSIC.ready) return;
+  for (const k of Object.keys(MUSIC_SRC)){
+    try {
+      const a = new Audio(MUSIC_SRC[k]);
+      a.loop = true; a.volume = 0; a.preload = 'auto';
+      MUSIC.t[k] = a;
+    } catch(e){}
+  }
+  MUSIC.ready = true;
+}
+function tickMusic(dt){
+  if (!MUSIC.ready) return;
+  // what should be playing right now
+  let want = 'explore';
+  if (G.mode === 'combat') want = 'battle';
+  else if (inBarrow(player.pos.x, player.pos.z) && player.pos.y < BARROW_FLOOR + 10) want = 'barrow';
+  if (G.mode === 'title') want = 'explore';
+  MUSIC.want = want;
+  for (const k of Object.keys(MUSIC.t)){
+    const a = MUSIC.t[k];
+    const target = (k === want && SETTINGS.music) ? SETTINGS.musicVol : 0;
+    const v = a.volume + (target - a.volume) * Math.min(1, dt*0.9);
+    a.volume = clamp(v, 0, 1);
+    if (target > 0.001 && a.paused) a.play().catch(()=>{});
+    else if (a.volume < 0.005 && !a.paused && target === 0) a.pause();
+  }
+}
+addEventListener('pointerdown', ()=>{ audioInit(); musicInit(); }, { once:false });
+addEventListener('keydown',     ()=>{ audioInit(); musicInit(); }, { once:false });
 
 // ───────────────────────────── animation & fx ─────────────────────────────
 function setAnim(a, type, dur, v){ if (a && a.mesh) a.anim = { type, t:0, dur, v:v||'slash' }; }
@@ -3548,6 +3627,89 @@ document.addEventListener('pointerlockchange', ()=>{
 });
 document.getElementById('lockmsg').addEventListener('click',
   ()=> renderer.domElement.requestPointerLock());
+
+// ═══════════════════════════ TOUCH ═══════════════════════════
+// Pointer lock does not exist on a phone, so looking is a drag on the right of
+// the screen and walking is a stick on the left. In combat the same drag orbits
+// the tactical camera and a tap is a click.
+const IS_TOUCH = matchMedia('(hover: none), (pointer: coarse)').matches ||
+                 navigator.maxTouchPoints > 0;
+const TOUCH = { move:{x:0,y:0}, stickId:null, lookId:null, lx:0, ly:0 };
+function initTouch(){
+  if (!IS_TOUCH && !SETTINGS.touch) return;
+  document.body.classList.add('touch');
+  document.getElementById('touch').classList.add('on');
+  const stick = document.getElementById('stick'), knob = document.getElementById('knob');
+  const R = 46;
+  stick.addEventListener('touchstart', e=>{
+    const t = e.changedTouches[0]; TOUCH.stickId = t.identifier;
+    audioInit(); musicInit(); e.preventDefault();
+  }, { passive:false });
+  addEventListener('touchmove', e=>{
+    for (const t of e.changedTouches){
+      if (t.identifier === TOUCH.stickId){
+        const r = stick.getBoundingClientRect();
+        let dx = t.clientX - (r.left+r.width/2), dy = t.clientY - (r.top+r.height/2);
+        const d = Math.hypot(dx,dy) || 1;
+        if (d > R){ dx = dx/d*R; dy = dy/d*R; }
+        TOUCH.move.x = dx/R; TOUCH.move.y = dy/R;
+        knob.style.transform = `translate(${dx}px,${dy}px)`;
+      } else if (t.identifier === TOUCH.lookId){
+        const sens = 0.0032 * SETTINGS.sens;
+        if (G.mode === 'combat'){
+          CB.orbit -= (t.clientX-TOUCH.lx)*0.010;
+          CB.tilt = clamp(CB.tilt + (t.clientY-TOUCH.ly)*0.006, 0.18, 1.15);
+        } else {
+          player.yaw   -= (t.clientX-TOUCH.lx)*sens;
+          player.pitch = clamp(player.pitch - (t.clientY-TOUCH.ly)*sens, -1.53, 1.53);
+        }
+        TOUCH.lx = t.clientX; TOUCH.ly = t.clientY;
+      }
+    }
+  }, { passive:false });
+  const endTouch = e=>{
+    for (const t of e.changedTouches){
+      if (t.identifier === TOUCH.stickId){
+        TOUCH.stickId = null; TOUCH.move.x = TOUCH.move.y = 0;
+        knob.style.transform = '';
+      }
+      if (t.identifier === TOUCH.lookId) TOUCH.lookId = null;
+    }
+  };
+  addEventListener('touchend', endTouch);
+  addEventListener('touchcancel', endTouch);
+  // look / orbit anywhere on the canvas; a tap that barely moves is a click
+  renderer.domElement.addEventListener('touchstart', e=>{
+    const t = e.changedTouches[0];
+    if (TOUCH.lookId !== null) return;
+    TOUCH.lookId = t.identifier; TOUCH.lx = t.clientX; TOUCH.ly = t.clientY;
+    TOUCH.sx = t.clientX; TOUCH.sy = t.clientY;
+    audioInit(); musicInit();
+  }, { passive:true });
+  renderer.domElement.addEventListener('touchend', e=>{
+    const t = e.changedTouches[0];
+    if (Math.hypot(t.clientX-TOUCH.sx, t.clientY-TOUCH.sy) < 12){
+      mouseNDC.x = (t.clientX/innerWidth)*2 - 1;
+      mouseNDC.y = -(t.clientY/innerHeight)*2 + 1;
+      if (G.mode === 'combat') pendingClick = { button:0 };
+    }
+  }, { passive:true });
+  for (const b of document.querySelectorAll('.tbtn')){
+    b.addEventListener('touchstart', e=>{
+      e.preventDefault(); audioInit(); musicInit();
+      const k = b.dataset.t;
+      if (k === 'jump') keys.Space = true;
+      else if (k === 'view'){ SETTINGS.thirdPerson = !SETTINGS.thirdPerson; saveSettings(); }
+      else if (k === 'menu'){ G.paused ? closePause() : openPause(); }
+      else if (k === 'act'){
+        if (G.mode === 'combat') endPlayerTurn();
+        else { const f = nearestFolk(), c = f ? null : nearestChest();
+               if (f) openTown(f); else if (c) openChest(c); else tryEngage(); }
+      }
+    }, { passive:false });
+    b.addEventListener('touchend', ()=>{ if (b.dataset.t === 'jump') keys.Space = false; });
+  }
+}
 addEventListener('resize', ()=>{
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
@@ -3559,7 +3721,7 @@ let digCooldown = 0;
 
 function updateExplore(dt){
   // look
-  if (locked){
+  if (locked && !IS_TOUCH){
     const sens = 0.0022 * SETTINGS.sens;
     player.yaw   -= mouseDX * sens;
     player.pitch = clamp(player.pitch - mouseDY * sens, -1.53, 1.53);
@@ -3577,6 +3739,7 @@ function updateExplore(dt){
   let ix = 0, iz = 0;
   if (keys.KeyW) iz += 1; if (keys.KeyS) iz -= 1;
   if (keys.KeyD) ix += 1; if (keys.KeyA) ix -= 1;
+  if (TOUCH.move.x || TOUCH.move.y){ ix += TOUCH.move.x; iz -= TOUCH.move.y; }
   const sprint = keys.ShiftLeft || keys.ShiftRight;
   const speed = (player.inWater ? 3.6 : (sprint ? 8.4 : 5.2));
   let wx = _fwd.x*iz + _right.x*ix, wz = _fwd.z*iz + _right.z*ix;
@@ -3635,7 +3798,7 @@ function updateExplore(dt){
 
   // Mining stays (it is traversal, and it feeds the terrain hook); the block
   // palette is gone — this is an RPG, not a builder.
-  if (rc.hit && digCooldown <= 0 && locked &&
+  if (rc.hit && digCooldown <= 0 && (locked || IS_TOUCH) &&
       (mouseDown[0] || (pendingClick && pendingClick.button === 0))){
     setBlock(rc.x, rc.y, rc.z, B.AIR);
     forceRemeshAround(rc.x, rc.z, 1);
@@ -4932,7 +5095,8 @@ function updateHudText(){
 // ═══════════════════════════════════════════════════════════════════════
 //  PAUSE MENU — character sheet, satchel, settings
 // ═══════════════════════════════════════════════════════════════════════
-const SETTINGS = { vol:0.34, sens:1.0, shadows:true, view:7, sfx:true, thirdPerson:false };
+const SETTINGS = { vol:0.34, sens:1.0, shadows:true, view:7, sfx:true, thirdPerson:false,
+                   music:true, musicVol:0.42, touch:false };
 try { Object.assign(SETTINGS, JSON.parse(localStorage.getItem('strata-set')||'{}')); } catch(e){}
 function saveSettings(){ try { localStorage.setItem('strata-set', JSON.stringify(SETTINGS)); } catch(e){} }
 function applySettings(){
@@ -4953,7 +5117,7 @@ function openTown(folk){
     const l = folk.lines[Math.floor(Math.random()*folk.lines.length)];
     toast(`${folk.name}: “${l}”`, 4.2);
     townFolk = null; G.paused = false;
-    if (G.mode === 'explore') document.getElementById('lockmsg').style.display = 'flex';
+    if (G.mode === 'explore' && !IS_TOUCH) document.getElementById('lockmsg').style.display = 'flex';
     return;
   }
   if (folk.role === 'reeve' && !player.q.offers.length) refreshOffers();
@@ -4963,7 +5127,7 @@ function openTown(folk){
 function closeTown(){
   townFolk = null; G.paused = false;
   document.getElementById('town').classList.remove('on');
-  if (G.mode === 'explore') document.getElementById('lockmsg').style.display = 'flex';
+  if (G.mode === 'explore' && !IS_TOUCH) document.getElementById('lockmsg').style.display = 'flex';
 }
 function drawTown(){
   if (!townFolk) return;
@@ -5107,7 +5271,7 @@ function openPause(tab){
 function closePause(){
   G.paused = false;
   document.getElementById('pause').classList.remove('on');
-  if (G.mode === 'explore') document.getElementById('lockmsg').style.display = 'flex';
+  if (G.mode === 'explore' && !IS_TOUCH) document.getElementById('lockmsg').style.display = 'flex';
 }
 function drawPause(){
   const root = document.getElementById('pause');
@@ -5170,9 +5334,13 @@ function drawPause(){
     body.innerHTML = `
       <div class="psec">Sound</div>
       ${t('sfx','Sound effects')}
-      <div class="srow2"><label>Volume</label>
+      <div class="srow2"><label>Effects volume</label>
         <input type="range" min="0" max="100" value="${Math.round(SETTINGS.vol*100)}" data-set="vol">
         <span class="sv">${Math.round(SETTINGS.vol*100)}</span></div>
+      ${t('music','Music')}
+      <div class="srow2"><label>Music volume</label>
+        <input type="range" min="0" max="100" value="${Math.round(SETTINGS.musicVol*100)}" data-set="musicVol">
+        <span class="sv">${Math.round(SETTINGS.musicVol*100)}</span></div>
       <div class="psec">Controls</div>
       ${t('thirdPerson','Third-person view (V)')}
       <div class="srow2"><label>Mouse sensitivity</label>
@@ -5390,6 +5558,7 @@ function step(dt){
   }
   drainMeshQueue(MESH_BUDGET);
   tickAudio(dt);
+  tickMusic(dt);
   tickBarrowLights(G.time);
   tickCampfire(G.time, dt);
   // sky dome rides with the camera; clouds wrap around it
@@ -5680,6 +5849,8 @@ document.getElementById('bBtn').onclick = ()=> leaveCombat(CB.result || 'win');
 newWorld();                                     // prime a world so the title screen has state
 applySettings();
 VIEW = SETTINGS.view;
+initTouch();
+if (IS_TOUCH) VIEW = Math.min(VIEW, 5);         // phones can't carry 7 chunks well
 
 // ═══════════════════════════════════════════════════════════════════════
 //  HEADLESS API — every loop must be drivable without a visible tab.
@@ -5837,6 +6008,7 @@ window.STRATA = {
   standable, surfaceY, reachable, hasLOS, planApproach,
   attack: resolveAttack, cast: castSpell, applyBuild, derive, knockback,
   tickStatus, applyStatus, KINDS, STATUS, AUD, SFX, audioInit, rebuildTrees, WIND,
+  MUSIC, musicInit, tickMusic, IS_TOUCH, TOUCH, initTouch,
   isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,
   openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
   flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners, backCovered, isSolid,

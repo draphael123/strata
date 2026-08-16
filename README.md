@@ -244,3 +244,13 @@ well should find this much easier, and the numbers say nothing about whether it'
    cover actually change your decisions, or are they invisible? Is Quarry/Raise fun?
 2. Pick the hook from what that playtest says.
 3. Then, and only then, balance.
+
+## Audio credits
+
+Music is CC0 from OpenGameArt and streamed from `audio/`:
+
+- `explore.ogg` — *Creepy Forest F* by Brandon Morris (CC0)
+- `barrow.ogg` — *Cave Theme* by brandon75689 (CC0)
+- `battle.mp3` — *Battle Theme A* by cynicmusic (CC0)
+
+Sound effects are procedural WebAudio, generated at runtime — no files.
