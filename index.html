@@ -2271,8 +2271,27 @@ const REGION_COL = {
 const _fc = new THREE.Color();
 // Per-voxel brightness jitter. Big flat stone surfaces (ruin walls, cliffs) look
 // like painted cardboard without it, so masonry gets far more than turf.
+// ⚠️ THIS IS WHAT MADE FLAT GROUND READ AS A CHESSBOARD.
+// The old jitter was `hash3(blockX, blockY, blockZ)` — one random brightness per
+// BLOCK — so every surface in the game was stamped with a random grid at exactly
+// the scale of the voxel lattice. It is the loudest "this is made of cubes"
+// signal in the renderer, and greedy meshing would not have touched it: merged
+// quads would simply have got one value each.
+//
+// Grain is still wanted; it just has to be CONTINUOUS. `grainAt` is sampled per
+// VERTEX in world space, so neighbouring blocks share the value at the corner
+// they have in common and the variation flows across the surface instead of
+// tiling with it. Two octaves at unrelated frequencies, so it never lines up
+// with the grid at any distance. This is the "detail texture", done in the
+// mesher where it costs nothing at draw time.
 const JITTER = { [B.MOSS]:0.20, [B.STONE]:0.15, [B.SLATE]:0.15, [B.THATCH]:0.13,
                  [B.PLANK]:0.11, [B.SAND]:0.09 };
+function grainAt(x, y, z){
+  // fine speckle + a broader mottle, both keyed off world position
+  const a = vnoise(x*0.63 + z*0.11, z*0.63 - y*0.17, 4801);
+  const b = vnoise(x*0.147 - y*0.09, z*0.147 + x*0.05, 9137);
+  return (a*0.62 + b*0.38);                      // 0..1, smooth everywhere
+}
 
 function buildChunkGeometry(cx, cz){
   const c = ensureChunk(cx, cz);
@@ -2308,7 +2327,6 @@ function buildChunkGeometry(cx, cz){
     const wx = ox+lx, wz = oz+lz;
     const water = (b === B.WATER);
     const jAmp = JITTER[b] || 0.06;
-    const jit = (1 - jAmp) + hash3(wx, y, wz) * jAmp * 2;
 
     for (let f=0; f<6; f++){
       const F = FACES[f];
@@ -2408,6 +2426,8 @@ function buildChunkGeometry(cx, cz){
         }
         arrP.push(wx+ox2, water && F.n[1] === 1 ? vy : y+oy2, wz+oz2);
         arrN.push(F.n[0], F.n[1], F.n[2]);
+        // grain sampled at the VERTEX, not the block, so it is continuous
+        const jit = water ? 1 : (1 - jAmp) + grainAt(wx+ox2, y+oy2, wz+oz2) * jAmp * 2;
         const k = F.shade * jit * (water ? 1 : AO_LEVEL[ao[i]]);
         arrC.push(fr*k, fg*k, fb*k);
         if (water){ wS.push(shore); wD.push(depth); } else SW.push(0);
@@ -2441,11 +2461,14 @@ function buildChunkGeometry(cx, cz){
           const nrm = [F.n[0], F.n[1], F.n[2]];
           nrm[t] += hi ? 1 : -1;
           const nl = Math.hypot(nrm[0],nrm[1],nrm[2]) || 1;
-          const kk = F.shade * jit * AO_LEVEL[Math.min(ao[i0], ao[i1])] * 0.80;
+          const kb = F.shade * AO_LEVEL[Math.min(ao[i0], ao[i1])] * 0.80;
           // winding: [inset_j, inset_i, outer_i, outer_j] faces outward
           for (const p of [cB, cA, outA, outB]){
             P.push(p[0], p[1], p[2]);
             N.push(nrm[0]/nl, nrm[1]/nl, nrm[2]/nl);
+            // grain per chamfer vertex too, so the bevel matches the face it
+            // runs along instead of carrying the block's old single value
+            const kk = kb * ((1 - jAmp) + grainAt(p[0], p[1], p[2]) * jAmp * 2);
             C.push(fr*kk, fg*kk, fb*kk);
             SW.push(0);
           }
@@ -2471,7 +2494,8 @@ function buildChunkGeometry(cx, cz){
           const nl2 = Math.hypot(nx2,ny2,nz2) || 1;
           // kept dim: a corner patch faces halfway to everywhere, so at full
           // brightness it catches the low sun and reads as a gold sparkle
-          const kc = F.shade * jit * AO_LEVEL[ao[i]] * 0.62;
+          const kc = F.shade * AO_LEVEL[ao[i]] * 0.62 *
+                     ((1 - jAmp) + grainAt(p0[0], p0[1], p0[2]) * jAmp * 2);
           const s2 = P.length/3;
           for (const p of [p0,p1,p2]){
             P.push(p[0],p[1],p[2]); N.push(nx2/nl2, ny2/nl2, nz2/nl2);
@@ -2679,6 +2703,360 @@ scene.background = new THREE.Color(SKY_COL);
 scene.fog = new THREE.Fog(HAZE_COL, VIEW*CX*0.42, VIEW*CX*1.02);
 
 const camera = new THREE.PerspectiveCamera(74, innerWidth/innerHeight, 0.1, 600);
+
+// ═══════════════════════════ POST-PROCESSING ════════════════════════════════
+// THE PRINT PASS. This is what turns a lit low-poly scene into something that
+// looks made rather than defaulted, and it is the whole art direction: ink over
+// colour. The world keeps its region palettes and its day/night light; this
+// unifies them under one grade, draws ink on the silhouettes, and lays hatching
+// in the shadows the way an engraver would.
+//
+// Hand-written rather than three's EffectComposer chain: only three.module.js is
+// vendored, and one composite pass that does edges, hatching, grade, AO, bloom
+// and depth-of-field together is both simpler to reason about and cheaper than
+// six passes each re-reading a full-screen buffer.
+//
+// Buffers: scene → rtScene (+depth). Bright parts of rtScene → rtBright at
+// quarter size, blurred twice → the same buffer serves BOTH bloom and the
+// depth-of-field far-blur, which is why DOF here costs almost nothing.
+const POST = { on:true, ink:1.0, hatch:1.0, grade:1.0, bloom:1.0, ao:1.0, dof:1.0 };
+// ⚠️ Built at the real size, and REBUILT on resize rather than setSize()'d.
+// Constructing at 1x1 and growing it left the attached DepthTexture reading as
+// uniformly zero — no error, no warning, the edge detector simply found nothing
+// and every outline silently failed to appear. Colour came through the whole
+// time, which is what made it look like a shader bug rather than an attachment
+// one. UnsignedIntType for the same reason: UnsignedShortType is not reliably
+// supported as a sampled depth attachment.
+function mkSceneRT(w, h){
+  return new THREE.WebGLRenderTarget(w, h, {
+    minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter,
+    type:THREE.HalfFloatType, colorSpace:THREE.NoColorSpace,
+    depthBuffer:true, stencilBuffer:false,
+  });
+}
+let rtScene = mkSceneRT(Math.max(1, innerWidth), Math.max(1, innerHeight));
+// ⚠️ DEPTH COMES FROM ITS OWN PASS, NOT FROM AN ATTACHED DepthTexture.
+// A sampled DepthTexture attachment read as uniformly zero here however it was
+// declared — UnsignedShort or UnsignedInt, built at size or resized into. No
+// error, no warning; colour came through the whole time, so it presented as a
+// shader bug rather than an attachment one, and the edge detector silently
+// found nothing. Rendering the scene once more with MeshDepthMaterial as an
+// override and RGBA-packed depth is one extra pass and it simply works —
+// three handles instancing and skinning in that material, which a hand-written
+// override would not.
+const rtDepth = new THREE.WebGLRenderTarget(Math.max(1,innerWidth), Math.max(1,innerHeight), {
+  minFilter:THREE.NearestFilter, magFilter:THREE.NearestFilter, colorSpace:THREE.NoColorSpace,
+});
+const depthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+const rtA = new THREE.WebGLRenderTarget(1, 1, { minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, type:THREE.HalfFloatType, colorSpace:THREE.NoColorSpace });
+const rtB = rtA.clone();
+
+const fsQuad = new THREE.BufferGeometry();
+fsQuad.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1,-1,0, 3,-1,0, -1,3,0]), 3));
+fsQuad.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0,0, 2,0, 0,2]), 2));
+const postScene = new THREE.Scene();
+const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const VERT_FS = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position, 1.0); }`;
+
+// ── 1. bright pass + directional streak (god rays) ──
+const matBright = new THREE.ShaderMaterial({
+  uniforms:{ tSrc:{value:null}, uSun:{value:new THREE.Vector2(0.5,0.5)}, uSunUp:{value:0}, uThresh:{value:0.62} },
+  vertexShader: VERT_FS,
+  fragmentShader:`
+    uniform sampler2D tSrc; uniform vec2 uSun; uniform float uSunUp, uThresh;
+    varying vec2 vUv;
+    void main(){
+      vec3 c = texture2D(tSrc, vUv).rgb;
+      float l = dot(c, vec3(0.2126,0.7152,0.0722));
+      vec3 b = c * smoothstep(uThresh, uThresh + 0.45, l);
+      // God rays: march toward the sun's screen position, accumulating only what
+      // was already bright. Cheap, and it only exists while the sun is above the
+      // horizon and roughly in shot, so it never fires at midnight.
+      if (uSunUp > 0.01){
+        vec2 d = (uSun - vUv) * 0.42;
+        vec2 uv = vUv; float w = 1.0; vec3 acc = vec3(0.0);
+        for (int i=0;i<10;i++){
+          uv += d * 0.1; w *= 0.86;
+          vec3 s = texture2D(tSrc, uv).rgb;
+          acc += s * smoothstep(0.78, 1.25, dot(s, vec3(0.2126,0.7152,0.0722))) * w;
+        }
+        b += acc * 0.085 * uSunUp;
+      }
+      gl_FragColor = vec4(b, 1.0);
+    }`,
+});
+// ── 2. separable blur, reused for bloom AND the depth-of-field far blur ──
+const matBlur = new THREE.ShaderMaterial({
+  uniforms:{ tSrc:{value:null}, uDir:{value:new THREE.Vector2(1,0)}, uTexel:{value:new THREE.Vector2()} },
+  vertexShader: VERT_FS,
+  fragmentShader:`
+    uniform sampler2D tSrc; uniform vec2 uDir, uTexel; varying vec2 vUv;
+    void main(){
+      vec2 o = uDir * uTexel;
+      vec3 s = texture2D(tSrc, vUv).rgb * 0.2270270270;
+      s += (texture2D(tSrc, vUv + o*1.3846153846).rgb + texture2D(tSrc, vUv - o*1.3846153846).rgb) * 0.3162162162;
+      s += (texture2D(tSrc, vUv + o*3.2307692308).rgb + texture2D(tSrc, vUv - o*3.2307692308).rgb) * 0.0702702703;
+      gl_FragColor = vec4(s, 1.0);
+    }`,
+});
+// ── 3. the composite: ink, hatching, grade, AO, bloom, DOF, vignette ──
+const matPost = new THREE.ShaderMaterial({
+  uniforms:{
+    tScene:{value:null}, tBlur:{value:null}, tDepth:{value:null},
+    uTexel:{value:new THREE.Vector2()}, uRes:{value:new THREE.Vector2()},
+    uNear:{value:0.1}, uFar:{value:600},
+    uInk:{value:1}, uHatch:{value:1}, uGrade:{value:1}, uBloom:{value:1},
+    uAO:{value:1}, uDof:{value:1},
+    uPaper:{value:new THREE.Color(0xf2e3c8)}, uInkCol:{value:new THREE.Color(0x1a1712)},
+    uNight:{value:0}, uTime:{value:0}, uDebug:{value:0},
+  },
+  vertexShader: VERT_FS,
+  fragmentShader:`
+    uniform sampler2D tScene, tBlur, tDepth;
+    uniform vec2 uTexel, uRes; uniform float uNear, uFar;
+    uniform float uInk, uHatch, uGrade, uBloom, uAO, uDof, uNight, uTime, uDebug;
+    uniform vec3 uPaper, uInkCol;
+    varying vec2 vUv;
+
+    // depth arrives RGBA-packed from MeshDepthMaterial; this is three's own
+    // unpack, kept explicit because the composite is a raw ShaderMaterial and
+    // gets none of three's shader chunks injected.
+    const vec4 UNPACK = vec4(255.0/256.0) / vec4(16777216.0, 65536.0, 256.0, 1.0);
+    float linz(float d){ return (2.0*uNear) / (uFar + uNear - d*(uFar-uNear)); }
+    float depthAt(vec2 uv){ return linz(dot(texture2D(tDepth, uv), UNPACK)); }
+
+    void main(){
+      vec3 col = texture2D(tScene, vUv).rgb;
+      float d  = depthAt(vUv);
+      float dist = d * uFar;
+
+      // Debug views: 1 = raw depth, 2 = the edge factor, 3 = the blur buffer.
+      // Tuning ink thresholds by eye against a finished frame is guesswork —
+      // you cannot tell "the edge detector found nothing" from "the edge
+      // detector found it and something later washed it out".
+      if (uDebug > 0.5 && uDebug < 1.5){ gl_FragColor = vec4(vec3(d*6.0), 1.0); return; }
+      if (uDebug > 2.5){ gl_FragColor = vec4(texture2D(tBlur, vUv).rgb*3.0, 1.0); return; }
+
+      // ── ink: silhouettes only ──
+      // Sobel on linear depth, plus a normal test reconstructed from depth
+      // derivatives so that a wall meeting a floor is inked even when they are
+      // the same distance away. Scaled by distance so the far treeline does not
+      // turn into a solid black mat.
+      // A one-texel Sobel gives a line half a CSS pixel wide on a 2x display,
+      // which all but disappears once the frame is scaled anywhere. An engraved
+      // line should be CONFIDENT — sampled at ~1.7 texels and taken as the max
+      // of two radii so the stroke has some body to it.
+      float e = 0.0;
+      {
+        vec2 t = uTexel * 1.7;
+        float dl = depthAt(vUv - vec2(t.x,0.0)), dr = depthAt(vUv + vec2(t.x,0.0));
+        float du = depthAt(vUv - vec2(0.0,t.y)), dd = depthAt(vUv + vec2(0.0,t.y));
+        float g = (abs(dl - dr) + abs(du - dd)) / max(d, 0.0006);
+        e = smoothstep(0.040, 0.20, g);
+        // crease detection: second derivative catches convex/concave joins
+        float lap = abs(dl + dr + du + dd - 4.0*d) / max(d, 0.0006);
+        e = max(e, smoothstep(0.045, 0.19, lap) * 0.78);
+        // a second, wider tap thickens the stroke without doubling its darkness
+        vec2 t2 = uTexel * 3.1;
+        float el = depthAt(vUv - vec2(t2.x,0.0)), er = depthAt(vUv + vec2(t2.x,0.0));
+        float eu = depthAt(vUv - vec2(0.0,t2.y)), ed = depthAt(vUv + vec2(0.0,t2.y));
+        float g2 = (abs(el - er) + abs(eu - ed)) / max(d, 0.0006);
+        e = max(e, smoothstep(0.075, 0.30, g2) * 0.55);
+      }
+      e *= 1.0 - smoothstep(0.34, 0.86, d);          // fade ink into the distance
+      if (uDebug > 1.5 && uDebug < 2.5){ gl_FragColor = vec4(vec3(e), 1.0); return; }
+
+      // ── screen-space AO from depth ──
+      float ao = 1.0;
+      {
+        float occ = 0.0;
+        for (int i=0;i<8;i++){
+          float a = float(i) * 0.7853981634;
+          vec2 off = vec2(cos(a), sin(a)) * uTexel * 5.0;
+          float ds = depthAt(vUv + off);
+          occ += clamp((d - ds) / max(d*0.045, 0.0007), 0.0, 1.0);
+        }
+        ao = 1.0 - clamp(occ / 8.0, 0.0, 1.0) * 0.55 * uAO;
+      }
+      col *= mix(1.0, ao, uAO);
+
+      // ── depth of field: the blur buffer doubles as the far field ──
+      float farBlur = smoothstep(0.30, 0.95, d) * uDof;
+      col = mix(col, texture2D(tBlur, vUv).rgb * 2.4, farBlur * 0.42);
+
+      // ── bloom ──
+      col += texture2D(tBlur, vUv).rgb * 0.85 * uBloom;
+
+      // ── the grade: ink over colour ──
+      // Saturation back by a third, everything pulled toward warm grey and
+      // ochre, and the darks lifted onto a paper tone rather than crushed to
+      // black — a print has no true black in its midtones, it has ink density.
+      if (uGrade > 0.001){
+        float l = dot(col, vec3(0.2126,0.7152,0.0722));
+        vec3 g = mix(col, vec3(l), 0.34 * uGrade);
+        vec3 warm = vec3(1.045, 0.995, 0.905);
+        g *= mix(vec3(1.0), warm, uGrade);
+        // tone curve: gentle S, with the toe landing on paper instead of black
+        g = pow(clamp(g, 0.0, 4.0), vec3(mix(1.0, 1.06, uGrade)));
+        g = mix(g, g*g*(3.0-2.0*g), 0.22 * uGrade);
+        // ⚠️ The paper lift fights the hook. Raising the blacks onto a paper
+        // tone is exactly right for a print in daylight, and at midnight it
+        // turns "the vale is dark and you are carrying the only light" into a
+        // legible grey field. Almost all of the lift comes off after dusk.
+        vec3 paper = uPaper * mix(1.0, 0.14, uNight);
+        g = mix(g, mix(paper*0.10, g, 0.86), uGrade * 0.55);
+        col = g;
+      }
+
+      // ── hatching ──
+      // Engraved shading: parallel rule lines that only appear where the image
+      // is already dark, at a fixed SCREEN angle so it reads as something laid
+      // over the picture rather than painted onto the geometry. A second, finer
+      // set crosses the first in the deepest shadow.
+      if (uHatch > 0.001){
+        // ⚠️ These thresholds were far too generous (0.06..0.52) and the sky
+        // guard keyed on d > 0.985, which never fires — the sky here is a DOME
+        // MESH a few hundred units out, not the far plane. Result: a fine
+        // diagonal screen-door over the entire image, sky included, which reads
+        // as a dirty monitor rather than as engraving. An engraver only cuts
+        // lines where the plate is meant to be DARK.
+        // ⚠️ PERCEPTUAL luminance, not linear. The composite works in linear
+        // space right up to the sRGB encode at the end, so a sky that looks like
+        // 0.55 grey is only 0.26 here — thresholding it with numbers chosen by
+        // eye put the entire sky inside the "this is shadow" band and hatched
+        // it. Gamma first, then threshold.
+        float l = pow(clamp(dot(col, vec3(0.2126,0.7152,0.0722)), 0.0, 1.0), 0.4545);
+        vec2 p = vUv * uRes;
+        float h1 = sin((p.x + p.y) * 0.42);
+        float h2 = sin((p.x - p.y) * 0.61);
+        float shade = 1.0 - smoothstep(0.02, 0.30, l);
+        float deep  = 1.0 - smoothstep(0.00, 0.14, l);
+        float ink = 0.0;
+        ink += smoothstep(0.30, 0.92, h1) * shade * 0.55;
+        ink += smoothstep(0.50, 0.96, h2) * deep  * 0.45;
+        // Fade the cut with distance. This is aerial perspective — an engraver
+        // works the foreground hard and lets the distance go to open paper — and
+        // it doubles as the sky guard, since the sky dome is further away than
+        // anything else in frame. Without it the night sky hatches, because a
+        // dark sky is exactly what the shade test is looking for.
+        ink *= 1.0 - smoothstep(0.30, 0.62, d);
+        ink *= step(d, 0.97);                       // never the sky
+        col = mix(col, uInkCol, clamp(ink,0.0,1.0) * uHatch * 0.85);
+      }
+
+      // Night has to READ as night. The whole premise is that you carry the only
+      // light worth having, and that is worth nothing if the unlit vale is
+      // comfortably legible. Pulled down here rather than in the scene lighting
+      // so the lantern, braziers and beacons — which are bright — keep their
+      // punch instead of being dimmed along with everything else.
+      col *= mix(1.0, 0.62, uNight);
+
+      // ── the ink line itself, last, so nothing washes it out ──
+      col = mix(col, uInkCol, clamp(e * uInk, 0.0, 1.0) * 0.88);
+
+      // ── vignette ──
+      vec2 q = (vUv - 0.5) * vec2(uRes.x/uRes.y, 1.0);
+      col *= 1.0 - clamp(dot(q,q) * 0.22, 0.0, 0.38);
+
+      // ⚠️ ENCODE TO sRGB BY HAND.
+      // The scene is rendered into a LINEAR half-float target, and three only
+      // injects its colour-space conversion into materials that include the
+      // relevant chunk — a raw ShaderMaterial gets nothing. Without this the
+      // composite writes linear values straight to an sRGB canvas and the whole
+      // game renders as if it were lit by a candle two rooms away.
+      col = pow(clamp(col, 0.0, 1.0), vec3(0.4545454545));
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+});
+const postMesh = new THREE.Mesh(fsQuad, matPost);
+postMesh.frustumCulled = false;
+postScene.add(postMesh);
+
+function postResize(w, h){
+  const pr = renderer.getPixelRatio();
+  const W = Math.max(1, Math.floor(w*pr)), H = Math.max(1, Math.floor(h*pr));
+  if (rtScene.width !== W || rtScene.height !== H){
+    rtScene.dispose();
+    rtScene = mkSceneRT(W, H);
+  }
+  rtDepth.setSize(W, H);
+  const w2 = Math.max(1, W>>2), h2 = Math.max(1, H>>2);
+  rtA.setSize(w2, h2); rtB.setSize(w2, h2);
+  matPost.uniforms.uTexel.value.set(1/W, 1/H);
+  matPost.uniforms.uRes.value.set(W, H);
+  matBlur.uniforms.uTexel.value.set(1/w2, 1/h2);
+}
+const _sunNdc = new THREE.Vector3();
+function renderPost(){
+  if (!POST.on){ renderer.setRenderTarget(null); renderer.render(scene, camera); return; }
+  // 1a. the scene
+  renderer.setRenderTarget(rtScene);
+  renderer.clear();
+  renderer.render(scene, camera);
+  // 1b. depth, as its own pass with an override material.
+  // ⚠️ The SKY IS EXCLUDED from this pass on purpose. The dome is a real mesh
+  // and sits at a modest depth — nothing like the far plane — so sky pixels are
+  // indistinguishable from mid-distance terrain by depth alone. That made the
+  // night sky (dark, therefore "shadow") get hatched like a shaded hillside.
+  // Leaving the dome out means sky reads as cleared depth, which both kills the
+  // hatching there and gives the treeline a clean silhouette to ink against.
+  const prevOverride = scene.overrideMaterial, prevBg = scene.background;
+  const skyWas = skyDome.visible, cloudWas = cloudMesh.visible;
+  skyDome.visible = false; cloudMesh.visible = false;
+  scene.overrideMaterial = depthMat;
+  scene.background = null;
+  renderer.setRenderTarget(rtDepth);
+  // ⚠️ Clear to RGBA(0,0,0,1), which is what packDepthToRGBA() produces for a
+  // depth of 1.0 — the far plane. The default clear has alpha 0, and alpha is
+  // the MOST significant byte in this packing, so an untouched pixel unpacked to
+  // ~0 and the empty sky read as the NEAREST thing on screen. That inverted
+  // every distance test downstream: the sky got hatched hardest of anything.
+  const clearWas = renderer.getClearColor(new THREE.Color()), alphaWas = renderer.getClearAlpha();
+  renderer.setClearColor(0x000000, 1);
+  renderer.clear();
+  renderer.render(scene, camera);
+  renderer.setClearColor(clearWas, alphaWas);
+  scene.overrideMaterial = prevOverride;
+  scene.background = prevBg;
+  skyDome.visible = skyWas; cloudMesh.visible = cloudWas;
+
+  // where is the sun on screen, and is it in front of us?
+  _sunNdc.copy(SUN_DIR).multiplyScalar(300).add(camera.position).project(camera);
+  const sunUp = (sun && sun.position.y > 0 ? 1 : 0) *
+                (_sunNdc.z < 1 ? 1 : 0) * clamp(daylight()*1.4, 0, 1);
+  matBright.uniforms.uSun.value.set(_sunNdc.x*0.5+0.5, _sunNdc.y*0.5+0.5);
+  matBright.uniforms.uSunUp.value = sunUp;
+
+  // 2. bright pass (+ god rays), then two blur passes
+  matBright.uniforms.tSrc.value = rtScene.texture;
+  postMesh.material = matBright;
+  renderer.setRenderTarget(rtA); renderer.render(postScene, postCam);
+  postMesh.material = matBlur;
+  matBlur.uniforms.tSrc.value = rtA.texture; matBlur.uniforms.uDir.value.set(1,0);
+  renderer.setRenderTarget(rtB); renderer.render(postScene, postCam);
+  matBlur.uniforms.tSrc.value = rtB.texture; matBlur.uniforms.uDir.value.set(0,1);
+  renderer.setRenderTarget(rtA); renderer.render(postScene, postCam);
+
+  // 3. composite to the screen
+  matPost.uniforms.tScene.value = rtScene.texture;
+  matPost.uniforms.tBlur.value  = rtA.texture;
+  matPost.uniforms.tDepth.value = rtDepth.texture;
+  matPost.uniforms.uNear.value = camera.near;
+  matPost.uniforms.uFar.value  = camera.far;
+  matPost.uniforms.uNight.value = 1 - clamp(daylight()*1.25, 0, 1);
+  matPost.uniforms.uTime.value = G.time;
+  const printOn = SETTINGS.post === false ? 0 : 1;
+  matPost.uniforms.uInk.value   = POST.ink   * printOn;
+  matPost.uniforms.uHatch.value = POST.hatch * printOn * (SETTINGS.hatch === false ? 0 : 1);
+  matPost.uniforms.uGrade.value = POST.grade * printOn;
+  matPost.uniforms.uBloom.value = POST.bloom;
+  matPost.uniforms.uAO.value    = POST.ao;
+  matPost.uniforms.uDof.value   = POST.dof;
+  matPost.uniforms.uDebug.value = POST.debug || 0;
+  postMesh.material = matPost;
+  renderer.setRenderTarget(null);
+  renderer.render(postScene, postCam);
+}
 
 // GOLDEN HOUR. A low raking sun catches every bevel and splits the world into
 // warm lit faces and cool shadowed ones — which is exactly what voxel geometry
@@ -5815,7 +6193,9 @@ function initTouch(){
 addEventListener('resize', ()=>{
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  postResize(innerWidth, innerHeight);
 });
+postResize(innerWidth, innerHeight);
 
 // ───────────────────────────── explore mode ─────────────────────────────
 const _fwd = new THREE.Vector3(), _right = new THREE.Vector3();
@@ -7683,7 +8063,8 @@ function updateHudText(){
 //  PAUSE MENU — character sheet, satchel, settings
 // ═══════════════════════════════════════════════════════════════════════
 const SETTINGS = { vol:0.34, sens:1.0, shadows:true, view:7, sfx:true, thirdPerson:false,
-                   music:true, musicVol:0.42, touch:false, scribe:true };
+                   music:true, musicVol:0.42, touch:false, scribe:true,
+                   post:true, hatch:true };
 try { Object.assign(SETTINGS, JSON.parse(localStorage.getItem('strata-set')||'{}')); } catch(e){}
 function saveSettings(){ try { localStorage.setItem('strata-set', JSON.stringify(SETTINGS)); } catch(e){} }
 function applySettings(){
@@ -8208,6 +8589,8 @@ function drawPause(){
         <input type="range" min="30" max="250" value="${Math.round(SETTINGS.sens*100)}" data-set="sens">
         <span class="sv">${SETTINGS.sens.toFixed(2)}</span></div>
       <div class="psec">Display</div>
+      ${t('post','Inked print pass')}
+      ${t('hatch','Hatched shadow')}
       ${t('shadows','Shadows')}
       <div class="srow2"><label>View distance</label>
         <input type="range" min="3" max="9" value="${SETTINGS.view}" data-set="view">
@@ -8518,7 +8901,7 @@ function renderOnlyTick(dt){
   updateTags(dt);
 }
 function render(){
-  renderer.render(scene, camera);
+  renderPost();
   G.frames++;
   lastRender = performance.now();
 }
@@ -8820,7 +9203,7 @@ window.STRATA = {
   THREE, camera, scene, renderer,
   // Render and grab the frame in the SAME tick — without preserveDrawingBuffer
   // the buffer is gone by the next task and toDataURL returns an empty image.
-  shot(q=0.72){ renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', q); },
+  shot(q=0.72){ renderPost(); return renderer.domElement.toDataURL('image/jpeg', q); },
   start(){ if (!loadGame()) newWorld(); enterWorld(); },
   fresh(){ localStorage.removeItem(SAVE_KEY); newWorld(); enterWorld(); },
   // fixed-seed world so two policies can be compared on the same terrain
@@ -8998,6 +9381,7 @@ window.STRATA = {
   attack: resolveAttack, cast: castSpell, applyBuild, derive, knockback,
   tickStatus, applyStatus, KINDS, STATUS, AUD, SFX, audioInit, rebuildTrees, WIND,
   MUSIC, musicInit, tickMusic, musicWant, musicTrack, bossPresent, MUSIC_SRC,
+  POST, renderPost, postResize, matPost, grainAt,
   IS_TOUCH, TOUCH, initTouch,
   threatOf, drawThreat, tReach, tThreat, save:saveGame, load:loadGame,
   keys, get pendingClick(){ return pendingClick; },
