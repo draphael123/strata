@@ -163,6 +163,39 @@
   #clock{position:absolute;left:18px;top:12px;font-size:11px;letter-spacing:.18em;
     color:#b9c2d0;text-shadow:0 2px 6px #000}
 
+  /* ---------- town dialogue ---------- */
+  #town{position:fixed;inset:0;z-index:57;display:none;align-items:center;justify-content:center;
+    background:rgba(6,9,14,.72);backdrop-filter:blur(3px);padding:20px}
+  #town.on{display:flex}
+  .thead{display:flex;align-items:baseline;gap:12px;padding:13px 18px;
+    border-bottom:1px solid rgba(216,180,90,.24);font-size:13px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--gold)}
+  .tstand{margin-left:auto;font-size:10px;letter-spacing:.14em;color:#8d97a7}
+  .offer{padding:11px 12px;border-radius:6px;border:1px solid rgba(255,255,255,.13);
+    background:rgba(255,255,255,.03);margin-bottom:8px;display:flex;gap:12px;align-items:flex-start}
+  .offer:hover{border-color:rgba(216,180,90,.5)}
+  .offer .on3{font-size:12px;color:#efe8d8}
+  .offer .od3{font-size:10.5px;color:#8d97a7;margin-top:3px;line-height:1.5}
+  .offer .orw{font-size:10px;color:var(--gold);margin-top:5px;letter-spacing:.06em}
+  .offer .prog{font-size:11px;color:#9ac25c;white-space:nowrap}
+  .offer.done{border-color:#9ac25c;background:rgba(90,140,60,.14)}
+  .shopitem{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:5px;
+    border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.03);margin-bottom:6px}
+
+  /* ---------- objective tracker ---------- */
+  #quests{position:absolute;right:18px;top:52px;width:236px;text-align:right;
+    font-size:11px;text-shadow:0 2px 6px #000;line-height:1.5}
+  #quests .qt{color:#efe8d8;font-size:11.5px}
+  #quests .qp{color:#9ac25c;font-size:10px;letter-spacing:.05em}
+  #quests .qd{color:#8d97a7;font-size:10px}
+  #quests .qq{margin-bottom:9px}
+  #quests .qq.ready .qp{color:var(--gold)}
+  #prompt{position:absolute;left:50%;bottom:22%;transform:translateX(-50%);
+    font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#efe8d8;
+    background:rgba(13,15,20,.78);border:1px solid rgba(216,180,90,.4);
+    padding:7px 16px;border-radius:20px;display:none}
+  #prompt.on{display:block}
+
   #lockmsg{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
     background:rgba(8,10,14,.55);cursor:pointer;font-size:13px;letter-spacing:.24em;
     text-transform:uppercase;color:#cfd6e2}
@@ -275,6 +308,8 @@
     <div id="vGear" class="lbl" style="margin-top:7px;color:#8d97a7"></div>
   </div>
   <div id="toast"></div>
+  <div id="quests"></div>
+  <div id="prompt"></div>
 </div>
 
 <div id="tags"></div>
@@ -314,6 +349,19 @@
       <span style="flex:1"></span>
       <button class="btn ghost small" id="cBack">Back</button>
       <button class="btn" id="cGo">Wake up</button>
+    </div>
+  </div>
+</div>
+
+<div id="town">
+  <div class="pwrap">
+    <div class="thead"><span id="tWho">Reeve Ordwin</span>
+      <span class="tstand" id="tStand">Stranger · 0 coin</span></div>
+    <div class="pbody" id="tBody"></div>
+    <div class="pfoot">
+      <span class="cnote">ESC or E to step away</span>
+      <span style="flex:1"></span>
+      <button class="btn" id="tClose">Leave</button>
     </div>
   </div>
 </div>
@@ -497,6 +545,55 @@ const ITEMS = {
   torc:    { name:'Iron Torc',     kind:'trinket', icon:'❖', desc:'Take 10% less damage.', soak:0.10 },
 };
 const LOOT_TABLE = ['salve','salve','draught','ember','charm','ward','lens','feather','torc'];
+
+// ── the town: errands, standing, coin ──────────────────────────────────────
+const TOWN_NAME = 'Fendmere';
+const REP_TIERS = [
+  { at:0,  name:'Stranger', blurb:'They watch you cross the green.' },
+  { at:3,  name:'Known',    blurb:'The reeve nods when you pass.' },
+  { at:7,  name:'Trusted',  blurb:'Doors open. Prices soften.' },
+  { at:13, name:'Sworn',    blurb:'Fendmere counts you its own.' },
+];
+const repTier = ()=>{ let t = REP_TIERS[0];
+  for (const r of REP_TIERS) if (player.q.rep >= r.at) t = r; return t; };
+const repIndex = ()=> REP_TIERS.indexOf(repTier());
+
+const ELITE_TITLES = ['the Gaunt','Ninebrand','the Hollow','Ashmaw','the Pale','Threehorn',
+                      'the Cairn-Sitter','Longshadow','the Bracken King','Wretchwind'];
+const CULL_TARGETS = ['husk','sprig','slinger','ashling','stalker','delver'];
+
+// Offers are a pure function of (slot, seed, tier), so the board is stable
+// until it is actually refreshed rather than reshuffling every time you look.
+function rollErrand(slot, seed, tier){
+  const r = (n)=> hash2(slot*31+n, seed, SEED+900);
+  const kind = r(1) < 0.42 ? 'cull' : r(1) < 0.76 ? 'hunt' : 'clear';
+  const ang = r(2)*Math.PI*2, dist = 46 + r(3)*62;
+  const sx = Math.round(TOWN.x + Math.cos(ang)*dist), sz = Math.round(TOWN.z + Math.sin(ang)*dist);
+  const pay = 12 + tier*9 + Math.floor(r(4)*10);
+  if (kind === 'cull'){
+    const k = CULL_TARGETS[Math.floor(r(5)*CULL_TARGETS.length)];
+    const need = 3 + Math.floor(r(6)*(2+tier));
+    return { kind, k, need, have:0, title:`Thin the ${KINDS[k].name}s`,
+      desc:`${need} ${KINDS[k].name}s, anywhere in the vale. Bring back nothing; we just want them gone.`,
+      coin:pay, xp:14+tier*8, site:null };
+  }
+  if (kind === 'hunt'){
+    const k = CULL_TARGETS[Math.floor(r(7)*CULL_TARGETS.length)];
+    const name = `${KINDS[k].name} ${ELITE_TITLES[Math.floor(r(8)*ELITE_TITLES.length)]}`;
+    return { kind, k, name, need:1, have:0, title:`Hunt ${name}`,
+      desc:`One beast, grown too bold. Last seen ${Math.round(dist)} paces from the gate.`,
+      coin:pay+14, xp:26+tier*10, site:{x:sx,z:sz}, spawned:false };
+  }
+  const n = 3 + Math.floor(r(9)*3);
+  return { kind:'clear', need:n, have:0, title:'Clear the old ground',
+    desc:`A nest of ${n} has settled ${Math.round(dist)} paces out. Turn them out of it.`,
+    coin:pay+8, xp:20+tier*9, site:{x:sx,z:sz}, spawned:false };
+}
+function refreshOffers(){
+  player.q.offerSeed = (Math.random()*1e9)|0;
+  const tier = repIndex();
+  player.q.offers = [0,1,2].map(i=> rollErrand(i, player.q.offerSeed, tier));
+}
 
 // Derived character numbers, all in one place so the creator can preview them live.
 function derive(st, weaponId){
@@ -2464,6 +2561,64 @@ function tickCampfire(t, dt){
   ea.needsUpdate = true; sa.needsUpdate = true;
 }
 
+// ── townsfolk ───────────────────────────────────────────────────────────────
+// Two people and a board. The town was visible from the campfire for four
+// versions and completely inert — a promise the game kept making and breaking.
+const TOWNSFOLK = [];
+function makeVillager(color, hat){
+  const g = new THREE.Group();
+  const bm = new THREE.MeshLambertMaterial({ color });
+  const tm = new THREE.MeshLambertMaterial({ color:0x4a4032 });
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.58,0.76,0.40), bm); torso.position.y=0.86;
+  const head  = new THREE.Mesh(new THREE.BoxGeometry(0.44,0.44,0.44),
+                  new THREE.MeshLambertMaterial({ color:0xd6b48f })); head.position.y=1.46;
+  const cap   = new THREE.Mesh(new THREE.BoxGeometry(0.50,0.14,0.50),
+                  new THREE.MeshLambertMaterial({ color:hat })); cap.position.y=1.75;
+  const legL  = new THREE.Mesh(new THREE.BoxGeometry(0.19,0.50,0.21), tm); legL.position.set(-0.15,0.25,0);
+  const legR  = legL.clone(); legR.position.x=0.15;
+  const armL  = new THREE.Mesh(new THREE.BoxGeometry(0.16,0.54,0.19), bm); armL.position.set(-0.38,0.88,0);
+  const armR  = armL.clone(); armR.position.x=0.38;
+  const sh = new THREE.Mesh(new THREE.CircleGeometry(0.40,12).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({ color:0x0a0d12, transparent:true, opacity:0.26, depthWrite:false }));
+  sh.position.y=0.03;
+  g.add(torso, head, cap, legL, legR, armL, armR, sh);
+  g.castShadow = true;
+  return g;
+}
+function buildTownsfolk(){
+  for (const t of TOWNSFOLK) scene.remove(t.mesh);
+  TOWNSFOLK.length = 0;
+  const spots = [
+    { role:'reeve', name:'Reeve Ordwin', color:0x6b5f8a, hat:0x3d3550, dx: 4, dz: 5,
+      line:'Fendmere always has work. Little of it pleasant.' },
+    { role:'quartermaster', name:'Quartermaster Hess', color:0x7a5a3a, hat:0x4e3a24, dx:-5, dz: 3,
+      line:'Coin first. Then we talk about what I keep in the back.' },
+  ];
+  for (const s of spots){
+    const x = TOWN.x + s.dx, z = TOWN.z + s.dz;
+    const y = surfaceY(x, z);
+    const m = makeVillager(s.color, s.hat);
+    m.position.set(x+0.5, y, z+0.5);
+    scene.add(m);
+    TOWNSFOLK.push({ ...s, x, y, z, mesh:m, bob:Math.random()*6 });
+  }
+}
+function nearestFolk(){
+  let best = null, bd = 4.2;
+  for (const t of TOWNSFOLK){
+    const d = Math.hypot(player.pos.x-(t.x+0.5), player.pos.z-(t.z+0.5));
+    if (d < bd && Math.abs(player.pos.y - t.y) < 4){ bd = d; best = t; }
+  }
+  return best;
+}
+function tickTownsfolk(dt, t){
+  for (const f of TOWNSFOLK){
+    f.bob += dt*1.6;
+    f.mesh.position.y = f.y + Math.sin(f.bob)*0.03;
+    f.mesh.rotation.y = Math.atan2(player.pos.x-(f.x+0.5), player.pos.z-(f.z+0.5));
+  }
+}
+
 let nextId = 1;
 function spawnEntity(kind, x, y, z){
   const K = KINDS[kind];
@@ -2485,11 +2640,81 @@ function despawnEntity(e){
   scene.remove(e.mesh);
   const i = entities.indexOf(e); if (i >= 0) entities.splice(i,1);
 }
+// ── errand bookkeeping ──────────────────────────────────────────────────────
+function creditKill(e){
+  let changed = false;
+  for (const q of player.q.active){
+    if (q.have >= q.need) continue;
+    if (q.kind === 'cull' && e.kind === q.k){ q.have++; changed = true; }
+    else if (q.kind === 'hunt' && e.eliteFor === q.id){ q.have++; changed = true; }
+    else if (q.kind === 'clear' && e.siteFor === q.id){ q.have++; changed = true; }
+    if (changed && q.have >= q.need) toast(`${q.title} — done. Return to ${TOWN_NAME}.`, 3.2);
+  }
+  if (changed) drawQuestHud();
+}
+// Populate an errand site once the player is close enough to see it happen.
+function populateSites(){
+  for (const q of player.q.active){
+    if (!q.site || q.spawned || q.have >= q.need) continue;
+    if (Math.hypot(player.pos.x-q.site.x, player.pos.z-q.site.z) > 74) continue;
+    if (q.kind === 'hunt'){
+      const y = surfaceY(q.site.x, q.site.z);
+      if (y <= SEA+1) { q.spawned = true; continue; }
+      const e = spawnEntity(q.k, q.site.x, y, q.site.z);
+      e.name = q.name; e.eliteFor = q.id;
+      e.maxHp = Math.round(e.maxHp*1.9); e.hp = e.maxHp;
+      e.mesh.scale.multiplyScalar(1.22);
+      e.K = { ...e.K, atk:[e.K.atk[0]+3, e.K.atk[1]+4], xp:e.K.xp*2 };
+    } else {
+      for (let i=0;i<q.need;i++){
+        const x = q.site.x + Math.round((hash2(i,1,q.id)-0.5)*11);
+        const z = q.site.z + Math.round((hash2(i,2,q.id)-0.5)*11);
+        const y = surfaceY(x, z);
+        if (y <= SEA+1) continue;
+        const e = spawnEntity(randomKind(), x, y, z);
+        e.siteFor = q.id;
+      }
+    }
+    q.spawned = true;
+  }
+}
+function acceptErrand(i){
+  if (player.q.active.length >= 2){ toast('You can carry two errands'); return; }
+  const q = player.q.offers[i];
+  if (!q) return;
+  q.id = 'q' + (Date.now() % 1e7) + i;
+  player.q.active.push(q);
+  player.q.offers.splice(i, 1);
+  SFX.ui(); toast(`Taken: ${q.title}`, 2.6);
+  drawQuestHud(); drawTown();
+}
+function turnInErrands(){
+  let n = 0;
+  for (let i=player.q.active.length-1; i>=0; i--){
+    const q = player.q.active[i];
+    if (q.have < q.need) continue;
+    player.q.coin += q.coin;
+    player.q.rep  += 1;
+    player.q.done += 1;
+    gainXp(q.xp);
+    // clean up anything still standing that belonged to this errand
+    for (let j=entities.length-1;j>=0;j--)
+      if (entities[j].eliteFor === q.id || entities[j].siteFor === q.id) despawnEntity(entities[j]);
+    player.q.active.splice(i, 1);
+    n++;
+  }
+  if (n){ SFX.win(); toast(`Paid: ${n} errand${n>1?'s':''} settled`, 3); }
+  drawQuestHud(); drawVitals();
+  return n;
+}
+
 // keep a light population of creatures around the player
 function populate(px, pz){
   const want = 16;
   for (let i=entities.length-1; i>=0; i--){
     const e = entities[i];
+    // errand quarry sticks around even if you wander off, or hunts never finish
+    if (e.eliteFor || e.siteFor) continue;
     if (Math.hypot(e.px-px, e.pz-pz) > VIEW*CX*1.25) despawnEntity(e);
   }
   let guard = 0;
@@ -2526,6 +2751,7 @@ const player = {
   st: { mgt:STAT_BASE, vit:STAT_BASE, int:STAT_BASE, agi:STAT_BASE },
   weaponId: 'blade', spellId: 'wind',
   bag: {}, worn: [null, null],
+  q: { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0 },
   mp: 6, ap: 2, init: 0,
   mpMax: 6, apMax: 2,
   x:0, y:0, z:0,            // combat cell
@@ -2684,14 +2910,20 @@ addEventListener('keydown', e=>{
   if (G.mode === 'title') return;
   if (e.code === 'Escape'){
     e.preventDefault();
-    if (G.paused) closePause(); else openPause();
+    if (townFolk) closeTown();
+    else if (G.paused) closePause();
+    else openPause();
     return;
   }
+  if (townFolk){ if (e.code === 'KeyE') closeTown(); return; }
   if (G.paused) return;
   if (e.code === 'KeyI'){ openPause('bag'); return; }
   if (e.code === 'KeyC'){ openPause('char'); return; }
   if (G.mode === 'explore'){
-    if (e.code === 'KeyE') tryEngage();
+    if (e.code === 'KeyE'){
+      const f = nearestFolk();
+      if (f) openTown(f); else tryEngage();
+    }
   } else if (G.mode === 'combat'){
     const n = ['Digit1','Digit2','Digit3','Digit4'].indexOf(e.code);
     if (n >= 0) selectAbility(n);
@@ -2817,6 +3049,14 @@ function updateExplore(dt){
   }
   pendingClick = null;
 
+  // townsfolk, errand sites, and the "press E" prompt
+  tickTownsfolk(dt, G.time);
+  populateSites();
+  const folk = nearestFolk();
+  const pr = document.getElementById('prompt');
+  pr.classList.toggle('on', !!folk);
+  if (folk) pr.textContent = `E — speak with ${folk.name}`;
+
   // creature wander + aggro
   for (const e of entities){
     e.bob += dt*2.2;
@@ -2841,7 +3081,8 @@ function updateExplore(dt){
       e.mesh.userData.arms[0].rotation.x = -sw*0.6;
       e.mesh.userData.arms[1].rotation.x =  sw*0.6;
     }
-    // aggro: sees you and you are close
+    // aggro: sees you and you are close — but never inside the town walls
+    if (inTown(e.x, e.z)) continue;
     const d = Math.hypot(p.x-e.px, p.z-e.pz);
     if (d < e.K.aggro && Math.abs(p.y-e.py) < 6 &&
         hasLOS(p.x, p.y+1.4, p.z, e.px, e.py+1.2, e.pz)){
@@ -2996,7 +3237,7 @@ function damage(t, amt, note){
     setAnim(t, 'die', 0.55);
     SFX.die();
     log(`<b>${t.name}</b> falls.`);
-    if (!t.isPlayer) CB.xpPot += t.K.xp;
+    if (!t.isPlayer){ CB.xpPot += t.K.xp; creditKill(t); }
   }
   drawOrder();
   drawVitals();
@@ -3798,6 +4039,115 @@ function applySettings(){
   scene.traverse(o=>{ if (o.isMesh && o.material) o.material.needsUpdate = true; });
   saveSettings();
 }
+// ── town dialogue ───────────────────────────────────────────────────────────
+const SHOP_STOCK = ['salve','draught','ember','charm','ward','lens','feather','torc'];
+const SHOP_PRICE = { salve:14, draught:12, ember:18, charm:34, ward:34, lens:34, feather:34, torc:44 };
+let townFolk = null;
+function openTown(folk){
+  townFolk = folk;
+  G.paused = true;
+  if (locked) document.exitPointerLock();
+  if (folk.role === 'reeve' && !player.q.offers.length) refreshOffers();
+  document.getElementById('town').classList.add('on');
+  drawTown();
+}
+function closeTown(){
+  townFolk = null; G.paused = false;
+  document.getElementById('town').classList.remove('on');
+  if (G.mode === 'explore') document.getElementById('lockmsg').style.display = 'flex';
+}
+function drawTown(){
+  if (!townFolk) return;
+  const t = repTier(), body = document.getElementById('tBody');
+  document.getElementById('tWho').textContent = townFolk.name;
+  document.getElementById('tStand').textContent =
+    `${t.name} · ${player.q.coin} coin · ${player.q.done} settled`;
+
+  if (townFolk.role === 'reeve'){
+    const ready = player.q.active.filter(q=>q.have >= q.need).length;
+    const act = player.q.active.map(q=>`
+      <div class="offer ${q.have>=q.need?'done':''}">
+        <span style="flex:1"><div class="on3">${q.title}</div>
+          <div class="od3">${q.desc}</div>
+          <div class="orw">${q.coin} coin · ${q.xp} xp</div></span>
+        <span class="prog">${q.have}/${q.need}</span></div>`).join('')
+      || `<div class="od3">Nothing in hand.</div>`;
+    const off = player.q.offers.map((q,i)=>`
+      <div class="offer">
+        <span style="flex:1"><div class="on3">${q.title}</div>
+          <div class="od3">${q.desc}</div>
+          <div class="orw">${q.coin} coin · ${q.xp} xp</div></span>
+        <button class="tog" data-take="${i}">Take</button></div>`).join('')
+      || `<div class="od3">The board is bare. Come back after you've settled something.</div>`;
+    body.innerHTML = `
+      <div class="od3" style="font-style:italic;margin-bottom:12px">“${townFolk.line}”</div>
+      <div class="psec">In hand ${ready?`— <span style="color:#9ac25c">${ready} ready to settle</span>`:''}</div>
+      ${act}
+      ${ready?`<button class="btn small" id="tTurnIn" style="margin:4px 0 12px">Settle ${ready} errand${ready>1?'s':''}</button>`:''}
+      <div class="psec">The board</div>${off}
+      <div class="psec">Standing</div>
+      <div class="od3">${t.name} — ${t.blurb}</div>`;
+    const ti = document.getElementById('tTurnIn');
+    if (ti) ti.onclick = ()=>{ turnInErrands(); refreshOffers(); drawTown(); };
+    body.querySelectorAll('[data-take]').forEach(b=> b.onclick = ()=> acceptErrand(+b.dataset.take));
+  }
+
+  else {
+    const disc = 1 - repIndex()*0.08;                 // standing softens prices
+    body.innerHTML = `
+      <div class="od3" style="font-style:italic;margin-bottom:12px">“${townFolk.line}”</div>
+      <div class="psec">Stock ${repIndex()?`<span style="color:#9ac25c">(−${repIndex()*8}% for ${t.name})</span>`:''}</div>` +
+      SHOP_STOCK.map(id=>{
+        const it = ITEMS[id], p = Math.max(4, Math.round(SHOP_PRICE[id]*disc));
+        const afford = player.q.coin >= p;
+        return `<div class="shopitem"><span class="bi" style="width:26px;height:26px;border-radius:5px;
+          display:flex;align-items:center;justify-content:center;background:rgba(216,180,90,.16);
+          color:var(--gold)">${it.icon}</span>
+          <span style="flex:1"><div class="bn" style="font-size:12px;color:#efe8d8">${it.name}</div>
+          <div class="bd" style="font-size:10px;color:#8d97a7">${it.desc}</div></span>
+          <span class="bq" style="font-size:11px;color:${afford?'#d8b45a':'#7d5b52'}">${p}</span>
+          <button class="tog" data-buy="${id}" ${afford?'':'disabled style="opacity:.35"'}>Buy</button></div>`;
+      }).join('');
+    body.querySelectorAll('[data-buy]').forEach(b=> b.onclick = ()=>{
+      const id = b.dataset.buy, p = Math.max(4, Math.round(SHOP_PRICE[id]*disc));
+      if (player.q.coin < p) return;
+      player.q.coin -= p; giveItem(id); SFX.ui(); drawTown();
+    });
+  }
+}
+document.getElementById('tClose').onclick = closeTown;
+
+// ── objective tracker ───────────────────────────────────────────────────────
+function drawQuestHud(){
+  const el = document.getElementById('quests');
+  if (!player.q.active.length){
+    el.innerHTML = player.q.done || repIndex()
+      ? `<div class="qd">No errand in hand — see the reeve in ${TOWN_NAME}</div>` : '';
+    return;
+  }
+  el.innerHTML = player.q.active.map(q=>{
+    const ready = q.have >= q.need;
+    let where = '';
+    if (ready) where = `return to ${TOWN_NAME}`;
+    else if (q.site){
+      const d = Math.round(Math.hypot(player.pos.x-q.site.x, player.pos.z-q.site.z));
+      const b = bearingTo(q.site.x, q.site.z);
+      where = `${b} · ${d}m`;
+    } else where = 'anywhere in the vale';
+    return `<div class="qq ${ready?'ready':''}">
+      <div class="qt">${q.title}</div>
+      <div class="qp">${q.have}/${q.need}${ready?' — ready':''}</div>
+      <div class="qd">${where}</div></div>`;
+  }).join('');
+}
+function bearingTo(x, z){
+  const a = Math.atan2(x - player.pos.x, z - player.pos.z);
+  const rel = ((a - (player.yaw + Math.PI)) * 180/Math.PI % 360 + 540) % 360 - 180;
+  if (Math.abs(rel) < 22) return '▲ ahead';
+  if (Math.abs(rel) > 158) return '▼ behind';
+  return rel > 0 ? '► right' : '◄ left';
+}
+
 let pauseTab = 'char';
 function openPause(tab){
   if (G.mode === 'title') return;
@@ -3957,7 +4307,7 @@ function saveGame(){
            hp:player.hp, mana:player.mana, lvl:player.level, xp:player.xp, xpNext:player.xpNext,
            st:player.st, weaponId:player.weaponId, spellId:player.spellId,
            bonusHp:player.bonusHp||0, bonusMana:player.bonusMana||0,
-           bag:player.bag, worn:player.worn },
+           bag:player.bag, worn:player.worn, q:player.q },
       tod: G.tod,
       spawn: { x:player.spawn.x, y:player.spawn.y, z:player.spawn.z },
     }));
@@ -3979,6 +4329,8 @@ function loadGame(){
     player.level = s.p.lvl; player.xp = s.p.xp; player.xpNext = s.p.xpNext;
     player.hp = s.p.hp; player.mana = s.p.mana;
     player.bag = s.p.bag || {}; player.worn = s.p.worn || [null,null];
+    player.q = s.p.q || { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0 };
+    for (const q of player.q.active) q.spawned = false;   // sites repopulate on return
     if (typeof s.tod === 'number') G.tod = s.tod;
     player.spawn.set(s.spawn.x, s.spawn.y, s.spawn.z);
     return true;
@@ -4004,6 +4356,7 @@ function newWorld(){
   player.pitch = -0.05; player.vel.set(0,0,0);
   G.tod = 0.30;                                 // you wake in the early morning
   player.bag = {}; player.worn = [null, null];  // a new run starts empty-handed
+  player.q = { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0 };
   applyBuild(true);
 }
 // A handful of creatures prowling the ruins, so there is something to fight
@@ -4057,6 +4410,7 @@ function step(dt){
     if (G.saveT <= 0){ G.saveT = 20; saveGame(); }
     drawVitals();
     updateHudText();
+    if ((G.frames & 15) === 0) drawQuestHud();       // bearings update as you walk
   } else if (G.mode === 'combat'){
     updateCombat(dt);
   }
@@ -4143,6 +4497,11 @@ setInterval(()=>{
 // ═══════════════════════════════════════════════════════════════════════
 function enterWorld(){
   document.getElementById('title').style.display = 'none';
+  // never inherit a paused/dialogue state into a fresh world — step() early-outs
+  // while paused, so a stale flag silently freezes the entire game
+  G.paused = false; townFolk = null;
+  document.getElementById('pause').classList.remove('on');
+  document.getElementById('town').classList.remove('on');
   G.mode = 'explore';
   updateStreaming(player.pos.x, player.pos.z);
   drainMeshQueue(400);                         // build the first ring synchronously
@@ -4151,11 +4510,13 @@ function enterWorld(){
     player.pos.y = surfaceY(Math.floor(player.pos.x), Math.floor(player.pos.z)) + 0.1;
   buildCampfire();
   buildAtmosphere();
+  buildTownsfolk();
+  drawQuestHud();
   if (!entities.length && Math.hypot(player.pos.x-HOME.x, player.pos.z-HOME.z) < 40) seedValeEnemies();
   populate(player.pos.x, player.pos.z);
   drawVitals();
   document.getElementById('lockmsg').style.display = 'flex';
-  toast('Ruins, water, and a town on the hill', 3.4);
+  toast(`${TOWN_NAME} lies over the hill — they have work`, 3.6);
 }
 // ═══════════════════════════════════════════════════════════════════════
 //  CHARACTER CREATOR
@@ -4354,6 +4715,8 @@ window.STRATA = {
   tickStatus, applyStatus, KINDS, STATUS, AUD, SFX, audioInit, rebuildTrees, WIND,
   isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,
   openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
+  TOWNSFOLK, openTown, closeTown, acceptErrand, turnInErrands, refreshOffers,
+  populateSites, repTier, buildTownsfolk, creditKill,
   get abilities(){ return ABILITIES; },
   WEAPONS, SPELLS, STATS, HOME, LAKE, TOWN,
   teleport(x,z){
