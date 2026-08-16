@@ -223,6 +223,37 @@
   #quests .qd{color:#8d97a7;font-size:10px}
   #quests .qq{margin-bottom:9px}
   #quests .qq.ready .qp{color:var(--gold)}
+  /* The commission has to out-rank the errands at a glance, or it reads as one
+     more piece of casual work and gets ignored the same way it was before. */
+  #quests .qmain{color:#ff9a6a;font-size:9px;letter-spacing:.16em;text-transform:uppercase}
+  #quests .qq.main{border-right:2px solid rgba(255,120,80,.55);padding-right:8px}
+  #quests .qq.main .qt{color:#ffd9c2;font-size:12.5px}
+  #quests .qq.lead .qd{color:#c9a48f}
+  /* unspent attribute points */
+  #ptspip{position:absolute;left:50%;top:16px;transform:translateX(-50%);display:none;
+    font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#0d0f14;
+    background:var(--gold);padding:4px 12px;border-radius:12px;font-weight:700;
+    box-shadow:0 3px 12px rgba(0,0,0,.5)}
+  .statrow{display:flex;align-items:center;gap:8px}
+  .statrow .gate{color:#7d8798;font-size:10px;letter-spacing:.02em;margin-top:1px}
+  .plus{width:22px;height:22px;flex:0 0 22px;border-radius:5px;cursor:pointer;
+    border:1px solid rgba(216,180,90,.6);background:rgba(216,180,90,.16);
+    color:var(--gold);font-size:14px;line-height:1;padding:0}
+  .plus:hover:not(:disabled){background:rgba(216,180,90,.34)}
+  .plus:disabled{opacity:.25;cursor:default}
+  .bsw{width:26px;height:26px;flex:0 0 26px;border-radius:5px;border:2px solid;margin-top:2px}
+  /* the field spellbar — explore mode only */
+  #spellbar{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);
+    display:flex;gap:5px;pointer-events:auto}
+  .sb{position:relative;width:78px;padding:6px 5px 5px;border-radius:5px;cursor:pointer;
+    text-align:center;background:linear-gradient(rgba(38,46,58,.86),rgba(20,25,32,.9));
+    border:1px solid rgba(255,255,255,.13);transition:.14s}
+  .sb:hover{border-color:var(--gold);transform:translateY(-2px)}
+  .sb.off{opacity:.34;cursor:not-allowed;transform:none!important}
+  .sb .sn{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#efe8d8;line-height:1.2}
+  .sb .sc{font-size:9px;color:#6ea8e0;margin-top:2px}
+  .sb .sc span{color:#6e7889;margin-left:2px}
+  .sb .sk{position:absolute;top:2px;left:4px;font-size:8px;color:#6e7889}
   #eye{position:absolute;left:50%;top:calc(50% + 34px);transform:translateX(-50%);
     font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:#ffb066;
     text-shadow:0 2px 8px #000;opacity:0;transition:opacity .18s;pointer-events:none}
@@ -288,7 +319,25 @@
   .chip.you .hb>i{background:#9ac25c}
 
   #acts{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);
-    display:flex;gap:7px;pointer-events:auto}
+    display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:auto}
+  /* the category row, and the drawer that opens above it */
+  .catrow{display:flex;gap:6px}
+  .drawer{display:flex;gap:7px;padding:8px;border-radius:8px;
+    background:rgba(13,16,22,.86);border:1px solid rgba(255,255,255,.13);
+    box-shadow:0 8px 26px rgba(0,0,0,.5)}
+  .cat{position:relative;width:82px;padding:7px 6px 6px;border-radius:6px;cursor:pointer;
+    text-align:center;background:linear-gradient(rgba(43,52,66,.92),rgba(22,27,34,.94));
+    border:1px solid rgba(255,255,255,.15);transition:.14s}
+  .cat:hover{border-color:var(--gold);transform:translateY(-2px)}
+  .cat.sel{border-color:var(--gold);background:linear-gradient(rgba(72,60,30,.95),rgba(40,33,17,.95));
+    box-shadow:0 0 18px rgba(216,180,90,.32)}
+  .cat.off{opacity:.32;cursor:not-allowed;transform:none!important;border-color:rgba(255,255,255,.1)}
+  .cat .ci{font-size:15px;line-height:1;color:#d8cbb0;margin-bottom:3px}
+  .cat .cn{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#efe8d8}
+  .cat .ch{font-size:9px;color:#8d97a7;margin-top:1px;line-height:1.3;min-height:11px}
+  .cat .ck{position:absolute;top:3px;left:5px;font-size:9px;color:#6e7889}
+  .cat.end{width:70px}
+  .cat.end .ci{color:#8d97a7}
   .act{width:96px;padding:8px 6px 7px;border-radius:6px;cursor:pointer;text-align:center;
     background:linear-gradient(rgba(43,52,66,.92),rgba(22,27,34,.94));
     border:1px solid rgba(255,255,255,.15);transition:.14s}
@@ -395,6 +444,8 @@
   </div>
   <div id="toast"></div>
   <div id="quests"></div>
+  <div id="ptspip"></div>
+  <div id="spellbar"></div>
   <div id="prompt"></div>
   <div id="eye"></div>
 </div>
@@ -466,6 +517,7 @@
       <button class="ptab on" data-tab="char">Character</button>
       <button class="ptab" data-tab="bag">Satchel</button>
       <button class="ptab" data-tab="quests">Errands</button>
+      <button class="ptab" data-tab="best">Bestiary</button>
       <button class="ptab" data-tab="guide">Guide</button>
       <button class="ptab" data-tab="set">Settings</button>
     </div>
@@ -585,13 +637,20 @@ const inBarrow = (x,z)=> x > BARROW.x-11 && x < BARROW.x+11 &&
                          z > BARROW.z-19 && z < BARROW.z+34;
 
 const B = { AIR:0, GRASS:1, DIRT:2, STONE:3, SAND:4, WATER:5, WOOD:6, LEAF:7, SNOW:8, SLATE:9,
-            MOSS:10, PLANK:11, THATCH:12, EMBER:13, BIRCH:14, PINE:15, TRUNK:16, SHRUB:17 };
-const SOLID = [0,1,1,1,1,0,1,1,1,1, 1,1,1,1,1,1,1,1];   // blocks movement + line of sight
-const OPAQUE= [0,1,1,1,1,0,1,1,1,1, 1,1,1,1,1,1,1,1];   // blocks light for AO
+            MOSS:10, PLANK:11, THATCH:12, EMBER:13, BIRCH:14, PINE:15, TRUNK:16, SHRUB:17,
+            ROAD:18, COBBLE:19, ROCK:20, DEADWOOD:21 };
+const SOLID = [0,1,1,1,1,0,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1];   // blocks movement + line of sight
+const OPAQUE= [0,1,1,1,1,0,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1];   // blocks light for AO
 // Tree voxels stay in the data — they still block movement, sight and cover —
 // but they are NOT drawn. Real tapered meshes are drawn over them instead, which
 // is what finally stops the forest reading as Minecraft.
-const UNDRAWN = { [B.TRUNK]:1, [B.BIRCH]:1, [B.LEAF]:1, [B.PINE]:1, [B.SHRUB]:1 };
+// Boulders and deadfall get the same treatment as the trees, and for the same
+// reason: a boulder made of literal cubes is the single loudest "this is
+// Minecraft" signal left in the world, and there are far more boulders than
+// trees. The voxels stay — you still climb them, hide behind them and break line
+// of sight on them — but a real rounded mass is drawn over the top.
+const UNDRAWN = { [B.TRUNK]:1, [B.BIRCH]:1, [B.LEAF]:1, [B.PINE]:1, [B.SHRUB]:1,
+                  [B.ROCK]:1, [B.DEADWOOD]:1 };
 
 // per-block face colours: [top, side, bottom]
 const COL = {
@@ -611,11 +670,24 @@ const COL = {
   [B.MOSS ]: [0x8b9679, 0x848c72, 0x767e68],   // weathered, lichen-blotched ruin stone
   [B.PLANK]: [0x9c7444, 0x8a663c, 0x775833],
   [B.THATCH]:[0xb08a4a, 0x8d6d39, 0x775c30],
-  [B.EMBER]: [0xff9a3c, 0xe8742a, 0xc2551c],
+  // Full-saturation orange on a 1m cube reads as a plastic brick, and there is
+  // one on top of every waystone and both gate towers. Deeper and sootier — the
+  // GLOW comes from the light pool below, which is where a fire's brightness
+  // should come from anyway.
+  [B.EMBER]: [0xd2762c, 0xb35a20, 0x8e4318],
   [B.BIRCH]: [0xd8d2c4, 0xcfc8b8, 0xbdb6a6],
   [B.PINE ]: [0x3c6438, 0x355a32, 0x2e4e2c],
   [B.TRUNK]: [0x6d4f31, 0x5e432a, 0x503a24],
   [B.SHRUB]: [0x4e7c3c, 0x477134, 0x3d632e],
+  // The road has to read as a ROAD from a long way off or it cannot lead anywhere.
+  // Pale dry-packed earth against green ground is the strongest cheap signal there
+  // is — the same reason the ochre waymark rag worked where grey stone did not.
+  [B.ROAD  ]: [0xa8916a, 0x9c855f, 0x8a7553],
+  [B.COBBLE]: [0x93918c, 0x8a8883, 0x7c7a76],
+  // UNDRAWN — these never reach the mesher, but a missing COL entry is a silent
+  // black block the day something stops being undrawn.
+  [B.ROCK    ]: [0x82868f, 0x7a7e87, 0x6e727a],
+  [B.DEADWOOD]: [0x6d5a42, 0x5e4d38, 0x50412e],
 };
 
 // ═══════════════════════ character: stats, gear, spells ═══════════════════════
@@ -829,16 +901,24 @@ function rollErrand(slot, seed, tier){
     desc:`A nest of ${n} has settled ${Math.round(dist)} paces out. Turn them out of it.`,
     coin:pay+8, xp:20+tier*9, site:{x:sx,z:sz}, spawned:false };
 }
-// The one hand-written commission. Offered once, and only after you've proved
-// useful — a stranger doesn't get sent into the barrow.
+// The one hand-written commission — and the closest thing the game has to a MAIN
+// quest, so it is flagged as one. It used to be gated behind settling an errand
+// first and then listed as one more entry on the reeve's board, which meant the
+// only authored dungeon in the game was something you could play for an hour
+// without ever being told existed.
 const BARROW_QUEST = {
-  kind:'barrow', id:'barrow', need:1, have:0,
+  kind:'barrow', id:'barrow', need:1, have:0, main:true,
   title:'Open the barrow',
   desc:'There is a mouth in the hillside south-west of the water, and something in it that '
      + 'the old people walled up rather than fight. Go down. Put out whatever is still burning.',
   coin:120, xp:180, site:{ x:BARROW.x, z:BARROW.z-16 }, spawned:false,
 };
-function barrowOffered(){ return player.q.done >= 1 && player.q.barrow === 'none'; }
+// Offered from the first conversation. A commission this size is exactly what a
+// reeve leads with when a lamplighter finally walks through the gate.
+function barrowOffered(){ return player.q.barrow === 'none'; }
+// The main quest does not eat one of your two errand slots — carrying it should
+// never be a reason to turn down paying work.
+function errandsInHand(){ return player.q.active.filter(q=>!q.main).length; }
 function refreshOffers(){
   player.q.offerSeed = (Math.random()*1e9)|0;
   const tier = repIndex();
@@ -920,14 +1000,23 @@ function heightAt(x, z){
   // stairs. Broad, gentle swells instead.
   const d = fbm(x*0.0068, z*0.0068, 4, SEED+511) - 0.5;
   const m = Math.max(0, c - 0.72) / 0.28;             // mountain mask, pushed further out
-  // MUCH flatter than it was (was 18 + c*22 + d*9 + m*m*26, a ~48-block range).
-  // The old relief did three bad things at once: it made a tactics grid you could
-  // not walk across, it broke every long sightline the game depends on, and every
-  // steep face turned into a stack of 1-block terraces whose bevelled DIRT sides
-  // read as big diagonal brown slabs. Variety now comes from what GROWS on the
-  // ground, not from how far the ground falls away. Mountains survive as distant
-  // silhouettes because the mask only opens up in the top quarter of the range.
-  let h = 28 + c*9 + d*3.4 + m*m*17;
+  // NEAR-PLAIN. This has now been flattened twice: 18+c*22+d*9+m*m*26 (a 48-block
+  // range) → 28+c*9+d*3.4+m*m*17 → this. The remaining relief is about six blocks
+  // of broad swell across the whole vale, which is enough to keep the horizon from
+  // being a ruled line and not enough to hide anything.
+  //
+  // The reason is that rolling ground was doing the opposite of its job: it broke
+  // the long sightlines the game lives on, every steep face terraced into
+  // diagonal brown slabs, and — worst — it made one patch of wood indistinguishable
+  // from the next, because the only thing varying was how far the ground fell away.
+  // Interest now comes from what STANDS on the ground: landmarks, ruins, water,
+  // the town. Empty, level ground between them is what makes them read.
+  //
+  // ⚠️ The cost is that natural high ground is now rare, and high ground is a
+  // ±25%/15% damage swing. Elevation is deliberately moved to things that are
+  // BUILT — rampart walks, ruin steps, boulder tops, the barrow dais — so a fight
+  // still has height in it, but you have to go and stand on something.
+  let h = 30 + c*4.6 + d*2.1 + m*m*22;
   const vale = valeHeight(x, z);
   if (vale !== null){
     const dd = Math.hypot(x-HOME.x, z-HOME.z);
@@ -943,20 +1032,50 @@ function biomeTop(topY, x, z){
   if (topY <= SEA+1) return B.SAND;
   if (topY > 54) return B.SNOW;
   if (topY > 46) return B.STONE;
-  if (onPath(x, z)) return B.DIRT;      // a worn track reads as "people live here"
+  // A worn track reads as "people live here" — and a graded one reads as a road
+  // that is GOING somewhere, which is the whole job. Metalled centre, dirt verge,
+  // and cobbles for the last stretch up to the gate.
+  const rd = onPath(x, z);
+  if (rd === 2) return nearGate(x, z) ? B.COBBLE : B.ROAD;
+  if (rd === 1) return B.DIRT;
   return B.GRASS;
 }
-// A wandering footpath from the camp up to the town. Straight lines look surveyed,
+function nearGate(x, z){
+  return Math.hypot(x-(TOWN.x+GATE.dx), z-(TOWN.z+GATE.dz)) < 16;
+}
+// A wandering road from the camp up to the town. Straight lines look surveyed,
 // so the centreline wobbles with noise.
+//
+// ⚠️ This was BROKEN and it is why the gate was never found. The old test was
+// `hypot(centreline - point) + wob < 1.7` — adding the wobble to an ALWAYS
+// POSITIVE distance. Wherever the noise went above +1.7 the condition could not
+// be satisfied at ANY distance, so the road did not wander, it VANISHED: a dashed
+// line of dirt with multi-block gaps, present maybe half the way along. A road you
+// lose sight of is not a road, and it never delivered anyone to the gatehouse.
+// The wobble has to displace a SIGNED perpendicular offset instead.
+//
+// Returns 0 when off the road, else 1 for the worn verge and 2 for the metalled
+// centre, so the surface can be graded rather than one flat stripe of dirt.
 function onPath(x, z){
   const d = Math.hypot(x-HOME.x, z-HOME.z);
-  if (d > VALE_R || d < 5) return false;
-  const ax = TOWN.x-HOME.x, az = TOWN.z-HOME.z, L2 = ax*ax + az*az;
+  if (d > VALE_R || d < 4) return 0;
+  const ax = TOWN.x-HOME.x, az = TOWN.z-HOME.z, L2 = ax*ax + az*az, L = Math.sqrt(L2);
   const t = ((x-HOME.x)*ax + (z-HOME.z)*az) / L2;
-  if (t < 0 || t > 1.04) return false;
-  const wob = (fbm(x*0.035, z*0.035, 2, SEED+808) - 0.5) * 11;
-  const perp = Math.hypot(HOME.x + ax*t - x, HOME.z + az*t - z) + wob;
-  return Math.abs(perp) < 1.7;
+  // Run PAST the wall line so the road arrives at the gate and carries on through
+  // it to the well, rather than stopping short in the grass outside. Not far past:
+  // at 1.34 the road shot straight out the far side of the town and back into the
+  // fields, which reads as a road to nowhere.
+  if (t < 0 || t > 1.04) return 0;
+  // signed offset from the centreline: +ve one side, -ve the other
+  const perp = ((x-HOME.x)*az - (z-HOME.z)*ax) / L;
+  const wob  = (fbm(x*0.021, z*0.021, 2, SEED+808) - 0.5) * 13;
+  // The last stretch straightens out and stops wobbling — traffic near a gate
+  // wears a straight line, and the road has to actually hit the gateway.
+  const straighten = clamp((t - 0.80) / 0.20, 0, 1);
+  const off = Math.abs(perp - wob * (1 - straighten));
+  if (off < 1.9) return 2;
+  if (off < 3.4) return 1;
+  return 0;
 }
 // ───────────────────── the authored starting vale ─────────────────────
 // Terrain is a pure function of (x,z), so the start area is BLENDED INTO the
@@ -985,8 +1104,14 @@ function valeHeight(x, z){
     // and the sand a shoreline rather than a desert.
     // A purely radial profile carves perfect concentric steps — the bed reads as
     // a machined amphitheatre. Noise breaks the rings into a lake bottom.
+    // Now that the land is near-plain, this bowl is by far the steepest thing in
+    // the world, and a radial profile turns that into perfect concentric terraces
+    // — an amphitheatre, clearly visible the moment you wade in. Shallower, and
+    // with a lot more noise in the bed, so the rings never line up.
     const s = Math.pow(ld/LAKE.r, 2.6);
-    h = Math.min(h, 19 + (h-19)*s + (fbm(x*0.085, z*0.085, 3, SEED+55) - 0.5) * 3.4);
+    const bed = (fbm(x*0.085, z*0.085, 3, SEED+55) - 0.5) * 5.2
+              + (fbm(x*0.190, z*0.190, 2, SEED+56) - 0.5) * 2.4;
+    h = Math.min(h, 21.5 + (h-21.5)*s + bed);
   }
   // the town sits on a rise so it reads against the sky from the camp
   const td = Math.hypot(x-TOWN.x, z-TOWN.z);
@@ -1060,6 +1185,7 @@ function featureAt(x, z){
   const topY = heightAt(x, z);
   if (topY <= SEA+1 || topY > 52) return null;
   if (inCamp(x,z) || inTown(x,z) || onPath(x,z) || inBarrow(x,z)) return null;
+  if (inLandmark(x,z)) return null;
   const slope = Math.abs(heightAt(x+1,z)-topY) + Math.abs(heightAt(x,z+1)-topY);
   const h = hash2(x, z, SEED+4242);
   const R = REGION_RULES[regionAt(x, z)] || REGION_RULES.meadow;
@@ -1078,8 +1204,10 @@ function featureAt(x, z){
     return { t:'log', topY, len:3+Math.floor(hash2(x,z,SEED+13)*4),
              dir:hash2(x,z,SEED+14) < 0.5 };
   if (h < (a += 0.0050*R.log*s)) return { t:'stump', topY };
-  if (h < (a += 0.0040*R.snag*s))
-    return { t:'snag', topY, hh:5+Math.floor(hash2(x,z,SEED+15)*5) };
+  // Dead standing trees were 5-9 blocks tall at this density, which put bare
+  // dark spars across every horizon — the single most repetitive shape out there.
+  if (h < (a += 0.0022*R.snag*s))
+    return { t:'snag', topY, hh:3+Math.floor(hash2(x,z,SEED+15)*4) };
   if (h < (a += 0.0255*R.bush*s))
     return { t:'bush', topY, r:1, hh:1+Math.floor(hash2(x,z,SEED+16)*2) };
   if (h < (a += 0.0090*R.rocks*s)) return { t:'rocks', topY };
@@ -1089,7 +1217,7 @@ function featureAt(x, z){
 // deterministic tree test for a column
 function treeAt(x, z){
   if (inCamp(x,z) || inTown(x,z)) return null;   // keep the camp and streets clear
-  if (onPath(x,z) || inBarrow(x,z)) return null;
+  if (onPath(x,z) || inBarrow(x,z) || inLandmark(x,z)) return null;
   const topY = heightAt(x, z);
   if (topY <= SEA+1 || topY > 46) return null;
   const R = REGION_RULES[regionAt(x, z)] || REGION_RULES.meadow;
@@ -1104,10 +1232,322 @@ function treeAt(x, z){
   const r = hash2(x, z, SEED+555);
   const sp = R.species;
   const kind = r < sp.pine ? 'pine' : r < sp.pine + sp.birch ? 'birch' : 'oak';
+  // ⚠️ Birches at 6-9 blocks carried their whole crown at the very top, above the
+  // eyeline, so what you actually SAW walking through a birch stand was bare
+  // poles. Shorter bole, and the crown masses now hang down it — see rebuildTrees.
   const trunk = kind === 'pine'  ? 6 + Math.floor(hash2(x,z,SEED+777)*5)
-              : kind === 'birch' ? 6 + Math.floor(hash2(x,z,SEED+777)*4)
+              : kind === 'birch' ? 4 + Math.floor(hash2(x,z,SEED+777)*3)
               :                    4 + Math.floor(hash2(x,z,SEED+777)*4);
   return { topY, trunk, kind };
+}
+
+// ═════════════════════════════ LANDMARKS ════════════════════════════════════
+// The vale was one uniform scatter of trees, scrub and boulders forever. Nothing
+// in it was worth walking towards, and after five minutes every direction looked
+// like every other direction. Landmarks are the fix, and the ground was flattened
+// specifically so they would have somewhere to stand and something to stand
+// against — a 20-block tower on rolling hills is a bump; on a plain it is a
+// destination you can see from a field away and steer by.
+//
+// Placement is a coarse deterministic grid, like the caches: one candidate per
+// LM_GRID cell, hashed. They are stamped in genChunk exactly like structures(),
+// so they stream, save, evict and survive chunk reload for free.
+const LM_GRID = 132;
+const LM_KINDS = [
+  // built — history, and the strongest read at distance
+  { id:'tower',    w:11, tall:true  },
+  { id:'arch',     w:11, tall:true  },
+  { id:'abbey',    w:19, tall:false },
+  { id:'bridge',   w:17, tall:false },
+  { id:'statue',   w:9,  tall:true  },
+  // natural
+  { id:'crag',     w:13, tall:true  },
+  { id:'rockarch', w:13, tall:true  },
+  { id:'greattree',w:13, tall:true  },
+  // people, or the memory of them
+  { id:'farm',     w:15, tall:false },
+  { id:'shrine',   w:7,  tall:false },
+  // the lamplighter's own: things that WERE lit, and are not
+  { id:'beacon',   w:9,  tall:true  },
+  { id:'watchtower',w:11,tall:true  },
+];
+// Nothing grows on a landmark, and the ground immediately around it is kept
+// clear. "An authored area has to READ, not just exist" — the first vale hid both
+// the lake and the town under ordinary forest density, and a 20-block tower with
+// four oaks growing out of its doorway is the same mistake at a smaller scale.
+function inLandmark(x, z){
+  const gx = Math.floor(x/LM_GRID), gz = Math.floor(z/LM_GRID);
+  for (let dz=-1; dz<=1; dz++) for (let dx=-1; dx<=1; dx++){
+    const lm = landmarkAt(gx+dx, gz+dz);
+    if (lm && Math.hypot(x-lm.x, z-lm.z) < lm.w + 3) return true;
+  }
+  return false;
+}
+function landmarkAt(gx, gz){
+  if (hash2(gx, gz, SEED+9100) > 0.62) return null;
+  const x = gx*LM_GRID + 20 + Math.floor(hash2(gx,gz,SEED+9101)*(LM_GRID-40));
+  const z = gz*LM_GRID + 20 + Math.floor(hash2(gz,gx,SEED+9102)*(LM_GRID-40));
+  if (inCamp(x,z) || inTown(x,z) || inBarrow(x,z)) return null;
+  if (Math.hypot(x-TOWN.x, z-TOWN.z) < 46) return null;
+  const gy = heightAt(x, z);
+  if (gy <= SEA+2 || gy > 48) return null;             // not in the water, not up a mountain
+  const k = LM_KINDS[Math.floor(hash2(gx,gz,SEED+9103) * LM_KINDS.length) % LM_KINDS.length];
+  return { x, z, gy, kind:k.id, w:k.w, s:hash2(gx,gz,SEED+9104), gx, gz };
+}
+// Every landmark that could possibly touch this chunk.
+function landmarksNear(ox, oz){
+  const out = [];
+  const g0x = Math.floor((ox-40)/LM_GRID), g1x = Math.floor((ox+CX+40)/LM_GRID);
+  const g0z = Math.floor((oz-40)/LM_GRID), g1z = Math.floor((oz+CZ+40)/LM_GRID);
+  for (let gz=g0z; gz<=g1z; gz++) for (let gx=g0x; gx<=g1x; gx++){
+    const lm = landmarkAt(gx, gz);
+    if (lm) out.push(lm);
+  }
+  return out;
+}
+// Build one landmark's voxels. `put` is world-space and clips itself.
+function buildLandmark(lm, put){
+  const { x, z, gy, s } = lm;
+  const R = (n)=> hash2(x+n, z-n, SEED+9200+n);        // stable per-landmark dice
+  const ring = (cx, cz, rad, y0, y1, b, gap)=>{
+    for (let dx=-rad-1; dx<=rad+1; dx++) for (let dz=-rad-1; dz<=rad+1; dz++){
+      const d = Math.hypot(dx, dz);
+      if (Math.abs(d - rad) > 0.7) continue;
+      if (gap != null && Math.abs(((Math.atan2(dz,dx) - gap + Math.PI*3) % (Math.PI*2)) - Math.PI) < 0.34) continue;
+      for (let y=y0; y<=y1; y++) put(cx+dx, y, cz+dz, b);
+    }
+  };
+  const disc = (cx, cz, rad, y, b)=>{
+    for (let dx=-rad; dx<=rad; dx++) for (let dz=-rad; dz<=rad; dz++)
+      if (dx*dx+dz*dz <= rad*rad) put(cx+dx, y, cz+dz, b);
+  };
+  const rubble = (rad, n)=>{                            // a skirt of fallen stone
+    for (let i=0;i<n;i++){
+      const a = R(i)*Math.PI*2, d = rad*0.7 + R(i+40)*rad*0.8;
+      const rx = x + Math.round(Math.cos(a)*d), rz = z + Math.round(Math.sin(a)*d);
+      const h = heightAt(rx, rz);
+      put(rx, h+1, rz, B.ROCK);
+      if (R(i+80) < 0.34) put(rx, h+2, rz, B.ROCK);
+    }
+  };
+
+  switch (lm.kind){
+    // ── a broken tower: still the tallest thing for a long way ──
+    case 'tower': {
+      const H = 17 + Math.floor(s*9);
+      disc(x, z, 5, gy, B.SLATE);
+      for (let y=1; y<=H; y++){
+        // the higher it goes the more of the circumference is missing, so the top
+        // reads as broken off rather than sawn flat
+        const open = Math.max(0, (y - H*0.55) / (H*0.45));
+        for (let dx=-4; dx<=4; dx++) for (let dz=-4; dz<=4; dz++){
+          const d = Math.hypot(dx,dz);
+          if (Math.abs(d-3.6) > 0.75) continue;
+          if (R(((dx+5)*11 + (dz+5)*7) % 60) < open*0.85) continue;
+          put(x+dx, gy+y, z+dz, y % 6 === 0 ? B.SLATE : B.MOSS);
+        }
+      }
+      for (let y=1; y<=3; y++) put(x, gy+y, z-4, B.AIR);      // a doorway
+      rubble(7, 16);
+      break;
+    }
+    // ── a standing arch, on a scale nothing else here matches ──
+    case 'arch': {
+      const H = 11 + Math.floor(s*5), span = 4;
+      const th = R(3)*Math.PI;
+      const ax = Math.round(Math.cos(th)), az = Math.round(Math.sin(th));
+      for (const sgn of [-1, 1]){
+        for (let y=1; y<=H; y++)
+          for (let t=0; t<2; t++)
+            put(x + ax*span*sgn + az*t, gy+y, z + az*span*sgn - ax*t, B.MOSS);
+      }
+      for (let i=-span; i<=span; i++){
+        const lift = Math.round(Math.cos(i/span * Math.PI/2) * 2.6);
+        for (let t=0; t<2; t++)
+          put(x + ax*i + az*t, gy+H+lift, z + az*i - ax*t, B.MOSS);
+      }
+      rubble(8, 12);
+      break;
+    }
+    // ── a dead abbey: a roofless nave you can walk down ──
+    case 'abbey': {
+      const L = 15 + Math.floor(s*7), W = 7;
+      for (let i=0; i<=L; i++){
+        const decay = i/L;                                   // one end still stands
+        const wallH = Math.max(1, Math.round((7 - decay*5) + R(i)*2));
+        for (const sgn of [-1, 1]){
+          if (R(i+20) < decay*0.45) continue;                // gaps where it fell
+          for (let y=1; y<=wallH; y++) put(x+i-Math.floor(L/2), gy+y, z+sgn*Math.floor(W/2), B.MOSS);
+        }
+        for (let w=-Math.floor(W/2)+1; w<Math.floor(W/2); w++)
+          put(x+i-Math.floor(L/2), gy, z+w, B.SLATE);         // the floor
+      }
+      // the gable end, and a row of column stubs down the nave
+      for (let w=-Math.floor(W/2); w<=Math.floor(W/2); w++)
+        for (let y=1; y<=10; y++){
+          if (Math.abs(w) < 2 && y < 6) continue;             // the great door
+          put(x-Math.floor(L/2), gy+y, z+w, B.MOSS);
+        }
+      for (let i=3; i<L-2; i+=4) for (const sgn of [-1,1])
+        for (let y=1; y<=2+Math.floor(R(i+60)*3); y++)
+          put(x+i-Math.floor(L/2), gy+y, z+sgn*2, B.STONE);
+      break;
+    }
+    // ── a bridge with nothing under it and nowhere to go ──
+    case 'bridge': {
+      const L = 15 + Math.floor(s*5);
+      const th = R(5)*Math.PI;
+      const ax = Math.round(Math.cos(th)) || 1, az = Math.round(Math.sin(th));
+      const deckY = gy + 6;
+      for (let i=-Math.floor(L/2); i<=Math.floor(L/2); i++){
+        const broken = Math.abs(i) < 2 && s > 0.45;           // a gap in the middle
+        if (!broken) for (let w=-1; w<=1; w++)
+          put(x+ax*i+az*w, deckY, z+az*i-ax*w, B.SLATE);
+        if (i % 5 === 0){                                     // piers down to the ground
+          const px = x+ax*i, pz = z+az*i, py = heightAt(px, pz);
+          for (let y=py+1; y<deckY; y++) for (let w=-1; w<=1; w++)
+            put(px+az*w, y, pz-ax*w, B.MOSS);
+        }
+        if (!broken && Math.abs(i) % 2 === 0) for (const w of [-2, 2])
+          put(x+ax*i+az*w, deckY+1, z+az*i-ax*w, B.MOSS);     // parapet
+      }
+      break;
+    }
+    // ── a colossus on a plinth, mostly still standing ──
+    case 'statue': {
+      for (let dx=-3; dx<=3; dx++) for (let dz=-3; dz<=3; dz++)
+        for (let y=1; y<=2; y++) put(x+dx, gy+y, z+dz, B.SLATE);
+      const H = 9 + Math.floor(s*5);
+      for (let y=3; y<=H; y++){
+        const r = y < H-4 ? 1 : 0;
+        for (let dx=-r; dx<=r; dx++) for (let dz=-r; dz<=r; dz++)
+          put(x+dx, gy+y, z+dz, B.MOSS);
+      }
+      for (let dx=-2; dx<=2; dx++) put(x+dx, gy+H-3, z, B.MOSS);    // outstretched arms
+      put(x, gy+H+1, z, B.MOSS);                                     // the head
+      if (s > 0.6){ put(x+2, gy+H-3, z, B.AIR); rubble(5, 6); }      // an arm on the ground
+      break;
+    }
+    // ── a tor: bare rock shouldering up out of level ground ──
+    case 'crag': {
+      const H = 9 + Math.floor(s*8);
+      for (let y=1; y<=H; y++){
+        const r = Math.max(1, Math.round(5.5 * (1 - y/(H+3)) + R(y)*1.4));
+        for (let dx=-r; dx<=r; dx++) for (let dz=-r; dz<=r; dz++){
+          if (dx*dx+dz*dz > r*r) continue;
+          if (R((dx*7+dz*13+y*3+90)%60) < 0.12) continue;    // bite chunks out of it
+          put(x+dx, gy+y, z+dz, B.ROCK);
+        }
+      }
+      rubble(9, 22);
+      break;
+    }
+    // ── a natural arch worn through a fin of rock ──
+    case 'rockarch': {
+      const H = 10 + Math.floor(s*5);
+      const th = R(7)*Math.PI;
+      const ax = Math.round(Math.cos(th)) || 1, az = Math.round(Math.sin(th));
+      for (let i=-6; i<=6; i++) for (let y=1; y<=H; y++){
+        const under = Math.abs(i) <= 3 && y <= H-4;           // the hole
+        if (under) continue;
+        const thick = Math.abs(i) > 4 ? 2 : 1;
+        for (let w=-thick; w<=thick; w++){
+          if (R((i*5+y*3+w*7+120+60)%60) < 0.10) continue;
+          put(x+ax*i+az*w, gy+y, z+az*i-ax*w, B.ROCK);
+        }
+      }
+      rubble(8, 14);
+      break;
+    }
+    // ── one enormous tree, alone ──
+    case 'greattree': {
+      const H = 15 + Math.floor(s*8);
+      for (let y=1; y<=H; y++){
+        const r = y < 3 ? 2 : y < H*0.6 ? 1 : 1;
+        for (let dx=-r; dx<=r; dx++) for (let dz=-r; dz<=r; dz++)
+          put(x+dx, gy+y, z+dz, B.TRUNK);
+      }
+      for (let dy=-5; dy<=3; dy++){
+        const rr = Math.round(7 * Math.cos(dy/6.5));
+        for (let dx=-rr; dx<=rr; dx++) for (let dz=-rr; dz<=rr; dz++){
+          if (dx*dx+dz*dz > rr*rr) continue;
+          if (R((dx*3+dz*5+dy*11+180+240)%60) < 0.22) continue;
+          put(x+dx, gy+H+dy, z+dz, B.LEAF);
+        }
+      }
+      break;
+    }
+    // ── an abandoned farmstead ──
+    case 'farm': {
+      const w = 7, d = 6;
+      for (let dx=0; dx<w; dx++) for (let dz=0; dz<d; dz++){
+        put(x+dx-3, gy, z+dz-3, B.PLANK);
+        const edge = dx===0||dx===w-1||dz===0||dz===d-1;
+        if (!edge) continue;
+        const hh = 4 - Math.floor(R((dx*7+dz*5)%60)*3);       // a roofless shell
+        for (let y=1; y<=hh; y++) put(x+dx-3, gy+y, z+dz-3, B.MOSS);
+      }
+      for (let y=1; y<=2; y++) put(x-3+3, gy+y, z-3, B.AIR);  // the doorway
+      // a field wall running off into the grass, and a well
+      const th = R(9)*Math.PI*2;
+      for (let i=4; i<16; i++){
+        const wx = x + Math.round(Math.cos(th)*i), wz = z + Math.round(Math.sin(th)*i);
+        if (R(i+30) < 0.25) continue;
+        put(wx, heightAt(wx,wz)+1, wz, B.ROCK);
+      }
+      for (let dx=0; dx<=1; dx++) for (let dz=0; dz<=1; dz++)
+        put(x+dx+6, gy+1, z+dz+4, B.STONE);
+      break;
+    }
+    // ── a roadside shrine ──
+    case 'shrine': {
+      disc(x, z, 2, gy, B.SLATE);
+      for (let y=1; y<=3; y++) for (const [dx,dz] of [[-1,-1],[1,-1],[-1,1],[1,1]])
+        put(x+dx, gy+y, z+dz, B.STONE);
+      for (let dx=-2; dx<=2; dx++) for (let dz=-2; dz<=2; dz++)
+        put(x+dx, gy+4, z+dz, B.SLATE);
+      put(x, gy+1, z, B.MOSS); put(x, gy+2, z, B.EMBER);      // the offering, long cold
+      break;
+    }
+    // ── a fallen beacon: the job, in ruins ──
+    case 'beacon': {
+      const H = 10 + Math.floor(s*6);
+      disc(x, z, 4, gy, B.SLATE);
+      for (let y=1; y<=H; y++){
+        const lean = Math.round(y * 0.16 * (s > 0.5 ? 1 : -1)); // it is going over
+        for (let dx=-1; dx<=1; dx++) for (let dz=-1; dz<=1; dz++)
+          put(x+dx+lean, gy+y, z+dz, B.MOSS);
+      }
+      const lean = Math.round(H * 0.16 * (s > 0.5 ? 1 : -1));
+      for (let dx=-2; dx<=2; dx++) for (let dz=-2; dz<=2; dz++){  // the firepan
+        if (Math.abs(dx)===2 && Math.abs(dz)===2) continue;
+        put(x+dx+lean, gy+H+1, z+dz, B.STONE);
+      }
+      put(x+lean, gy+H+2, z, B.DEADWOOD);                     // spent fuel, never relit
+      rubble(6, 10);
+      break;
+    }
+    // ── a watchtower that burned ──
+    case 'watchtower': {
+      const H = 12 + Math.floor(s*5);
+      for (let y=1; y<=H; y++){
+        const gone = y > H*0.62 && R((y*13+300)%60) < 0.5;
+        for (let dx=-2; dx<=2; dx++) for (let dz=-2; dz<=2; dz++){
+          const edge = Math.abs(dx)===2 || Math.abs(dz)===2;
+          if (!edge) continue;
+          if (gone && R((dx*7+dz*11+y*3+300)%60) < 0.6) continue;
+          put(x+dx, gy+y, z+dz, y > H*0.5 ? B.DEADWOOD : B.STONE);
+        }
+      }
+      // charred beams fallen out around the base
+      for (let i=0;i<7;i++){
+        const a = R(i+45)*Math.PI*2, d = 4 + R(i+50)*5;
+        const bx = x+Math.round(Math.cos(a)*d), bz = z+Math.round(Math.sin(a)*d);
+        put(bx, heightAt(bx,bz)+1, bz, B.DEADWOOD);
+      }
+      break;
+    }
+  }
 }
 
 // ───────────────────── structures (camp / ruins / town) ─────────────────────
@@ -1271,25 +1711,158 @@ function structures(){
   }
 
   // ── town on the rise ──
-  const house = (px,pz,w,d,h)=> box(px-2, pz-2, px+w+1, pz+d+1, (put)=>{
+  // A house you can walk into. The shell was already hollow, but the doorway was
+  // a 1-wide slot in a wall of identical planking with no windows, no threshold
+  // and nothing inside — so nobody ever tried the door. Doorways are now 2 wide
+  // with a lintel, walls carry windows, the frame is timbered, and there is
+  // something on the floor to have come in for.
+  const house = (px,pz,w,d,h,kind)=> box(px-3, pz-3, px+w+2, pz+d+2, (put)=>{
     const gy = heightAt(px+(w>>1), pz+(d>>1));
+    const big = kind === 'inn' || kind === 'hall' || kind === 'shop';
     for (let dx=0;dx<w;dx++) for (let dz=0;dz<d;dz++){
-      put(px+dx, gy, pz+dz, B.PLANK);
+      put(px+dx, gy, pz+dz, B.PLANK);                          // the floor
       const edge = dx===0||dx===w-1||dz===0||dz===d-1;
-      for (let y=1;y<=h;y++) put(px+dx, gy+y, pz+dz, edge ? (y===h?B.WOOD:B.PLANK) : B.AIR);
+      for (let y=1;y<=h;y++){
+        if (!edge){ put(px+dx, gy+y, pz+dz, B.AIR); continue; }
+        // corner posts and a mid rail in timber, infill in plank — the timbered
+        // frame is what stops a wall reading as one flat slab of the same colour
+        const corner = (dx===0||dx===w-1) && (dz===0||dz===d-1);
+        const window = !corner && y===2 && ((dx+dz) % 3 === 0) && h >= 4;
+        put(px+dx, gy+y, pz+dz,
+          window ? B.AIR : (corner || y===h || y===1) ? B.WOOD : B.PLANK);
+      }
     }
-    const dx0 = w>>1;
-    put(px+dx0, gy+1, pz, B.AIR); put(px+dx0, gy+2, pz, B.AIR);
-    let a0=px-1, b0=pz-1, a1=px+w, b1=pz+d, ry=gy+h+1;
-    while (a0<=a1 && b0<=b1){                                 // stepped thatch roof
-      for (let x=a0;x<=a1;x++) for (let z=b0;z<=b1;z++)
-        if (x===a0||x===a1||z===b0||z===b1) put(x,ry,z,B.THATCH);
-      a0++; b0++; a1--; b1--; ry++;
+    // a two-wide doorway with a lintel over it
+    const dx0 = Math.max(1, (w>>1) - 1);
+    for (const o of [0,1]) for (let y=1;y<=2;y++) put(px+dx0+o, gy+y, pz, B.AIR);
+    for (const o of [-1,0,1,2]) put(px+dx0+o, gy+3, pz, B.WOOD);
+    for (const o of [0,1]) put(px+dx0+o, gy, pz-1, B.SLATE);   // the threshold step
+    // what is inside
+    if (kind === 'inn'){
+      for (let i=1;i<=3;i++){                                   // beds along the back
+        put(px+i, gy+1, pz+d-2, B.WOOD); put(px+i, gy+1, pz+d-3, B.THATCH);
+      }
+      put(px+w-2, gy+1, pz+2, B.PLANK); put(px+w-3, gy+1, pz+2, B.PLANK);  // the bar
+      put(px+w-2, gy+1, pz+d-2, B.EMBER);                       // the hearth
+    } else if (kind === 'shop'){
+      for (let i=1;i<w-1;i++) put(px+i, gy+1, pz+d-2, B.PLANK); // a long counter
+      put(px+1, gy+2, pz+d-2, B.STONE); put(px+w-2, gy+2, pz+d-2, B.WOOD);
+    } else if (kind === 'hall'){
+      for (let i=2;i<w-2;i++){ put(px+i, gy+1, pz+2, B.PLANK); put(px+i, gy+1, pz+d-3, B.PLANK); }
+      put(px+(w>>1), gy+1, pz+d-2, B.WOOD);                     // the reeve's chair
+      put(px+1, gy+1, pz+1, B.EMBER);
+    } else {
+      put(px+1, gy+1, pz+d-2, B.WOOD);                          // a table and a bed
+      put(px+w-2, gy+1, pz+1, B.THATCH);
     }
+    // ── the roof ──
+    // Every building had the same stepped pyramid. Big buildings now get a
+    // ridged gable running the long way, which reads completely differently in
+    // silhouette and is how you pick the inn out from across the square.
+    if (big && w > d){
+      // ⚠️ One row of thatch per step leaves a gap you can see straight through
+      // between courses — from any raised angle the roof reads as a set of loose
+      // planks with the room visible between them. Each step is two deep, so the
+      // slope is a solid surface.
+      for (let ry=0; ry<=Math.ceil(d/2); ry++){
+        const b0 = pz-1+ry, b1 = pz+d-ry;
+        if (b0 > b1) break;
+        for (let x=px-1; x<=px+w; x++){
+          put(x, gy+h+1+ry, b0, B.THATCH);
+          put(x, gy+h+1+ry, Math.min(b0+1, b1), B.THATCH);
+          put(x, gy+h+1+ry, b1, B.THATCH);
+          put(x, gy+h+1+ry, Math.max(b1-1, b0), B.THATCH);
+        }
+      }
+    } else {
+      let a0=px-1, b0=pz-1, a1=px+w, b1=pz+d, ry=gy+h+1;
+      while (a0<=a1 && b0<=b1){                                 // stepped thatch roof
+        for (let x=a0;x<=a1;x++) for (let z=b0;z<=b1;z++)
+          if (x===a0||x===a1||z===b0||z===b1) put(x,ry,z,B.THATCH);
+        a0++; b0++; a1--; b1--; ry++;
+      }
+    }
+    // a chimney on anything with a fire in it
+    if (big) for (let y=1; y<=h+3; y++) put(px+w-2, gy+y, pz+d-1, B.STONE);
   });
-  const HOUSES = [[-9,-8,7,6,4],[2,-10,6,6,4],[-10,3,6,5,3],[3,4,7,6,5],
-                  [-2,-2,5,5,4],[11,-3,6,6,4],[-16,-4,5,5,3]];
-  for (const [ox,oz,w,d,h] of HOUSES) house(TOWN.x+ox, TOWN.z+oz, w, d, h);
+  // ── Fendmere proper ──────────────────────────────────────────────────────
+  // Seven identical 6x6 boxes on no particular plan is a hamlet, and it read as
+  // one: nowhere to walk, nothing to be the middle of it, and every building the
+  // same size and shape so none of them meant anything. This is a STREET PLAN —
+  // a market square around the well, a lane running from the gate to it, and the
+  // three buildings you actually use given footprints big enough to find.
+  //
+  // The road enters at GATE and runs to the well; nothing is allowed to sit on
+  // it. The old layout put a house squarely across the road at t≈0.88, which is
+  // why the road went missing for the last ten metres of its run.
+  const onLane = (px, pz)=>{
+    const ax = TOWN.x-HOME.x, az = TOWN.z-HOME.z, L2 = ax*ax + az*az, L = Math.sqrt(L2);
+    const t = ((px-HOME.x)*ax + (pz-HOME.z)*az) / L2;
+    if (t < 0.60 || t > 1.06) return false;
+    return Math.abs(((px-HOME.x)*az - (pz-HOME.z)*ax) / L) < 4.2;
+  };
+  // dx, dz, w, d, h, kind
+  const HOUSES = [
+    [-13,-11, 9, 7, 5, 'hall'],     // the reeve's hall — the biggest roof in town
+    [ -4,-13, 7, 6, 4, 'house'],
+    [  6,-11, 6, 5, 4, 'house'],
+    [ 13, -4, 8, 7, 5, 'inn'],      // the Kettle
+    [-14,  2,10, 6, 4, 'shop'],     // Hess's, long and low
+    [ -5,  8, 6, 6, 4, 'house'],
+    [  5,  9, 7, 5, 3, 'house'],
+    [ 14,  7, 5, 5, 3, 'house'],
+    [-11, 11, 6, 5, 4, 'house'],
+    [ 12, -13, 5, 5, 3,'house'],
+    [ -2, 14, 6, 5, 4, 'house'],
+  ];
+  const hits = (px,pz,w,d)=>{
+    for (let a=-2; a<=w+1; a++) for (let b=-2; b<=d+1; b++)
+      if (onLane(px+a, pz+b)) return true;
+    return false;
+  };
+  for (const [ox,oz,w,d,h,kind] of HOUSES){
+    let px = TOWN.x+ox, pz = TOWN.z+oz;
+    // Dropping a building that touches the lane left visible holes in the plan —
+    // and the holes were all on the same side, because the lane runs on one side.
+    // Nudge it clear instead, and only give up if there is genuinely nowhere.
+    if (hits(px, pz, w, d)){
+      let moved = false;
+      for (const [sx,sz] of [[5,0],[-5,0],[0,5],[0,-5],[7,4],[-7,-4],[4,7],[-4,-7]]){
+        if (!hits(px+sx, pz+sz, w, d)){ px += sx; pz += sz; moved = true; break; }
+      }
+      if (!moved) continue;
+    }
+    house(px, pz, w, d, h, kind);
+  }
+  // ── the market square ──
+  // Flagged ground around the well, stalls along two sides, and a notice board.
+  // A town needs a middle, and the middle is where the errands come from.
+  box(TOWN.x-9, TOWN.z-9, TOWN.x+9, TOWN.z+9, (put)=>{
+    for (let dx=-7; dx<=7; dx++) for (let dz=-7; dz<=7; dz++){
+      if (dx*dx + dz*dz > 52) continue;
+      const px = TOWN.x+dx, pz = TOWN.z+dz;
+      // Alternating on parity gives a literal chessboard — the strongest pattern
+      // the eye knows, on the largest flat surface in the town. Mostly cobble,
+      // with the odd slate flag broken up by noise.
+      put(px, heightAt(px,pz), pz,
+          hash2(px, pz, SEED+9400) < 0.22 ? B.SLATE : B.COBBLE);
+    }
+    // four stalls: two posts, a counter and a canvas over the top
+    const stalls = [[-6,-2],[-6,2],[6,-2],[6,2]];
+    for (const [sx,sz] of stalls){
+      const bx = TOWN.x+sx, bz = TOWN.z+sz, gy = heightAt(bx, bz);
+      for (const d of [-1, 1]){
+        for (let y=1; y<=3; y++) put(bx, gy+y, bz+d, B.WOOD);
+      }
+      for (let d=-1; d<=1; d++) put(bx, gy+1, bz+d, B.PLANK);      // the counter
+      for (let d=-2; d<=2; d++) for (let e=-1; e<=1; e++)
+        put(bx+e, gy+4, bz+d, B.THATCH);                           // the awning
+    }
+    // the notice board, facing the lane
+    const nx = TOWN.x-2, nz = TOWN.z-5, ny = heightAt(nx, nz);
+    for (let y=1; y<=2; y++){ put(nx, ny+y, nz, B.WOOD); put(nx+1, ny+y, nz, B.WOOD); }
+    put(nx, ny+3, nz, B.PLANK); put(nx+1, ny+3, nz, B.PLANK);
+  });
   box(TOWN.x-1, TOWN.z-1, TOWN.x+2, TOWN.z+2, (put)=>{        // well
     const gy = heightAt(TOWN.x, TOWN.z);
     for (let x=0;x<=1;x++) for (let z=0;z<=1;z++){
@@ -1297,42 +1870,86 @@ function structures(){
       if (x+z===0||x+z===2) put(TOWN.x+x, gy+2, TOWN.z+z, B.STONE);
     }
   });
-  // ── a fence ring around the town, broken by a gate facing the path ──
+  // ── the town WALL, broken by a gate facing the road ──
+  // This was a ring of 1-block wooden posts, and the game has a 1-block auto-step:
+  // you could walk over Fendmere's defences at any point on the circle without
+  // noticing there was a wall, which made the gatehouse decorative and the curfew
+  // meaningless. A wall has to be a wall. Three courses of dressed stone with a
+  // crenellated top, sampled by RADIUS over the whole box rather than by 180
+  // angular steps — rounding a circle into 180 samples leaves gaps you can walk
+  // through, which is the same bug in a different costume.
   box(TOWN.x-26, TOWN.z-26, TOWN.x+26, TOWN.z+26, (put)=>{
     const R = 23;
-    for (let a=0; a<180; a++){
-      const th = a/180*Math.PI*2;
-      const x = Math.round(TOWN.x + Math.cos(th)*R), z = Math.round(TOWN.z + Math.sin(th)*R);
-      // leave a gateway where the path arrives
-      const toCamp = Math.atan2(HOME.z-TOWN.z, HOME.x-TOWN.x);
-      let dth = Math.abs(((th - toCamp + Math.PI*3) % (Math.PI*2)) - Math.PI);
-      if (dth > Math.PI - 0.22) continue;
+    const toCamp = Math.atan2(HOME.z-TOWN.z, HOME.x-TOWN.x);
+    for (let x=TOWN.x-26; x<=TOWN.x+26; x++) for (let z=TOWN.z-26; z<=TOWN.z+26; z++){
+      const dx = x-TOWN.x, dz = z-TOWN.z, d = Math.hypot(dx, dz);
+      if (Math.abs(d - R) > 1.0) continue;
+      const th = Math.atan2(dz, dx);
+      // ⚠️ This test was INVERTED and nobody could see it. `dth` is the angular
+      // distance from the road bearing, so `dth > PI - 0.22` skips the arc
+      // OPPOSITE the road — the fence's only gap sat round the BACK of the town
+      // while the gatehouse was built into unbroken fence on the camp side. The
+      // gate has never once been the way in. Skip near ZERO: at the road.
+      const dth = Math.abs(((th - toCamp + Math.PI*3) % (Math.PI*2)) - Math.PI);
+      if (dth < 0.20) continue;                       // the gateway
       const gy = heightAt(x, z);
-      put(x, gy+1, z, B.WOOD);
-      if (a % 6 === 0) put(x, gy+2, z, B.WOOD);       // taller posts at intervals
+      for (let y=1; y<=3; y++) put(x, gy+y, z, B.STONE);
+      // merlons every third block along the arc, so the top edge reads as a
+      // battlement rather than a flat grey band
+      if (((Math.round(th*R/1.0)) % 3 + 3) % 3 === 0) put(x, gy+4, z, B.STONE);
     }
   });
 
   // ── the gatehouse ──
-  // The fence already had a gap where the path arrives; a gap is not a gate. Two
-  // piers and a lintel, so arriving at Fendmere is arriving SOMEWHERE, and the
-  // warden has a post to stand at.
-  box(TOWN.x+GATE.dx-5, TOWN.z+GATE.dz-5, TOWN.x+GATE.dx+5, TOWN.z+GATE.dz+5, (put)=>{
+  // Two piers and a lintel were not enough to find. This is now a proper gatehouse:
+  // twin towers standing well clear of the wall top, a deep arch between them, and
+  // a brazier burning on each tower. The braziers are the point — a lamplighter's
+  // town announces itself with FIRE, and two lights up in the air are visible from
+  // the far side of the vale at night, which is exactly when you need to find the
+  // gate before it shuts.
+  box(TOWN.x+GATE.dx-8, TOWN.z+GATE.dz-8, TOWN.x+GATE.dx+8, TOWN.z+GATE.dz+8, (put)=>{
     const cx = TOWN.x+GATE.dx, cz = TOWN.z+GATE.dz;
     const gy = heightAt(cx, cz);
-    // piers set either side of the opening, across the line of the road
+    // px,pz runs ACROSS the road; rx,rz runs along it
     const px = Math.round(-Math.sin(GATE.th)), pz = Math.round(Math.cos(GATE.th));
-    for (const s of [-2, 2]){
-      for (let y=1; y<=4; y++)
-        for (const [ax,az] of [[0,0],[px,pz]])
-          put(cx + px*s + ax, gy+y, cz + pz*s + az, y===4 ? B.SLATE : B.STONE);
+    const rx = Math.round(Math.cos(GATE.th)),  rz = Math.round(Math.sin(GATE.th));
+    const TH = 9;                                   // tower height above ground
+    for (const s of [-3, 3]){                       // the two towers
+      const tx = cx + px*s, tz = cz + pz*s;
+      for (let dx=-1; dx<=1; dx++) for (let dz=-1; dz<=1; dz++)
+        for (let y=1; y<=TH; y++)
+          put(tx+dx, gy+y, tz+dz, y===TH ? B.SLATE : B.STONE);
+      // crenellated cap, and a fire in the middle of it
+      for (const [dx,dz] of [[-1,-1],[1,-1],[-1,1],[1,1]]) put(tx+dx, gy+TH+1, tz+dz, B.STONE);
+      put(tx, gy+TH+1, tz, B.EMBER);
     }
-    for (let i=-2; i<=2; i++) put(cx + px*i, gy+5, cz + pz*i, B.WOOD);   // lintel
-    for (let i=-2; i<=2; i++) put(cx + px*i, gy+6, cz + pz*i, B.SLATE);  // capping
-    for (let i=-3; i<=3; i++) for (let j=-1; j<=1; j++)                  // flagged road
-      put(cx + px*i + Math.round(Math.cos(GATE.th))*j,
-          gy, cz + pz*i + Math.round(Math.sin(GATE.th))*j, B.SLATE);
+    // the arch: jambs, then a lintel and capping carried across the opening
+    for (let i=-2; i<=2; i++){
+      for (let y=6; y<=7; y++) put(cx + px*i, gy+y, cz + pz*i, y===6 ? B.WOOD : B.SLATE);
+    }
+    for (let i=-2; i<=2; i++) put(cx + px*i, gy+8, cz + pz*i, B.STONE);
+    // flagged apron either side, so the road visibly becomes a threshold
+    for (let i=-4; i<=4; i++) for (let j=-4; j<=4; j++)
+      put(cx + px*i + rx*j, gy, cz + pz*i + rz*j, B.COBBLE);
   });
+
+  // ── waystones down the road ──
+  // A road you cannot see the end of does not lead anywhere. Marker stones at
+  // intervals along the last stretch, each with the ochre rag that made the
+  // waymarks legible — a colour nothing natural in this vale uses — and a lamp
+  // hood on top. Standing at any one of them, the next is visible, and the last
+  // of them is inside sight of the gate.
+  for (let n=1; n<=6; n++){
+    const t = 0.30 + n*0.108;
+    const wx = Math.round(HOME.x + (TOWN.x-HOME.x)*t), wz = Math.round(HOME.z + (TOWN.z-HOME.z)*t);
+    const ox = Math.round(-Math.sin(GATE.th)*3), oz = Math.round(Math.cos(GATE.th)*3);
+    box(wx+ox-2, wz+oz-2, wx+ox+2, wz+oz+2, (put)=>{
+      const sx = wx+ox, sz = wz+oz, gy = heightAt(sx, sz);
+      for (let y=1; y<=3; y++) put(sx, gy+y, sz, B.STONE);
+      put(sx, gy+4, sz, B.EMBER);                   // the lamp hood
+      put(sx+1, gy+2, sz, B.THATCH);                // the rag, tied off
+    });
+  }
 
   // a watchtower, so the town has a silhouette from 75 blocks out
   box(TOWN.x+17, TOWN.z+9, TOWN.x+21, TOWN.z+13, (put)=>{
@@ -1442,15 +2059,22 @@ function genChunk(cx, cz){
         const rr = dy === f.hh-1 ? f.r-1 : f.r;
         for (let dz=-rr; dz<=rr; dz++) for (let dx=-rr; dx<=rr; dx++){
           if (rr>1 && Math.abs(dx)===rr && Math.abs(dz)===rr) continue;
-          put(lx+dx, gy+1+dy, lz+dz, B.STONE);
+          put(lx+dx, gy+1+dy, lz+dz, B.ROCK);
         }
       }
+      if (lx>=0 && lx<CX && lz>=0 && lz<CZ)
+        snags.push({ x:ox+lx, z:oz+lz, topY:gy, trunk:f.hh, r:f.r, kind:'boulder' });
     } else if (f.t === 'log'){
       for (let i=0; i<f.len; i++)
-        put(lx + (f.dir?i:0), gy+1, lz + (f.dir?0:i), B.WOOD);
+        put(lx + (f.dir?i:0), gy+1, lz + (f.dir?0:i), B.DEADWOOD);
+      if (lx>=0 && lx<CX && lz>=0 && lz<CZ)
+        snags.push({ x:ox+lx, z:oz+lz, topY:gy, trunk:f.len, dir:f.dir, kind:'log' });
     } else if (f.t === 'stump'){
-      put(lx, gy+1, lz, B.WOOD);
-      if (hash2(ox+lx, oz+lz, SEED+17) < 0.5) put(lx, gy+2, lz, B.WOOD);
+      put(lx, gy+1, lz, B.DEADWOOD);
+      const tall = hash2(ox+lx, oz+lz, SEED+17) < 0.5;
+      if (tall) put(lx, gy+2, lz, B.DEADWOOD);
+      if (lx>=0 && lx<CX && lz>=0 && lz<CZ)
+        snags.push({ x:ox+lx, z:oz+lz, topY:gy, trunk:tall?2:1, kind:'stump' });
     } else if (f.t === 'snag'){
       // A 1-wide, 9-tall bare WOOD column reads as a plank standing in a field —
       // this is the "weird geometry" in the wild. Use B.TRUNK, which is UNDRAWN,
@@ -1468,8 +2092,11 @@ function genChunk(cx, cz){
       if (lx>=0 && lx<CX && lz>=0 && lz<CZ)
         snags.push({ x:ox+lx, z:oz+lz, topY:gy, trunk:f.hh, kind:'bush' });
     } else if (f.t === 'rocks'){
-      put(lx, gy+1, lz, B.STONE);
-      if (hash2(ox+lx, oz+lz, SEED+18) < 0.6) put(lx+1, gy+1, lz, B.STONE);
+      put(lx, gy+1, lz, B.ROCK);
+      const pair = hash2(ox+lx, oz+lz, SEED+18) < 0.6;
+      if (pair) put(lx+1, gy+1, lz, B.ROCK);
+      if (lx>=0 && lx<CX && lz>=0 && lz<CZ)
+        snags.push({ x:ox+lx, z:oz+lz, topY:gy, trunk:1, r:pair?1:0, kind:'rocks' });
     }
   }
 
@@ -1484,6 +2111,18 @@ function genChunk(cx, cz){
     for (const s of structures()){
       if (s.x1 < ox || s.x0 > ox+CX-1 || s.z1 < oz || s.z0 > oz+CZ-1) continue;
       s.build(put);
+    }
+    // landmarks, from the deterministic grid rather than the authored list
+    for (const lm of landmarksNear(ox, oz)){
+      if (lm.x + lm.w < ox || lm.x - lm.w > ox+CX-1) continue;
+      if (lm.z + lm.w < oz || lm.z - lm.w > oz+CZ-1) continue;
+      buildLandmark(lm, put);
+      // ⚠️ The great tree is built out of TRUNK and LEAF, which are UNDRAWN — the
+      // mesher skips them and a real mesh is drawn over instead. Without an entry
+      // in this chunk's prop list it would be a completely INVISIBLE 20-block
+      // tree you walk into. Register it, on the chunk that owns its base.
+      if (lm.kind === 'greattree' && lm.x >= ox && lm.x < ox+CX && lm.z >= oz && lm.z < oz+CZ)
+        snags.push({ x:lm.x, z:lm.z, topY:lm.gy, trunk:15 + Math.floor(lm.s*8), kind:'greattree' });
     }
   }
 
@@ -1614,6 +2253,21 @@ const C_DRY  = new THREE.Color(0x9a9a55);   // sun-bleached straw
 const C_LUSH = new THREE.Color(0x3f6f2f);   // sheltered, deep
 const C_BARE = new THREE.Color(0x7d6242);   // worn through to earth
 const C_ROCK = new THREE.Color(0x8a8d94);
+// ── region palettes ──
+// Regions already decided what GROWS where — pine against oak, heath against
+// meadow — but every one of them stood on identical green, so the boundary
+// between an old wood and a heath was invisible from any distance. The ground is
+// the largest single surface on screen; if it never changes colour, nowhere ever
+// looks like anywhere else. Each region now pulls the turf toward its own hue and
+// its own weight, which is what makes crossing from one into another READ.
+const REGION_COL = {
+  oldwood:  { col:new THREE.Color(0x4d7434), amt:0.50 },   // deep, damp, shaded
+  pinewood: { col:new THREE.Color(0x3d5f43), amt:0.62 },   // cold blue-green needle litter
+  heath:    { col:new THREE.Color(0x8a7f4e), amt:0.66 },   // tawny, thin, half stone
+  meadow:   { col:new THREE.Color(0x82a24e), amt:0.44 },   // bright open pasture
+  marsh:    { col:new THREE.Color(0x5c7050), amt:0.60 },   // grey-green, waterlogged
+  ruinfield:{ col:new THREE.Color(0x7d8a5c), amt:0.48 },   // old fields going back to scrub
+};
 const _fc = new THREE.Color();
 // Per-voxel brightness jitter. Big flat stone surfaces (ruin walls, cliffs) look
 // like painted cardboard without it, so masonry gets far more than turf.
@@ -1633,6 +2287,7 @@ function buildChunkGeometry(cx, cz){
   // through to earth on slopes and hard ground. Computed once per column, not
   // per face — this sits in the hot path.
   const TINT = new Float32Array(CX*CZ*2);
+  const RCOL = new Array(CX*CZ);                  // which region's palette this column takes
   for (let lz=0; lz<CZ; lz++) for (let lx=0; lx<CX; lx++){
     const wx = ox+lx, wz = oz+lz;
     const m = fbm(wx*0.016, wz*0.016, 3, SEED+61);
@@ -1642,6 +2297,7 @@ function buildChunkGeometry(cx, cz){
     const i2 = (lz*CX+lx)*2;
     TINT[i2]   = clamp((m - 0.34) / 0.36, 0, 1);                    // 0 lush → 1 dry
     TINT[i2+1] = clamp((w - 0.56)*2.6 + slope*0.20, 0, 1);          // bare earth
+    RCOL[lz*CX+lx] = REGION_COL[regionAt(wx, wz)] || REGION_COL.meadow;
   }
 
   for (let y=0; y<=c.maxY; y++)
@@ -1671,9 +2327,13 @@ function buildChunkGeometry(cx, cz){
       if (!water){
         const ti = (lz*CX+lx)*2, dry = TINT[ti], wear = TINT[ti+1];
         if (b === B.GRASS){
-          _fc.lerp(C_LUSH, (1-dry)*0.45);
-          _fc.lerp(C_DRY,  dry*0.60);
-          _fc.lerp(C_BARE, wear*0.72);
+          // region first, so a pine wood floor is already cold and a heath
+          // already tawny before the local damp/wear variation goes on top
+          const rc = RCOL[lz*CX+lx];
+          _fc.lerp(rc.col, rc.amt);
+          _fc.lerp(C_LUSH, (1-dry)*0.34);
+          _fc.lerp(C_DRY,  dry*0.46);
+          _fc.lerp(C_BARE, wear*0.66);
         } else if (b === B.DIRT){
           _fc.lerp(C_DRY, dry*0.28);
         } else if (b === B.STONE || b === B.SLATE || b === B.MOSS){
@@ -2148,6 +2808,23 @@ const hemi = scene.children.find(o=>o.isHemisphereLight);
 const ambient = scene.children.find(o=>o.isAmbientLight);
 const WEATHER = { overcast: 0 };
 const ANIM = { phase: 0, bob: 0, lean: 0 };      // the player's gait, smoothed
+// The third-person camera's own angles, kept apart from the body's facing so the
+// camera can swing a full circle and come round the front. `at` is the smoothed
+// distance actually in use after terrain collision pulls it in.
+const CAM = { yaw: 0, pitch: -0.16, dist: 4.8, at: 4.8 };
+const CAM_MIN = 1.6, CAM_MAX = 9.5;
+// What the player considers "forward" for bearings, the compass and the minimap
+// arrow. In third person that is where the CAMERA looks, not where the body does.
+function viewYaw(){ return SETTINGS.thirdPerson ? CAM.yaw : player.yaw; }
+// Carry the angle across when the view changes, or every V snaps the world round
+// by however far the camera had been orbited.
+function toggleView(){
+  if (SETTINGS.thirdPerson){ player.yaw = CAM.yaw; player.pitch = clamp(CAM.pitch, -1.4, 1.4); }
+  else { CAM.yaw = player.yaw; CAM.pitch = clamp(player.pitch, -1.15, 1.30); CAM.at = CAM.dist; }
+  SETTINGS.thirdPerson = !SETTINGS.thirdPerson;
+  saveSettings();
+  toast(SETTINGS.thirdPerson ? 'Third person — mouse orbits, scroll to pull back' : 'First person', 1.6);
+}
 
 // ═══════════════════════════ LIGHT ═══════════════════════════
 // The vale is dark and you are paid to change that. Light is not decoration here:
@@ -2398,26 +3075,85 @@ const birchLeafMat = new THREE.MeshLambertMaterial({ color:0x74a04a, flatShading
 // their voxels still blocked movement — collision you cannot see is worse than a
 // green cube.
 const bushMat = new THREE.MeshLambertMaterial({ color:0x466b31, flatShading:true });
+// Pale grey stone under a low warm sun renders almost white and blows out the
+// whole midground; real field stone is much darker and a little warm.
+const rockMat = new THREE.MeshLambertMaterial({ color:0x6a6c70, flatShading:true });
+const deadMat = new THREE.MeshLambertMaterial({ color:0x6d5a42, flatShading:true });
+// A rock wants an irregular silhouette, not a sphere — a subdivided icosahedron
+// with its vertices pushed about once, at build time, gives every instance the
+// same lumpy shape, and non-uniform scale plus yaw makes them read as different
+// stones anyway.
+function lumpy(r, detail, amt, seed){
+  const g = new THREE.IcosahedronGeometry(r, detail);
+  const p = g.attributes.position;
+  let s = seed;
+  const rnd = ()=>{ s = (s*1664525 + 1013904223) & 0x7fffffff; return s/0x7fffffff; };
+  for (let i=0;i<p.count;i++){
+    const k = 1 + (rnd()-0.5)*amt;
+    p.setXYZ(i, p.getX(i)*k, p.getY(i)*k, p.getZ(i)*k);
+  }
+  g.computeVertexNormals();
+  return g;
+}
 const TREES = {
-  trunk:  mkInst(new THREE.CylinderGeometry(0.20, 0.38, 1, 6), barkMat),
-  birch:  mkInst(new THREE.CylinderGeometry(0.15, 0.24, 1, 6), birchMat),
-  oakTop: mkInst(new THREE.IcosahedronGeometry(1, 0), oakMat),
-  pineTop:mkInst(new THREE.ConeGeometry(1, 1, 7), pineMat),
-  birTop: mkInst(new THREE.IcosahedronGeometry(1, 0), birchLeafMat),
-  bushTop:mkInst(new THREE.IcosahedronGeometry(1, 0), bushMat, 4200),
+  // ⚠️ CAPS. Every one of these pools is one draw call, and overflowing one does
+  // not error — it silently drops instances, and it drops the ones LATE in the
+  // scan, which are the far ones. `oakTop` and `trunk` were both sitting exactly
+  // on 900 in ordinary woodland: distant oaks were losing their crowns and being
+  // drawn as bare poles, which is most of why the forest looked like telephone
+  // wires. Crown masses per tree went 3→4, so the ceiling has to go up with it.
+  trunk:  mkInst(new THREE.CylinderGeometry(0.20, 0.38, 1, 6), barkMat, 2600),
+  // Birches were 0.15 at the top over a 6-9 block trunk with one small crown:
+  // a telephone pole with a shrub balanced on it, and the woods were full of them.
+  birch:  mkInst(new THREE.CylinderGeometry(0.26, 0.36, 1, 6), birchMat, 1200),
+  oakTop: mkInst(new THREE.IcosahedronGeometry(1, 0), oakMat, 6000),
+  pineTop:mkInst(new THREE.ConeGeometry(1, 1, 7), pineMat, 3000),
+  birTop: mkInst(new THREE.IcosahedronGeometry(1, 0), birchLeafMat, 3600),
+  // measured peak across a transect of every region: 3777 against a 4200 cap.
+  // Too close — a denser seed would silently start dropping distant scrub.
+  bushTop:mkInst(new THREE.IcosahedronGeometry(1, 0), bushMat, 5600),
+  rock:   mkInst(lumpy(1, 1, 0.42, 20260816), rockMat, 3600),
+  dead:   mkInst(new THREE.CylinderGeometry(0.30, 0.36, 1, 6), deadMat, 1800),
 };
+// Instance colour. Every oak in the vale was byte-identical, which is most of why
+// a wood read as wallpaper — the eye finds the repeat instantly. A little hue and
+// value spread per instance is the cheapest possible fix and needs no new draw call.
+for (const k of ['oakTop','pineTop','birTop','bushTop','rock','dead']){
+  const m = TREES[k];
+  m.instanceColor = new THREE.InstancedBufferAttribute(
+    new Float32Array(m.userData.cap * 3), 3);
+  m.instanceColor.setUsage(THREE.DynamicDrawUsage);
+}
+const _tc = new THREE.Color();
 const _tm = new THREE.Matrix4(), _tq = new THREE.Quaternion(),
       _tv = new THREE.Vector3(), _ts = new THREE.Vector3(), _te = new THREE.Euler();
 let treeChunkKey = null;
 function rebuildTrees(pcx, pcz){
-  const counts = { trunk:0, birch:0, oakTop:0, pineTop:0, birTop:0, bushTop:0 };
-  const push = (key, x,y,z, sx,sy,sz, yaw, tilt)=>{
+  const counts = { trunk:0, birch:0, oakTop:0, pineTop:0, birTop:0, bushTop:0,
+                   rock:0, dead:0 };
+  // `tint` is a per-instance hue/value nudge in [-1,1]; foliage swings green
+  // toward yellow-olive or deep blue-green, stone toward warm or cold grey.
+  const push = (key, x,y,z, sx,sy,sz, yaw, tilt, tint)=>{
     if (counts[key] >= TREES[key].userData.cap) return;
     _te.set(tilt||0, yaw||0, 0);
     _tq.setFromEuler(_te);
     _tv.set(x,y,z); _ts.set(sx,sy,sz);
     _tm.compose(_tv, _tq, _ts);
-    TREES[key].setMatrixAt(counts[key]++, _tm);
+    const i = counts[key]++;
+    TREES[key].setMatrixAt(i, _tm);
+    const ic = TREES[key].instanceColor;
+    if (ic){
+      const t = tint || 0;
+      if (key === 'rock' || key === 'dead'){
+        const v = 1 + t*0.13;
+        _tc.setRGB(v + t*0.04, v, v - t*0.05);
+      } else {
+        // shift along green→olive rather than just lighter/darker, or a whole
+        // wood brightens and dims together and still reads as one object
+        _tc.setRGB(1 + t*0.26, 1 + t*0.10, 1 - t*0.20);
+      }
+      ic.setXYZ(i, _tc.r, _tc.g, _tc.b);
+    }
   };
   for (let dz=-VIEW; dz<=VIEW; dz++) for (let dx=-VIEW; dx<=VIEW; dx++){
     if (dx*dx+dz*dz > VIEW*VIEW) continue;
@@ -2430,13 +3166,40 @@ function rebuildTrees(pcx, pcz){
       const yaw = hash2(t.x, t.z, 991) * Math.PI * 2;
       const tilt = (hash2(t.x, t.z, 992) - 0.5) * 0.10;
       const jitter = 0.85 + hash2(t.x, t.z, 993) * 0.35;
-      if (t.kind === 'bush'){
+      const tint = (hash2(t.x, t.z, 994) - 0.5) * 2;      // −1..1, stable per column
+      if (t.kind === 'boulder'){
+        // Two or three overlapping masses, wider than tall and sunk into the
+        // ground, so it reads as stone that has been there a long time rather
+        // than a cube dropped on the grass. The voxels underneath are unchanged.
+        const rr = (t.r + 0.55), hh = t.trunk;
+        push('rock', x, base + hh*0.42 - 0.35, z, rr*1.18*jitter, hh*0.80, rr*1.06*jitter, yaw, tilt, tint);
+        push('rock', x - rr*0.34, base + hh*0.30 - 0.3, z + rr*0.30,
+             rr*0.80*jitter, hh*0.56, rr*0.74*jitter, yaw+1.9, tilt, tint*0.6);
+        if (t.r > 1)
+          push('rock', x + rr*0.36, base + hh*0.24 - 0.25, z - rr*0.26,
+               rr*0.66*jitter, hh*0.46, rr*0.62*jitter, yaw+3.7, tilt, tint*1.2);
+      } else if (t.kind === 'rocks'){
+        push('rock', x, base - 0.28, z, 0.62*jitter, 0.72, 0.58*jitter, yaw, tilt, tint);
+        if (t.r) push('rock', x+1, base - 0.34, z, 0.50*jitter, 0.58, 0.52*jitter, yaw+2.2, tilt, tint*0.7);
+        push('rock', x - 0.34, base - 0.40, z + 0.3, 0.36*jitter, 0.40, 0.34*jitter, yaw+4.0, tilt, tint*1.3);
+      } else if (t.kind === 'log'){
+        // a fallen trunk lying along its run, with the root plate at one end
+        const len = t.trunk;
+        const lyaw = t.dir ? Math.PI/2 : 0;
+        push('dead', x + (t.dir ? (len-1)/2 : 0), base - 0.10, z + (t.dir ? 0 : (len-1)/2),
+             1.0*jitter, len*0.98, 1.0*jitter, lyaw, Math.PI/2, tint);
+        push('rock', x - (t.dir?0.4:0), base - 0.2, z - (t.dir?0:0.4),
+             0.52, 0.46, 0.52, yaw, 0, tint*0.5);
+      } else if (t.kind === 'stump'){
+        const hh = t.trunk;
+        push('dead', x, base + hh*0.42 - 0.2, z, 1.15*jitter, hh*0.9, 1.15*jitter, yaw, tilt, tint);
+      } else if (t.kind === 'bush'){
         // Three overlapping rounded masses at different heights — a shrub, rather
         // than the 3x3 green cube the raw voxels make.
         const bh = 0.8 + t.trunk*0.55;
-        push('bushTop', x,        base + bh*0.42, z,        1.9*jitter, bh, 1.9*jitter, yaw, tilt);
-        push('bushTop', x - 0.55, base + bh*0.30, z + 0.45, 1.35*jitter, bh*0.72, 1.35*jitter, yaw+2.0, tilt);
-        push('bushTop', x + 0.5,  base + bh*0.34, z - 0.4,  1.25*jitter, bh*0.66, 1.25*jitter, yaw+4.1, tilt);
+        push('bushTop', x,        base + bh*0.42, z,        1.9*jitter, bh, 1.9*jitter, yaw, tilt, tint);
+        push('bushTop', x - 0.55, base + bh*0.30, z + 0.45, 1.35*jitter, bh*0.72, 1.35*jitter, yaw+2.0, tilt, tint*0.7);
+        push('bushTop', x + 0.5,  base + bh*0.34, z - 0.4,  1.25*jitter, bh*0.66, 1.25*jitter, yaw+4.1, tilt, tint*1.2);
       } else if (t.kind === 'snag'){
         // A dead tree: a tapered spar, snapped off at the top, with a couple of
         // broken limbs. Narrow at the base so it never reads as a fence post.
@@ -2445,28 +3208,48 @@ function rebuildTrees(pcx, pcz){
         push('trunk', x + 0.42, base + h*0.62, z, 0.62, 0.20, 0.20, yaw+1.2, 0.5);
         if (jitter > 1.05)
           push('trunk', x - 0.36, base + h*0.44, z + 0.2, 0.5, 0.18, 0.18, yaw+3.4, -0.45);
+      } else if (t.kind === 'greattree'){
+        // The landmark oak. Same parts as an ordinary one, at four times the size,
+        // which is the entire point — scale is what makes something a landmark.
+        push('trunk', x, base + h*0.5, z, 3.1, h+1.0, 3.1, yaw, tilt*0.3, tint*0.3);
+        push('oakTop', x,        base + h + 1.2, z,        7.4, 5.2, 7.4, yaw,     tilt*0.2, tint);
+        push('oakTop', x - 3.4,  base + h - 1.4, z + 2.6,  5.6, 4.0, 5.6, yaw+2.1, tilt*0.2, tint*0.6);
+        push('oakTop', x + 3.6,  base + h - 0.9, z - 2.4,  5.2, 3.8, 5.2, yaw+4.0, tilt*0.2, tint*1.3);
+        push('oakTop', x + 0.4,  base + h + 3.6, z - 0.6,  4.4, 3.2, 4.4, yaw+5.2, tilt*0.2, tint*0.8);
+        push('oakTop', x - 1.2,  base + h - 3.6, z - 2.9,  4.0, 2.9, 4.0, yaw+1.0, tilt*0.2, tint*1.1);
       } else if (t.kind === 'pine'){
-        push('trunk', x, base + h*0.5, z, 0.75, h+1.2, 0.75, yaw, tilt);
-        for (let i=0;i<3;i++){
-          const f = i/2;
-          push('pineTop', x, base + h - 1.2 + i*1.5, z,
-               (2.15 - f*1.05)*jitter, 2.4 - f*0.5, (2.15 - f*1.05)*jitter, yaw + i*0.5, tilt);
+        push('trunk', x, base + h*0.5, z, 0.75, h+1.2, 0.75, yaw, tilt, tint*0.4);
+        for (let i=0;i<4;i++){
+          const f = i/3;
+          push('pineTop', x, base + h - 2.0 + i*1.42, z,
+               (2.45 - f*1.35)*jitter, 2.6 - f*0.55, (2.45 - f*1.35)*jitter, yaw + i*0.5, tilt, tint);
         }
       } else if (t.kind === 'birch'){
-        push('birch', x, base + h*0.5, z, 1, h+0.8, 1, yaw, tilt);
-        push('birTop', x, base + h + 0.25, z, 1.55*jitter, 1.35, 1.55*jitter, yaw, tilt);
-        push('birTop', x + 0.35, base + h - 0.75, z - 0.25, 1.05*jitter, 0.95, 1.05*jitter, yaw+1.1, tilt);
+        // A birch crown is a tall airy plume, not one ball balanced on a stick.
+        // Four staggered masses over a much thicker bole is what stops a stand of
+        // birches reading as a row of telephone poles.
+        push('birch', x, base + h*0.5, z, 1, h+0.8, 1, yaw, tilt, tint*0.3);
+        push('birTop', x, base + h + 0.55, z, 1.45*jitter, 1.60, 1.45*jitter, yaw, tilt, tint);
+        push('birTop', x - 0.42, base + h - 0.45, z + 0.30, 1.30*jitter, 1.25, 1.30*jitter, yaw+1.1, tilt, tint*0.7);
+        push('birTop', x + 0.46, base + h - 1.25, z - 0.32, 1.15*jitter, 1.10, 1.15*jitter, yaw+3.0, tilt, tint*1.3);
+        push('birTop', x + 0.10, base + h - 2.10, z + 0.40, 0.92*jitter, 0.90, 0.92*jitter, yaw+4.6, tilt, tint*0.5);
       } else {
-        push('trunk', x, base + h*0.5, z, 1, h+0.6, 1, yaw, tilt);
-        push('oakTop', x, base + h + 0.35, z, 2.0*jitter, 1.55, 2.0*jitter, yaw, tilt);
-        push('oakTop', x - 0.55, base + h - 0.35, z + 0.4, 1.45*jitter, 1.15, 1.45*jitter, yaw+2.1, tilt);
-        push('oakTop', x + 0.6, base + h - 0.15, z - 0.35, 1.30*jitter, 1.05, 1.30*jitter, yaw+4.0, tilt);
+        push('trunk', x, base + h*0.5, z, 1.15, h+0.6, 1.15, yaw, tilt, tint*0.3);
+        push('oakTop', x, base + h + 0.35, z, 2.25*jitter, 1.70, 2.25*jitter, yaw, tilt, tint);
+        push('oakTop', x - 0.62, base + h - 0.35, z + 0.45, 1.65*jitter, 1.25, 1.65*jitter, yaw+2.1, tilt, tint*0.6);
+        push('oakTop', x + 0.68, base + h - 0.15, z - 0.40, 1.50*jitter, 1.15, 1.50*jitter, yaw+4.0, tilt, tint*1.35);
+        push('oakTop', x + 0.05, base + h + 1.05, z - 0.10, 1.30*jitter, 1.00, 1.30*jitter, yaw+5.2, tilt, tint*0.8);
       }
     }
   }
   for (const k of Object.keys(counts)){
     TREES[k].count = counts[k];
     TREES[k].instanceMatrix.needsUpdate = true;
+    if (TREES[k].instanceColor) TREES[k].instanceColor.needsUpdate = true;
+    // Overflow is silent and it eats the FAR instances first, so say so loudly
+    // rather than wondering later why the horizon is full of bare trunks.
+    if (counts[k] >= TREES[k].userData.cap)
+      console.warn(`[strata] instance pool "${k}" is full at ${counts[k]} — raise its cap`);
   }
   return counts;
 }
@@ -2837,7 +3620,8 @@ function makeBody(kind){
   const hip = new THREE.Mesh(new THREE.CylinderGeometry(tw*0.42, tw*0.34, 0.22, 8)
     .scale(1, 1, td/tw*1.5), tm);
   hip.position.y = 0.50;
-  const head  = new THREE.Mesh(new THREE.BoxGeometry(0.44,0.42,0.42), tm); head.position.y = 1.44;
+  const head  = new THREE.Mesh(headGeo(0.44),
+    new THREE.MeshLambertMaterial({ color:K.trim, flatShading:true })); head.position.y = 1.44;
   addFace(head, 0.42, { eyeCol: K.glow || 0xcfd6df, sunken:true });
   const neck  = new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.15,0.16,6), tm); neck.position.y=1.22;
   const limb = (r0,r1,len)=> new THREE.CylinderGeometry(r0, r1, len, 6);
@@ -3638,6 +4422,51 @@ function nextWaymark(fromX, fromZ){
   return { dist: Math.round(bd), dir: BEARING_NAME[oct] };
 }
 
+// ── fires out in the world ──────────────────────────────────────────────────
+// The gate braziers and the waystone lamps are EMBER voxels, and a voxel is lit
+// by the sun like any other block — so at midnight, the fires on top of
+// Fendmere's gate were the darkest things in the picture. In a game whose whole
+// premise is who is carrying the light, that is close to a bug. A small pool of
+// point lights follows the player to the nearest of them.
+const WORLD_FIRES = (()=>{
+  const out = [];
+  const gx = TOWN.x+GATE.dx, gz = TOWN.z+GATE.dz, gg = heightAt(gx, gz);
+  const px = Math.round(-Math.sin(GATE.th)), pz = Math.round(Math.cos(GATE.th));
+  for (const s of [-3, 3]) out.push([gx+px*s, gg+11, gz+pz*s]);       // the gate braziers
+  for (let n=1; n<=6; n++){                                            // the waystone lamps
+    const t = 0.30 + n*0.108;
+    const wx = Math.round(HOME.x + (TOWN.x-HOME.x)*t), wz = Math.round(HOME.z + (TOWN.z-HOME.z)*t);
+    const ox = Math.round(-Math.sin(GATE.th)*3), oz = Math.round(Math.cos(GATE.th)*3);
+    out.push([wx+ox, heightAt(wx+ox, wz+oz)+5, wz+oz]);
+  }
+  out.push([HOME.x, SHORE_Y+1, HOME.z]);                               // the camp fire
+  return out;
+})();
+const worldFireLights = [];
+function buildWorldFires(){
+  if (worldFireLights.length) return;
+  for (let i=0;i<4;i++){
+    const l = new THREE.PointLight(0xffa855, 0, 26, 1.7);
+    worldFireLights.push(l); scene.add(l);
+  }
+}
+function tickWorldFires(t){
+  if (!worldFireLights.length) return;
+  // Bright at night, all but off at noon — a fire you can see in daylight looks
+  // like a bug, and the point of these is to be findable after dark.
+  const night = 1 - clamp(daylight()*1.5, 0, 1);
+  const near = WORLD_FIRES
+    .map(f=>({ f, d:Math.hypot(f[0]-player.pos.x, f[2]-player.pos.z) }))
+    .sort((a,b)=>a.d-b.d).slice(0, worldFireLights.length);
+  for (let i=0;i<worldFireLights.length;i++){
+    const L = worldFireLights[i], n = near[i];
+    if (!n || n.d > 46 || night < 0.04){ L.intensity = 0; continue; }
+    L.position.set(n.f[0]+0.5, n.f[1], n.f[2]+0.5);
+    const flicker = 0.86 + 0.14*Math.sin(t*7.3 + i*2.1) * Math.sin(t*3.1 + i);
+    L.intensity = night * 5.2 * flicker * clamp(1 - n.d/46, 0, 1);
+  }
+}
+
 // ── barrow lighting ─────────────────────────────────────────────────────────
 // The sun can't reach a burial hall, and the sky ambient alone renders it flat.
 // A small pool of point lights follows you to the nearest braziers.
@@ -3703,15 +4532,25 @@ function mapColour(x, z){
   return MAP_COL[regionAt(x, z)] || MAP_COL.meadow;
 }
 // Landmarks worth drawing: the things you would actually put on a map.
+//
+// `pierce` means the mark shows THROUGH the fog. The rule is: anything you have
+// been TOLD about is on your map, anything you have to FIND is not. Being sent to
+// kill something twelve hundred paces east and then having the map refuse to say
+// where east is isn't discovery, it's a missing feature. Caches stay fogged —
+// those are the things you find.
 function mapMarks(){
-  const m = [ { x:HOME.x, z:HOME.z, c:'#ffb35e', s:'fire' },
-              { x:TOWN.x, z:TOWN.z, c:'#e8d9a8', s:'town' },
-              { x:BARROW.x, z:BARROW.z, c:'#b06a9a', s:'barrow' } ];
-  for (const b of litBeacons()) m.push({ x:b.x, z:b.z, c:'#ffc26a', s:'beacon' });
+  const m = [ { x:HOME.x, z:HOME.z, c:'#ffb35e', s:'fire',  pierce:true },
+              { x:TOWN.x, z:TOWN.z, c:'#e8d9a8', s:'town',  pierce:true },
+              { x:BARROW.x, z:BARROW.z, c:'#b06a9a', s:'barrow',
+                pierce: player.q.barrow !== 'none' || barrowOffered() } ];
+  for (const b of litBeacons()) m.push({ x:b.x, z:b.z, c:'#ffc26a', s:'beacon', pierce:true });
   for (const c of chests)
     if (!player.q.chests[c.id]) m.push({ x:c.x, z:c.z, c:'#9fd0ff', s:'cache' });
   for (const q of player.q.active)
-    if (q.site) m.push({ x:q.site.x, z:q.site.z, c:'#9ac25c', s:'errand' });
+    if (q.site) m.push({ x:q.site.x, z:q.site.z, s:'errand', pierce:true,
+                         c: q.main ? '#ff9a6a' : '#9ac25c',
+                         label: q.title, main: !!q.main,
+                         ready: q.have >= q.need });
   return m;
 }
 let _miniT = 0;
@@ -3732,11 +4571,25 @@ function drawMinimap(dt){
     g.fillStyle = mapColour(wx, wz);
     g.fillRect(sx, sy, 3, 3);
   }
-  // marks
+  // marks — and for anything you have been told about, an arrow pinned to the rim
+  // when it is off the minimap, so the minimap answers "which way" and not just
+  // "what is within 100 paces of me"
   for (const mk of mapMarks()){
-    const sx = half + (mk.x-px)/SPAN, sy = half + (mk.z-pz)/SPAN;
-    if ((sx-half)**2 + (sy-half)**2 > half*half) continue;
-    g.fillStyle = mk.c; g.beginPath(); g.arc(sx, sy, 3, 0, 6.29); g.fill();
+    let sx = half + (mk.x-px)/SPAN, sy = half + (mk.z-pz)/SPAN;
+    const off = (sx-half)**2 + (sy-half)**2 > (half-4)**2;
+    if (off){
+      if (!mk.pierce) continue;
+      const a = Math.atan2(sy-half, sx-half), R = half-6;
+      sx = half + Math.cos(a)*R; sy = half + Math.sin(a)*R;
+      g.save(); g.translate(sx, sy); g.rotate(a);
+      g.fillStyle = mk.c; g.beginPath();
+      g.moveTo(4,0); g.lineTo(-3,3); g.lineTo(-3,-3); g.closePath(); g.fill();
+      g.restore();
+      continue;
+    }
+    g.fillStyle = mk.c;
+    g.beginPath(); g.arc(sx, sy, mk.main ? 4 : 3, 0, 6.29); g.fill();
+    if (mk.main){ g.strokeStyle = 'rgba(0,0,0,.65)'; g.lineWidth = 1.2; g.stroke(); }
   }
   // creatures you can actually see, and the wildlife
   for (const e of entities){
@@ -3746,7 +4599,7 @@ function drawMinimap(dt){
     g.fillStyle = '#cf5a4c'; g.fillRect(sx-1.5, sy-1.5, 3, 3);
   }
   // you, and which way you are facing
-  g.save(); g.translate(half, half); g.rotate(-player.yaw);
+  g.save(); g.translate(half, half); g.rotate(-viewYaw());
   g.fillStyle = '#fff6e0'; g.beginPath();
   g.moveTo(0,-6); g.lineTo(4,5); g.lineTo(0,2.5); g.lineTo(-4,5); g.closePath(); g.fill();
   g.restore();
@@ -3763,40 +4616,120 @@ function toggleWorldMap(){
 function drawWorldMap(){
   const cv = document.getElementById('wmC');
   const g = cv.getContext('2d');
-  const S = cv.width, cells = MAP_R*2, px = S/cells;
+  const S = cv.width;
   g.fillStyle = '#080b12'; g.fillRect(0,0,S,S);
+
+  // ── fit the view to what there is to look at ──
+  // MAP_R covers 1200 world units square. Everything the game actually contains
+  // sits inside about 300 of them, so a fixed extent drew the entire vale as a
+  // thumbnail-sized knot of overlapping labels in the middle of a black field.
+  // Frame the content instead: everywhere you have been, everything you have been
+  // told about, and you — then pad it and square it up.
+  const marks = mapMarks();
+  let x0 = player.pos.x, x1 = player.pos.x, z0 = player.pos.z, z1 = player.pos.z;
+  const grow = (x,z)=>{ if(x<x0)x0=x; if(x>x1)x1=x; if(z<z0)z0=z; if(z>z1)z1=z; };
+  grow(HOME.x, HOME.z); grow(TOWN.x, TOWN.z);
+  for (const mk of marks) if (mk.pierce) grow(mk.x, mk.z);
+  for (const k of SEEN){
+    const [cx, cz] = k.split(',');
+    grow(+cx*MAP_CELL, +cz*MAP_CELL);
+  }
+  const PAD = 34;
+  x0 -= PAD; x1 += PAD; z0 -= PAD; z1 += PAD;
+  // square it, and never zoom in past a sensible minimum
+  const cx0 = (x0+x1)/2, cz0 = (z0+z1)/2;
+  const span = Math.max(240, x1-x0, z1-z0);
+  const VX0 = cx0 - span/2, VZ0 = cz0 - span/2;
+  const sc = S / span;                              // pixels per world unit
+  const toSX = (w)=> (w - VX0) * sc;
+  const toSZ = (w)=> (w - VZ0) * sc;
+  const toS  = toSX;                                // x and z share the scale
+
+  const cell = MAP_CELL * sc;
   let seen = 0;
-  for (let cz=-MAP_R; cz<MAP_R; cz++) for (let cx=-MAP_R; cx<MAP_R; cx++){
-    if (!SEEN.has(mapKey(cx,cz))) continue;        // unvisited stays under fog
+  const c0 = Math.floor(VX0/MAP_CELL), cz0i = Math.floor(VZ0/MAP_CELL);
+  const cn = Math.ceil(span/MAP_CELL) + 2;
+  for (let cz=cz0i; cz<cz0i+cn; cz++) for (let cxi=c0; cxi<c0+cn; cxi++){
+    if (!SEEN.has(mapKey(cxi,cz))) continue;       // unvisited stays under fog
     seen++;
-    g.fillStyle = mapColour(cx*MAP_CELL, cz*MAP_CELL);
-    g.fillRect((cx+MAP_R)*px, (cz+MAP_R)*px, px+0.6, px+0.6);
+    g.fillStyle = mapColour(cxi*MAP_CELL, cz*MAP_CELL);
+    g.fillRect(toSX(cxi*MAP_CELL), toSZ(cz*MAP_CELL), cell+0.6, cell+0.6);
   }
   // a soft vignette so the fog reads as fog rather than as a black background
   const grd = g.createRadialGradient(S/2,S/2,S*0.30, S/2,S/2,S*0.62);
   grd.addColorStop(0,'rgba(8,11,18,0)'); grd.addColorStop(1,'rgba(8,11,18,.55)');
   g.fillStyle = grd; g.fillRect(0,0,S,S);
-  const toS = (w)=> (w/MAP_CELL + MAP_R)*px;
-  for (const mk of mapMarks()){
-    if (!SEEN.has(mapKey(Math.round(mk.x/MAP_CELL), Math.round(mk.z/MAP_CELL)))) continue;
-    const sx = toS(mk.x), sy = toS(mk.z);
-    g.fillStyle = mk.c;
-    g.beginPath(); g.arc(sx, sy, mk.s==='town'?6:4.5, 0, 6.29); g.fill();
-    g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 1.4; g.stroke();
-    if (mk.s === 'town' || mk.s === 'barrow' || mk.s === 'fire'){
-      g.fillStyle = '#e8e2d4'; g.font = '11px monospace'; g.textAlign = 'center';
-      g.fillText(mk.s === 'town' ? TOWN_NAME : mk.s === 'barrow' ? 'The Barrow' : 'Camp',
-                 sx, sy - 9);
+  // a scale bar, because a map that rescales itself has to say what it is showing
+  const barW = S*0.18, barM = Math.round(barW/sc);
+  g.strokeStyle = 'rgba(232,226,212,.5)'; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(S-18-barW, S-20); g.lineTo(S-18, S-20);
+  g.moveTo(S-18-barW, S-24); g.lineTo(S-18-barW, S-16);
+  g.moveTo(S-18, S-24); g.lineTo(S-18, S-16); g.stroke();
+  g.fillStyle = 'rgba(232,226,212,.6)'; g.font = '10px monospace'; g.textAlign = 'center';
+  g.fillText(barM + 'm', S-18-barW/2, S-27);
+  // Labels stack when two marks land on the same spot; nudge each one clear of
+  // whatever has already been drawn rather than letting them overprint.
+  const placed = [];
+  for (const mk of marks){
+    const known = SEEN.has(mapKey(Math.round(mk.x/MAP_CELL), Math.round(mk.z/MAP_CELL)));
+    if (!known && !mk.pierce) continue;
+    const sx = toSX(mk.x), sy = toSZ(mk.z);
+    const r = mk.s==='town' ? 6 : mk.main ? 6 : 4.5;
+    if (!known){
+      // Told about, but not yet walked to: a hollow ring, so the map distinguishes
+      // "I have been here" from "I know this is there".
+      g.strokeStyle = mk.c; g.lineWidth = 2;
+      g.beginPath(); g.arc(sx, sy, r, 0, 6.29); g.stroke();
+      g.beginPath(); g.arc(sx, sy, 1.5, 0, 6.29); g.fillStyle = mk.c; g.fill();
+    } else {
+      g.fillStyle = mk.c;
+      g.beginPath(); g.arc(sx, sy, r, 0, 6.29); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 1.4; g.stroke();
+    }
+    // Objectives carry their name and how far off they are. A dot you cannot
+    // identify is only marginally better than no dot.
+    let label = null;
+    if (mk.s === 'town') label = TOWN_NAME;
+    else if (mk.s === 'barrow') label = 'The Barrow';
+    else if (mk.s === 'fire') label = 'Camp';
+    else if (mk.s === 'errand') label = mk.label;
+    if (label){
+      const d = Math.round(Math.hypot(mk.x-player.pos.x, mk.z-player.pos.z));
+      g.font = mk.main ? 'bold 11px monospace' : '11px monospace';
+      g.textAlign = 'center';
+      const w = g.measureText(label).width;
+      let ly = sy - r - 4;
+      // slide up until this label clears every label already on the page
+      for (let guard=0; guard<12; guard++){
+        const hit = placed.some(p=> Math.abs(p.y-ly) < 12 && Math.abs(p.x-sx) < (p.w+w)/2 + 6);
+        if (!hit) break;
+        ly -= 13;
+      }
+      placed.push({ x:sx, y:ly, w });
+      g.lineWidth = 3; g.strokeStyle = 'rgba(6,9,14,.85)';
+      g.strokeText(label, sx, ly);
+      g.fillStyle = mk.main ? '#ffd9c2' : '#e8e2d4';
+      g.fillText(label, sx, ly);
+      if (mk.s === 'errand'){
+        const sub = mk.ready ? 'ready — return to ' + TOWN_NAME : d + 'm';
+        g.font = '9px monospace';
+        g.strokeText(sub, sx, sy + r + 11);
+        g.fillStyle = mk.ready ? '#9ac25c' : '#9aa4b4';
+        g.fillText(sub, sx, sy + r + 11);
+      }
     }
   }
-  const sx = toS(player.pos.x), sy = toS(player.pos.z);
-  g.save(); g.translate(sx, sy); g.rotate(-player.yaw);
+  const sx = toSX(player.pos.x), sy = toSZ(player.pos.z);
+  g.save(); g.translate(sx, sy); g.rotate(-viewYaw());
   g.fillStyle = '#fff6e0'; g.beginPath();
   g.moveTo(0,-9); g.lineTo(6,7); g.lineTo(0,3.5); g.lineTo(-6,7); g.closePath(); g.fill();
   g.strokeStyle = '#1a1410'; g.lineWidth = 1.5; g.stroke();
   g.restore();
+  // "% of the vale seen" is measured against the vale, not against the whole
+  // 1200-unit grid the map used to draw — the old figure was stuck near 1%.
+  const valeCells = Math.PI*Math.pow(VALE_R*2.2/MAP_CELL, 2);
   document.getElementById('wmSeen').textContent =
-    Math.min(99, Math.round(seen / (cells*cells) * 100 * 6));
+    Math.min(99, Math.max(1, Math.round(seen / valeCells * 100)));
 }
 
 // ── wildlife ────────────────────────────────────────────────────────────────
@@ -3915,17 +4848,41 @@ function faceMat(col, glow){
                           : new THREE.MeshLambertMaterial({ color:col }));
   return _faceMats.get(k);
 }
+// A perfect cube for a head is the single loudest "this is a placeholder" signal
+// a character can send, and both the player and every humanoid creature had one.
+// This is still low-poly and still faceted — it just has a jaw, a crown and some
+// asymmetry front-to-back, which is all it takes to stop reading as a brick.
+// Keeps the flat front face the eyes are pinned to.
+function headGeo(w){
+  const g = new THREE.SphereGeometry(w*0.54, 7, 5);
+  const p = g.attributes.position;
+  for (let i=0;i<p.count;i++){
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const t = clamp((y/(w*0.54) + 1) * 0.5, 0, 1);       // 0 chin → 1 crown
+    // narrow the jaw, flatten the crown, and flatten the face plane a little
+    const nx = x * (0.80 + t*0.30);
+    const ny = y * (1.04 - t*0.10) + w*0.03;
+    const nz = z * (0.76 + t*0.20) * (z > 0 ? 0.90 : 1.0);
+    p.setXYZ(i, nx, ny, nz);
+  }
+  g.computeVertexNormals();
+  return g;
+}
 function addFace(head, w, o={}){
   const d = o.depth !== undefined ? o.depth : w*0.5;
   const eyeCol = o.eyeCol || 0x241c14;
   const glow = !!o.eyeCol && o.eyeCol !== 0x241c14 && o.eyeCol !== 0x2a2016;
-  const ew = o.small ? w*0.16 : w*0.20, eh = o.small ? w*0.12 : w*0.16;
-  const ex = w*0.24, ey = o.sunken ? w*0.06 : w*0.08;
+  // Eyes were w*0.20 wide with a white backing 1.35x bigger again — on a head
+  // this size that is a pair of dinner plates, and with the orbit camera you can
+  // now walk round the front and look straight at them. Smaller, and the white
+  // reduced to a hairline so it still catches light without going googly.
+  const ew = o.small ? w*0.12 : w*0.135, eh = o.small ? w*0.09 : w*0.105;
+  const ex = w*0.21, ey = o.sunken ? w*0.05 : w*0.07;
   for (const s of [-1, 1]){
     // a sliver of white behind the pupil gives the eye somewhere to sit
     if (!o.small && !glow){
       const wsl = new THREE.Mesh(_faceGeo, _eyeWhiteMat);
-      wsl.scale.set(ew*1.35, eh*1.35, w*0.04);
+      wsl.scale.set(ew*1.22, eh*1.18, w*0.04);
       wsl.position.set(s*ex, ey, d - w*0.005);
       head.add(wsl);
     }
@@ -4016,8 +4973,9 @@ function makeVillager(color, hat){
   const bm = new THREE.MeshLambertMaterial({ color });
   const tm = new THREE.MeshLambertMaterial({ color:0x4a4032 });
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.58,0.76,0.40), bm); torso.position.y=0.86;
-  const head  = new THREE.Mesh(new THREE.BoxGeometry(0.44,0.44,0.44),
-                  new THREE.MeshLambertMaterial({ color:0xd6b48f })); head.position.y=1.46;
+  const head  = new THREE.Mesh(headGeo(0.44),
+                  new THREE.MeshLambertMaterial({ color:0xd6b48f, flatShading:true }));
+  head.position.y=1.46;
   addFace(head, 0.44, { brow:true });
   const cap   = new THREE.Mesh(new THREE.BoxGeometry(0.50,0.14,0.50),
                   new THREE.MeshLambertMaterial({ color:hat })); cap.position.y=1.75;
@@ -4036,11 +4994,17 @@ function buildTownsfolk(){
   for (const t of TOWNSFOLK) scene.remove(t.mesh);
   TOWNSFOLK.length = 0;
   const spots = [
-    { role:'reeve', name:'Reeve Ordwin', color:0x6b5f8a, hat:0x3d3550, dx: 4, dz: 5,
+    // ⚠️ These are FIXED offsets and the town now has buildings on a plan, so a
+    // position that was open ground before the rebuild can end up inside a wall
+    // — five of the seven were, and the fallback drops them on the ROOF, because
+    // surfaceY returns the top of whatever is there. Each trader now stands just
+    // outside their own door, facing the square, which is also where you would
+    // actually look for them.
+    { role:'reeve', name:'Reeve Ordwin', color:0x6b5f8a, hat:0x3d3550, dx:-9, dz:-14,
       line:'Fendmere always has work. Little of it pleasant.' },
-    { role:'quartermaster', name:'Quartermaster Hess', color:0x7a5a3a, hat:0x4e3a24, dx:-5, dz: 3,
+    { role:'quartermaster', name:'Quartermaster Hess', color:0x7a5a3a, hat:0x4e3a24, dx:-10, dz: 0,
       line:'Coin first. Then we talk about what I keep in the back.' },
-    { role:'innkeeper', name:'Maerin of the Kettle', color:0x8a5a5a, hat:0x5a3232, dx:-1, dz:-6,
+    { role:'innkeeper', name:'Maerin of the Kettle', color:0x8a5a5a, hat:0x5a3232, dx:16, dz:-6,
       line:'Bed\'s warm, roof\'s sound, and I lock the door at dark. Twelve coin.' },
     // people who simply live here
     // The gate. Somebody has to be standing at it, or a wall is just scenery.
@@ -4049,15 +5013,15 @@ function buildTownsfolk(){
       lines:['State your business.',
              'Nobody comes through after dark. That is the rule and I keep it.',
              'The lamplighter, is it. Mind the road.'] },
-    { role:'idler', name:'Old Cobb',   color:0x5a6a4a, hat:0x3a442e, dx: 9, dz:-4, wander:7,
+    { role:'idler', name:'Old Cobb',   color:0x5a6a4a, hat:0x3a442e, dx: 4, dz: 5, wander:5,
       lines:['Rain coming. My knee says so.',
              'They walled that barrow up for a reason, you know.',
              'You\'re the one from the fire. Word gets round.'] },
-    { role:'idler', name:'Wren',       color:0x4a6a7a, hat:0x2e4450, dx:-8, dz:-2, wander:9,
+    { role:'idler', name:'Wren',       color:0x4a6a7a, hat:0x2e4450, dx:-4, dz:-4, wander:5,
       lines:['I count the gate. Someone has to.',
              'Wolves came near the fence twice this week.',
              'Don\'t go out past dark. Just don\'t.'] },
-    { role:'idler', name:'Tomas Bell', color:0x7a6a4a, hat:0x4e442e, dx: 2, dz:11, wander:8,
+    { role:'idler', name:'Tomas Bell', color:0x7a6a4a, hat:0x4e442e, dx: 7, dz:-1, wander:5,
       lines:['Thatch wants redoing before the wet.',
              'My brother went east and didn\'t come back. That was spring.',
              'If you\'re selling, Hess is fair. Mostly.'] },
@@ -4067,7 +5031,18 @@ function buildTownsfolk(){
     // Hand-placed, in a town where trees are suppressed — so fall back to the
     // plain surface. A house floor sits at the building's centre height, not the
     // column's, which is why the strict check was dropping the two traders.
-    let y = spawnGroundY(x, z);
+    // Prefer a genuinely open column: the terrain height with two blocks of air
+    // over it. surfaceY() is the LAST resort because it happily returns the top
+    // of a thatch roof, and a quartermaster on his own roof is very hard to
+    // notice in a screenshot and very obvious to a player.
+    // ⚠️ Requiring TWO clear blocks put anyone standing under a market awning up
+    // on top of it — the awning sits two above the ground, so the column failed
+    // the test and the fallback returned the top of the canvas. One clear block
+    // over open terrain is the right test; people stand under things.
+    let y = null;
+    const gy = heightAt(x, z);
+    if (getBlock(x, gy+1, z) === B.AIR) y = gy + 1;
+    if (y === null) y = spawnGroundY(x, z);
     if (y === null) y = surfaceY(x, z);
     if (y === null) continue;
     const m = makeVillager(s.color, s.hat);
@@ -4168,7 +5143,41 @@ function despawnEntity(e){
   const i = entities.indexOf(e); if (i >= 0) entities.splice(i,1);
 }
 // ── errand bookkeeping ──────────────────────────────────────────────────────
+// ── the bestiary ────────────────────────────────────────────────────────────
+// You learn a creature by fighting it, which is the only way a bestiary is worth
+// having: at one kill it is a name and a picture, and by the fifth it has told you
+// how the thing actually plays. Reading the entry for something you have never met
+// would be reading the designer's notes.
+const BEST_TIERS = [
+  { at:0, label:'Encountered' },
+  { at:1, label:'Studied' },
+  { at:3, label:'Understood' },
+  { at:6, label:'Mastered' },
+];
+function bestTier(kind){
+  const n = (player.kills && player.kills[kind]) || 0;
+  let t = 0;
+  for (let i=0;i<BEST_TIERS.length;i++) if (n >= BEST_TIERS[i].at) t = i;
+  return t;
+}
+function noteSeen(kind){
+  if (!kind || !KINDS[kind]) return;
+  if (!player.seenKinds) player.seenKinds = new Set();
+  if (player.seenKinds.has(kind)) return;
+  player.seenKinds.add(kind);
+  toast(`${KINDS[kind].name} added to the bestiary — B`, 3);
+}
+function noteKill(kind){
+  if (!kind || !KINDS[kind]) return;
+  noteSeen(kind);
+  if (!player.kills) player.kills = {};
+  const was = bestTier(kind);
+  player.kills[kind] = (player.kills[kind] || 0) + 1;
+  const now = bestTier(kind);
+  if (now > was) toast(`${KINDS[kind].name} — ${BEST_TIERS[now].label}`, 3);
+}
 function creditKill(e){
+  noteKill(e.kind);
   if (player.run) player.run.killed++;
   // Vigil turns "kill the weak one first" into a sustain plan instead of just
   // arithmetic, which is the sort of thing a trinket should be for.
@@ -4246,14 +5255,13 @@ function populateSites(){
   }
 }
 function acceptBarrow(){
-  if (player.q.active.length >= 2){ toast('You can carry two errands'); return; }
   player.q.barrow = 'taken';
   player.q.active.push({ ...BARROW_QUEST });
   SFX.ui(); toast('Taken: Open the barrow', 3);
   drawQuestHud(); drawTown();
 }
 function acceptErrand(i){
-  if (player.q.active.length >= 2){ toast('You can carry two errands'); return; }
+  if (errandsInHand() >= 2){ toast('You can carry two errands'); return; }
   const q = player.q.offers[i];
   if (!q) return;
   q.id = 'q' + (Date.now() % 1e7) + i;
@@ -4337,6 +5345,8 @@ const player = {
   st: { mgt:STAT_BASE, vit:STAT_BASE, int:STAT_BASE, agi:STAT_BASE },
   weaponId: 'blade', spellId: 'wind',
   bag: {}, worn: [null, null],
+  pts: 0,                              // unspent attribute points
+  seenKinds: new Set(), kills: {},      // the bestiary: what you have met, and how often
   q: { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none' },
   look: { skin:1, hair:1, tunic:0, cloak:0 },
   gear: {}, chests: {},
@@ -4402,8 +5412,9 @@ function applyBuild(refill){
     new THREE.CylinderGeometry(0.27, 0.34, 0.80, 8).scale(1,1,0.72), bm); torso.position.y=0.88;
   const hip   = new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.20,0.22,8).scale(1,1,0.72), tm);
   hip.position.y=0.52;
-  const head  = new THREE.Mesh(new THREE.BoxGeometry(0.42,0.42,0.42),
-                  new THREE.MeshLambertMaterial({ color:0xd6b48f })); head.position.y=1.46;
+  const head  = new THREE.Mesh(headGeo(0.42),
+                  new THREE.MeshLambertMaterial({ color:0xd6b48f, flatShading:true }));
+  head.position.y=1.46;
   addFace(head, 0.42, { brow:true });
   const neck  = new THREE.Mesh(new THREE.CylinderGeometry(0.10,0.15,0.16,6), tm); neck.position.y=1.24;
   const hat   = new THREE.Mesh(new THREE.ConeGeometry(0.34,0.24,8), cm); hat.position.y=1.76;
@@ -4424,8 +5435,33 @@ function applyBuild(refill){
     new THREE.MeshBasicMaterial({ color:0x7fc8ff, transparent:true, opacity:0.55,
       depthWrite:false, side:THREE.DoubleSide }));
   wedge.position.set(0, 0.05, 0); wedge.renderOrder = 2; wedge.visible = false;
+  // Shoulders, a belt, hands and boots. The figure was a torso, two sticks and
+  // two more sticks — no joints, nothing at the ends of the limbs, and nothing to
+  // break the tunic's vertical run. These are five cheap meshes and they do more
+  // for how the character reads than anything else on it.
+  const dk = new THREE.MeshLambertMaterial({ color:0x241d16 });
+  const yoke = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.13, 0.13, 0.74, 6).rotateZ(Math.PI/2).scale(1,1,0.72), bm);
+  yoke.position.y = 1.18;
+  const belt = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.30, 0.30, 0.09, 10).scale(1,1,0.74), dk);
+  belt.position.y = 0.56;
+  // ⚠️ Parented to the LIMBS, not to the figure. Hung off the group they keep
+  // their world position while the arm swings through them, which reads as a
+  // person whose hands have come off.
+  const handL = new THREE.Mesh(new THREE.SphereGeometry(0.078, 6, 4), dk);
+  handL.position.set(0, -0.32, 0.01);
+  const handR = handL.clone();
+  armL.add(handL); armR.add(handR);
+  const bootL = new THREE.Mesh(new THREE.BoxGeometry(0.155, 0.11, 0.24), dk);
+  bootL.position.set(0, -0.27, 0.04);
+  const bootR = bootL.clone();
+  legL.add(bootL); legR.add(bootR);
+  g.add(yoke, belt);
   g.add(torso, head, hat, legL, legR, armL, armR, shadow, wedge);
   g.userData.wedge = wedge;
+  g.userData.hands = [handL, handR];
+  g.userData.boots = [bootL, bootR];
   g.userData.legs = [legL, legR];
   g.userData.arms = [armL, armR];
   g.userData.skin = head.material;
@@ -4558,12 +5594,11 @@ addEventListener('keydown', e=>{
   if (e.code === 'KeyI'){ openPause('bag'); return; }
   if (e.code === 'KeyC'){ openPause('char'); return; }
   if (e.code === 'KeyJ'){ openPause('quests'); return; }
-  if (e.code === 'KeyV'){
-    SETTINGS.thirdPerson = !SETTINGS.thirdPerson; saveSettings();
-    toast(SETTINGS.thirdPerson ? 'Third person' : 'First person', 1.2);
-    return;
-  }
+  if (e.code === 'KeyB'){ openPause('best'); return; }
+  if (e.code === 'KeyV'){ toggleView(); return; }
   if (G.mode === 'explore'){
+    const sn = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8'].indexOf(e.code);
+    if (sn >= 0){ const sp = worldSpells()[sn]; if (sp) worldCast(sp.id); }
     if (e.code === 'KeyE'){
       const f = nearestFolk(), c = f ? null : nearestChest();
       const fire = (f||c) ? null : nearestHearth();
@@ -4582,10 +5617,21 @@ addEventListener('keydown', e=>{
       drawVitals();
     }
   } else if (G.mode === 'combat'){
-    const n = ['Digit1','Digit2','Digit3','Digit4'].indexOf(e.code);
-    if (n >= 0) selectAbility(n);
-    if (e.code === 'Space'){ e.preventDefault(); endPlayerTurn(); }
-    if (e.code === 'KeyQ'){ CB.selAbility = -1; refreshTargets(); drawActs(); }
+    // Number keys pick a CATEGORY now, matching the row on screen. With a drawer
+    // open they pick within it instead, so 2-then-1 is "spells, the first one".
+    const n = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6'].indexOf(e.code);
+    if (n >= 0){
+      const cats = actCats();
+      const open = cats.find(c=> c.id === CB.cat && c.list);
+      if (open && open.list[n]){
+        const o = open.list[n];
+        if (o.kind === 'ability') selectAbility(o.i);
+        else { CB.cat = null; useItem(o.id); }
+      } else if (cats[n]) pickCat(cats[n].id);
+    }
+    if (e.code === 'Space'){ e.preventDefault(); CB.cat = null; endPlayerTurn(); }
+    if (e.code === 'KeyQ'){ CB.selAbility = -1; CB.cat = null; refreshTargets(); drawActs(); }
+    if (e.code === 'Escape' && CB.cat){ CB.cat = null; drawActs(); }
     if (e.code === 'KeyT'){
       showAllThreat = !showAllThreat; drawThreat(); SFX.ui();
       toast(showAllThreat ? 'Showing every creature’s reach' : 'Reach: hover a creature', 1.8);
@@ -4625,6 +5671,8 @@ addEventListener('mousemove', e=>{
 });
 addEventListener('wheel', e=>{
   if (G.mode === 'combat') CB.dist = clamp(CB.dist + Math.sign(e.deltaY)*1.4, 6, 30);
+  else if (SETTINGS.thirdPerson && !G.paused)
+    CAM.dist = clamp(CAM.dist + Math.sign(e.deltaY)*0.6, CAM_MIN, CAM_MAX);
 }, { passive:true });
 document.addEventListener('pointerlockchange', ()=>{
   locked = (document.pointerLockElement === renderer.domElement);
@@ -4665,9 +5713,13 @@ function initTouch(){
         if (G.mode === 'combat'){
           CB.orbit -= (t.clientX-TOUCH.lx)*0.010;
           CB.tilt = clamp(CB.tilt + (t.clientY-TOUCH.ly)*0.006, 0.18, 1.15);
+        } else if (SETTINGS.thirdPerson){
+          CAM.yaw   -= (t.clientX-TOUCH.lx)*sens;
+          CAM.pitch = clamp(CAM.pitch - (t.clientY-TOUCH.ly)*sens, -1.15, 1.30);
         } else {
           player.yaw   -= (t.clientX-TOUCH.lx)*sens;
           player.pitch = clamp(player.pitch - (t.clientY-TOUCH.ly)*sens, -1.53, 1.53);
+          CAM.yaw = player.yaw; CAM.pitch = player.pitch;
         }
         TOUCH.lx = t.clientX; TOUCH.ly = t.clientY;
       }
@@ -4726,11 +5778,21 @@ const _fwd = new THREE.Vector3(), _right = new THREE.Vector3();
 let digCooldown = 0;
 
 function updateExplore(dt){
-  // look
+  // ── look ──
+  // First person turns the HEAD, so the look angle and the body's facing are the
+  // same thing. Third person turns the CAMERA, and the two come apart: the camera
+  // swings all the way round while the body keeps facing wherever it is walking,
+  // which is the only way you ever get to look at your own character's face.
   if (locked && !IS_TOUCH){
     const sens = 0.0022 * SETTINGS.sens;
-    player.yaw   -= mouseDX * sens;
-    player.pitch = clamp(player.pitch - mouseDY * sens, -1.53, 1.53);
+    if (SETTINGS.thirdPerson){
+      CAM.yaw   -= mouseDX * sens;
+      CAM.pitch = clamp(CAM.pitch - mouseDY * sens, -1.15, 1.30);
+    } else {
+      player.yaw   -= mouseDX * sens;
+      player.pitch = clamp(player.pitch - mouseDY * sens, -1.53, 1.53);
+      CAM.yaw = player.yaw; CAM.pitch = player.pitch;
+    }
   }
   mouseDX = 0; mouseDY = 0;
 
@@ -4739,9 +5801,10 @@ function updateExplore(dt){
   const feet = getBlock(Math.floor(p.x), Math.floor(p.y+0.3), Math.floor(p.z));
   player.inWater = (feet === B.WATER);
 
-  // walk
-  _fwd.set(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
-  _right.set(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+  // walk — always relative to the CAMERA, so W is "away from me" in both views
+  const vy = viewYaw();
+  _fwd.set(-Math.sin(vy), 0, -Math.cos(vy));
+  _right.set(Math.cos(vy), 0, -Math.sin(vy));
   let ix = 0, iz = 0;
   if (keys.KeyW) iz += 1; if (keys.KeyS) iz -= 1;
   if (keys.KeyD) ix += 1; if (keys.KeyA) ix -= 1;
@@ -4751,6 +5814,15 @@ function updateExplore(dt){
   let wx = _fwd.x*iz + _right.x*ix, wz = _fwd.z*iz + _right.z*ix;
   const wl = Math.hypot(wx, wz);
   if (wl > 0){ wx = wx/wl*speed; wz = wz/wl*speed; }
+  // In third person the body turns to face where it is GOING, and turns there over
+  // a few frames rather than snapping — a figure that pivots instantly reads as a
+  // sprite being flipped, not a person changing direction. Standing still, it
+  // holds its facing, which is what lets the camera come round and look at it.
+  if (SETTINGS.thirdPerson && wl > 0){
+    const want = Math.atan2(-wx, -wz);
+    let d = ((want - player.yaw + Math.PI*3) % (Math.PI*2)) - Math.PI;
+    player.yaw += d * Math.min(1, dt*11);
+  }
 
   // gravity + jump
   const grav = player.inWater ? 9 : 26;
@@ -4773,9 +5845,11 @@ function updateExplore(dt){
   if (player.onGround && !wasGround && player.vel.y < -6) SFX.step();
   if (p.y < -10){ p.copy(player.spawn); player.vel.set(0,0,0); }
 
-  // camera — first person, or over the shoulder with terrain collision
+  // camera — first person, or a free orbit around the character with terrain
+  // collision. The orbit angles are the CAMERA's, not the body's.
   camera.rotation.set(0,0,0);
-  camera.rotateY(player.yaw); camera.rotateX(player.pitch);
+  if (SETTINGS.thirdPerson){ camera.rotateY(CAM.yaw); camera.rotateX(CAM.pitch); }
+  else { camera.rotateY(player.yaw); camera.rotateX(player.pitch); }
   if (SETTINGS.thirdPerson){
     player.mesh.visible = true;
     player.mesh.position.set(p.x, p.y, p.z);
@@ -4817,12 +5891,17 @@ function updateExplore(dt){
     player.mesh.rotation.x = ANIM.lean;
     // the whole figure rolls very slightly into each step
     player.mesh.rotation.z = moving ? sw * 0.035 : 0;
+    // Orbit about the chest rather than the eyes: pivoting on the head throws the
+    // body out of frame the moment you look down at it.
     const back = new THREE.Vector3(0,0,1).applyQuaternion(camera.quaternion);
-    const eye = new THREE.Vector3(p.x, p.y + EYE, p.z);
-    const want = 4.6;
-    const hit = raycastVoxel(eye, back, want);
-    const d = hit.hit ? Math.max(1.1, hit.dist - 0.35) : want;
-    camera.position.set(eye.x + back.x*d, eye.y + back.y*d + 0.35, eye.z + back.z*d);
+    const eye = new THREE.Vector3(p.x, p.y + EYE*0.72, p.z);
+    const want = CAM.dist;
+    const hit = raycastVoxel(eye, back, want + 0.4);
+    const d = hit.hit ? Math.max(0.9, hit.dist - 0.4) : want;
+    // Ease the collision pull-in, or brushing past a tree snaps the camera into
+    // the character's back and out again every few steps.
+    CAM.at += (d - CAM.at) * Math.min(1, dt * (d < CAM.at ? 26 : 7));
+    camera.position.set(eye.x + back.x*CAM.at, eye.y + back.y*CAM.at + 0.30, eye.z + back.z*CAM.at);
   } else {
     player.mesh.visible = false;
     camera.position.set(p.x, p.y + EYE, p.z);
@@ -4960,8 +6039,7 @@ function buildAbilities(){
     id:'guard', name:'Guard', ap:1, mana:0, kind:'guard', range:0,
     desc:'Cover your own back until your next turn',
   }];
-  const sp = SPELLS.find(s=>s.id===player.spellId);
-  if (sp){
+  for (const sp of knownSpells()){
     const sw = sp.id==='fire' ? 'int' : sp.id==='pierce' ? 'agi' : sp.id==='bash' ? 'vit' : 'mgt';
     const sd = sp.dmg ? [Math.round(sp.dmg[0]*powerOf(player.st,sw)), Math.round(sp.dmg[1]*powerOf(player.st,sw))] : null;
     ABILITIES.push({
@@ -4972,6 +6050,104 @@ function buildAbilities(){
     });
   }
 }
+// ═══════════════════ casting in the field ═══════════════════════════════════
+// Spells used to exist only once a fight had already started, which put the two
+// lamplighter spells — Kindle especially — behind the exact thing they are meant
+// to help you avoid. Out here: utility casts freely, and an offensive spell
+// thrown at something OPENS the fight with the blow already struck.
+function utilitySpell(sp){ return sp.target === 'self' || sp.id === 'kindle'; }
+function worldSpells(){ return knownSpells(); }
+// What you are pointing at: the creature nearest your crosshair, within the
+// spell's reach and in line of sight.
+function spellTargetInView(range){
+  const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  const ex = player.pos.x, ey = player.pos.y + EYE*0.9, ez = player.pos.z;
+  let best = null, bestDot = 0.90;               // must be roughly under the crosshair
+  for (const e of entities){
+    if (!e.alive || e.critter) continue;
+    const dx = e.px-ex, dy = (e.py+0.9)-ey, dz = e.pz-ez;
+    const d = Math.hypot(dx, dy, dz);
+    if (d > range + 1.2) continue;
+    const dot = (dx*dir.x + dy*dir.y + dz*dir.z) / (d || 1);
+    if (dot < bestDot) continue;
+    if (!hasLOS(ex, ey, ez, e.px, e.py+1.0, e.pz)) continue;
+    bestDot = dot; best = e;
+  }
+  return best;
+}
+function worldCast(id){
+  if (G.mode !== 'explore' || G.paused || townFolk) return;
+  const sp = worldSpells().find(s=>s.id === id);
+  if (!sp) return;
+  if (player.mana < sp.mana){ toast('Not enough mana'); return; }
+
+  if (utilitySpell(sp)){
+    // Resolved here rather than through castSpell(), which reads grid coordinates
+    // and CB.order — neither of which exists while you are simply walking about.
+    if (sp.id === 'wind'){
+      if (player.hp >= player.maxHp){ toast('You are unhurt'); return; }
+      const before = player.hp;
+      player.hp = Math.min(player.maxHp, player.hp + 14);
+      SFX.heal(); toast(`Second Wind — ${Math.round(player.hp-before)} vigour`, 2);
+    } else if (sp.id === 'kindle'){
+      const before = player.q.oil || 0;
+      if (before >= OIL_MAX){ toast('The lamp is full'); return; }
+      player.q.oil = Math.min(OIL_MAX, before + 22);
+      KINDLE_T = 8;
+      SFX.heal(); toast(`Kindle — +${Math.round(player.q.oil-before)} oil`, 2);
+    } else { toast('Nothing to use it on out here'); return; }
+    player.mana -= sp.mana;
+    drawVitals(); drawSpellbar();
+    return;
+  }
+
+  const t = spellTargetInView(sp.range || 1);
+  if (!t){ toast(`Nothing in reach — aim at something within ${sp.range || 1}`, 2.2); return; }
+  CB.opening = { spellId: sp.id, targetId: t.id };
+  startCombat(t);
+}
+function resolveOpeningCast(){
+  const op = CB.opening; CB.opening = null;
+  if (!op) return;
+  const i = ABILITIES.findIndex(ab => ab.spell && ab.spell.id === op.spellId);
+  const target = CB.order.find(o => o.id === op.targetId && o.alive);
+  const a = actor();
+  if (i < 0 || !target || !a || !a.isPlayer) return;
+  const ab = ABILITIES[i];
+  if (player.mana < ab.mana || a.ap < ab.ap) return;
+  a.ap -= ab.ap;
+  castSpell(a, ab, target);
+  log(`You opened with <b>${ab.name}</b>.`);
+  refreshTargets(); drawActs(); drawPips();
+}
+function drawSpellbar(){
+  const el = document.getElementById('spellbar');
+  if (!el) return;
+  if (G.mode !== 'explore'){ el.style.display = 'none'; return; }
+  const list = worldSpells();
+  el.style.display = list.length ? 'flex' : 'none';
+  el.innerHTML = list.map((sp,i)=>{
+    const off = player.mana < sp.mana;
+    return `<div class="sb ${off?'off':''}" data-spell="${sp.id}" title="${sp.desc}">
+      <span class="sk">${i+1}</span>
+      <div class="sn">${sp.name}</div>
+      <div class="sc">${sp.mana}<span>·${utilitySpell(sp)?'self':(sp.range||1)}</span></div></div>`;
+  }).join('');
+  el.querySelectorAll('.sb').forEach(n=> n.onclick = ()=> worldCast(n.dataset.spell));
+}
+// The one you chose at creation, plus anything your attributes have since grown
+// into. Before attribute points existed, your single ability was fixed for the
+// whole game and a "Spells" menu would have held exactly one entry forever. Now
+// putting points into Intellect literally opens Fireball, which is what makes
+// spending a point feel like it bought something.
+function knownSpells(){
+  const est = effStats();
+  const out = [], seen = new Set();
+  const add = (sp)=>{ if (sp && !seen.has(sp.id)){ seen.add(sp.id); out.push(sp); } };
+  add(SPELLS.find(s=>s.id===player.spellId));
+  for (const sp of SPELLS) if (!sp.req || est[sp.req[0]] >= sp.req[1]) add(sp);
+  return out;
+}
 
 const CB = {
   active:false, order:[], turn:0, phase:'idle',
@@ -4979,7 +6155,7 @@ const CB = {
   orbit:0.7, tilt:0.62, dist:14, dragging:false, lastX:0, lastY:0,
   focus:new THREE.Vector3(), camPos:new THREE.Vector3(),
   timer:0, walkPath:null, walkI:0, walkT:0, walker:null,
-  aiQueue:[], xpPot:0, digTarget:null,
+  aiQueue:[], xpPot:0, digTarget:null, cat:null, opening:null,
 };
 
 // ── highlight layers ──
@@ -5374,10 +6550,12 @@ function startCombat(trigger){
     f.mesh.position.set(f.px, f.py, f.pz);
     f.mesh.rotation.x = 0;
   }
+  // The bestiary is written by fighting. Meeting something opens its page.
+  for (const f of foes) noteSeen(f.kind);
   CB.order = [player, ...foes].sort((a,b)=> b.init - a.init);
   CB.turn = -1; CB.xpPot = 0; CB.active = true;
   CB.round = 0; CB.lastDamageRound = 0; CB.result = null; CB.elapsed = 0;
-  CB.orbit = player.yaw + Math.PI; CB.tilt = 0.80; CB.dist = 13;
+  CB.orbit = viewYaw() + Math.PI; CB.tilt = 0.80; CB.dist = 13;
   CB.focus.set(player.px, player.py, player.pz);
   CB.camPos.copy(camera.position);
   CB.phase = 'intro'; CB.timer = 0.85;
@@ -5385,6 +6563,7 @@ function startCombat(trigger){
   G.mode = 'combat';
   document.getElementById('combat').classList.add('on');
   document.getElementById('hud').style.display = 'none';
+  document.getElementById('spellbar').style.display = 'none';
   document.getElementById('lockmsg').style.display = 'none';
   clogEl.innerHTML = '';
   if (CB.drop){
@@ -5437,6 +6616,7 @@ function leaveCombat(result){
   document.getElementById('banner').className = '';
   document.getElementById('combat').classList.remove('on');
   document.getElementById('hud').style.display = '';
+  drawSpellbar();
   player.mesh.visible = false;
 
   if (result !== 'lose'){
@@ -5475,18 +6655,49 @@ function leaveCombat(result){
   saveGame();
   document.getElementById('lockmsg').style.display = 'flex';
 }
+const PTS_PER_LEVEL = 2;
 function gainXp(n){
   player.xp += n;
+  let gained = 0;
   while (player.xp >= player.xpNext){
     player.xp -= player.xpNext;
     player.level++;
     player.xpNext = Math.round(player.xpNext*1.55);
     player.bonusHp = (player.bonusHp||0) + 6;
     player.bonusMana = (player.bonusMana||0) + 3;
+    // Levelling used to be entirely automatic — six vigour and three mana, with
+    // no decision in it. Points make a level a CHOICE, and they are the only way
+    // to reach a gate you missed at creation: Might 10 opens the Greataxe and
+    // Cleave, Intellect 9 the staff and Fireball, and so on.
+    player.pts = (player.pts||0) + PTS_PER_LEVEL;
+    gained += PTS_PER_LEVEL;
     applyBuild(true);
     toast('Level ' + player.level);
   }
+  if (gained){
+    toast(`${gained} attribute point${gained>1?'s':''} to spend — C`, 5);
+    SFX.ui && SFX.ui();
+    drawPointsPip();
+  }
   drawVitals();
+}
+// A quiet standing badge on the HUD. An unspent point that only ever announced
+// itself in a toast is an unspent point you forget about for three levels.
+function drawPointsPip(){
+  const el = document.getElementById('ptspip');
+  if (!el) return;
+  const n = player.pts || 0;
+  el.style.display = n ? 'block' : 'none';
+  el.textContent = n === 1 ? '1 point to spend — C' : `${n} points to spend — C`;
+}
+function spendPoint(id){
+  if (!(player.pts > 0)) return;
+  if (player.st[id] >= STAT_CAP){ toast(`${id.toUpperCase()} is at its cap`); return; }
+  player.st[id]++;
+  player.pts--;
+  applyBuild(false);
+  SFX.ui && SFX.ui();
+  drawPointsPip(); drawPause(); drawVitals();
 }
 
 // ── turn flow ──
@@ -5538,6 +6749,10 @@ function beginTurn(a){
     SFX.turn();
     log(`— <b>Your turn</b> —`);
     setHint('Move · act · T shows what every creature can reach');
+    // A spell thrown from the field opens the fight — it has to land on your own
+    // first turn, because startCombat runs an intro phase and there is no turn
+    // order to resolve into until this point.
+    if (CB.opening) resolveOpeningCast();
   } else {
     CB.phase = 'aithink'; CB.timer = 0.45;
     tMove.count = 0; tHit.count = 0;
@@ -6206,6 +7421,7 @@ function tutEnd(){
 }
 function setHint(t){ document.getElementById('hint').textContent = t; }
 function drawVitals(){
+  drawSpellbar();      // mana changed, so what you can afford changed
   document.getElementById('vHp').textContent = `${Math.round(player.hp)} / ${player.maxHp}`;
   document.getElementById('vHpB').style.width = (player.hp/player.maxHp*100) + '%';
   const frac = player.hp/player.maxHp, hv = document.getElementById('hurtv');
@@ -6248,37 +7464,107 @@ function drawPips(){
   document.getElementById('apPips').innerHTML =
     Array.from({length:apM}, (_,i)=>`<span class="pip ap ${i<ap?'on':''}"></span>`).join('');
 }
+// ── the action bar ──────────────────────────────────────────────────────────
+// This was one flat row: strike, guard, every spell, every consumable, withdraw
+// and end turn, all the same size and all shouting at once. With more than one
+// spell known it became unreadable. It is now a row of CATEGORIES; the ones that
+// hold a single thing act immediately, the ones that hold several open above the
+// row. Only one category is ever open, and taking any action closes it.
+function actCats(){
+  const a = actor();
+  const yours = a && a.isPlayer && CB.phase === 'idle';
+  const spellIdx = ABILITIES.map((ab,i)=>({ab,i})).filter(o=>o.ab.spell);
+  const items = Object.keys(player.bag).filter(id => (itemDef(id)||{}).kind === 'use'
+                                                 && player.bag[id] > 0);
+  const afford = (ab)=> yours && a.ap >= ab.ap && ab.mana <= player.mana;
+  return [
+    { id:'strike', name:'Strike', icon:'⚔', act:'ability', i:0,
+      hint: ABILITIES[0] ? ABILITIES[0].desc : '',
+      off: !ABILITIES[0] || !afford(ABILITIES[0]) },
+    // With the drawer shut, the row has to say WHICH spell is armed, or the only
+    // feedback for arming one is a highlight on a box labelled "Spells".
+    { id:'spells', name:'Spells', icon:'✦', act:'open', n:spellIdx.length,
+      hint: (ABILITIES[CB.selAbility] && ABILITIES[CB.selAbility].spell)
+        ? ABILITIES[CB.selAbility].name
+        : spellIdx.length ? `${spellIdx.length} known` : 'none',
+      off: !yours || !spellIdx.length, list:spellIdx.map(o=>({kind:'ability', i:o.i, ab:o.ab})) },
+    { id:'items',  name:'Items',  icon:'⚱', act:'open', n:items.length,
+      hint: items.length ? `${items.length} in the belt` : 'empty',
+      off: !yours || !items.length || a.ap < 1, list:items.map(id=>({kind:'item', id})) },
+    { id:'move',   name:'Move',   icon:'⇢', act:'move',
+      hint: yours ? `${budget(a)} left` : '', off: !yours || budget(a) <= 0 },
+    { id:'guard',  name:'Guard',  icon:'⛨', act:'ability', i:1,
+      hint:'Cover your back', off: !ABILITIES[1] || !afford(ABILITIES[1]) },
+    { id:'flee',   name:'Flee',   icon:'⤺', act:'flee',
+      hint:'They get a swing', off: !yours },
+  ];
+}
 function drawActs(){
   const a = actor();
   const yours = a && a.isPlayer && CB.phase === 'idle';
   const el = document.getElementById('acts');
-  el.innerHTML = ABILITIES.map((ab,i)=>{
-    const off = !yours || a.ap < ab.ap || ab.mana > player.mana;
-    const cost = ab.mana ? `<span class="mc">${ab.mana}</span>` : '';
-    return `<div class="act ${CB.selAbility===i?'sel':''} ${off?'off':''} ${ab.probe?'probe':''}" data-i="${i}">
-      <span class="ak">${i+1}</span>${cost}
-      <div class="an">${ab.name}</div><div class="ad">${ab.desc}</div></div>`;
+  const cats = actCats();
+  if (!yours) CB.cat = null;
+  const open = cats.find(c=> c.id === CB.cat && c.list && !c.off);
+
+  // the drawer, above the row
+  let drawer = '';
+  if (open){
+    drawer = `<div class="drawer">` + open.list.map((o,k)=>{
+      if (o.kind === 'ability'){
+        const off = !yours || a.ap < o.ab.ap || o.ab.mana > player.mana;
+        return `<div class="act ${CB.selAbility===o.i?'sel':''} ${off?'off':''}" data-i="${o.i}">
+          <span class="ak">${k+1}</span>${o.ab.mana?`<span class="mc">${o.ab.mana}</span>`:''}
+          <div class="an">${o.ab.name}</div><div class="ad">${o.ab.desc}</div></div>`;
+      }
+      const it = itemDef(o.id);
+      return `<div class="act belt ${yours && a.ap>=1 ? '' : 'off'}" data-use="${o.id}">
+        <span class="ak">${it.icon}</span><span class="mc bq">${player.bag[o.id]}</span>
+        <div class="an">${it.name}</div><div class="ad">${it.desc}</div></div>`;
+    }).join('') + `</div>`;
+  }
+
+  el.innerHTML = drawer + `<div class="catrow">` + cats.map((c,i)=>{
+    const sel = (c.act==='ability' && CB.selAbility===c.i)
+             || (c.act==='move' && CB.selAbility<0 && yours)
+             || (c.id === CB.cat && open);
+    return `<div class="cat ${sel?'sel':''} ${c.off?'off':''}" data-cat="${c.id}">
+      <span class="ck">${i+1}</span>
+      <div class="ci">${c.icon}</div>
+      <div class="cn">${c.name}</div>
+      <div class="ch">${c.hint}</div></div>`;
   }).join('')
-    // The belt. Consumables used to live only in the pause panel, so drinking in a
-    // fight meant opening a menu — and cost nothing. Now they sit with the abilities
-    // and read like what they are: one of the things you can spend your action on.
-    + Object.keys(player.bag).filter(id => (itemDef(id)||{}).kind === 'use')
-        .map(id => { const it = itemDef(id);
-          return `<div class="act belt ${yours && a.ap >= 1 ? '' : 'off'}" data-use="${id}">
-            <span class="ak">${it.icon}</span><span class="mc bq">${player.bag[id]}</span>
-            <div class="an">${it.name}</div><div class="ad">${it.desc}</div></div>`; }).join('')
-    + `<div class="act ${yours?'':'off'}" data-flee="1"><div class="an">Withdraw</div>
-       <div class="ad">Break off · they get a swing</div></div>`
-    + `<div class="act" data-end="1"><div class="an">End Turn</div><div class="ad">SPACE</div></div>`;
+    + `<div class="cat end" data-end="1"><div class="ci">⏎</div>
+       <div class="cn">End Turn</div><div class="ch">SPACE</div></div>`
+    + `</div>`;
+
+  el.querySelectorAll('.cat').forEach(n=>{
+    n.onclick = ()=>{
+      if (n.dataset.end){ CB.cat = null; endPlayerTurn(); return; }
+      if (n.classList.contains('off')) return;
+      pickCat(n.dataset.cat);
+    };
+  });
   el.querySelectorAll('.act').forEach(n=>{
     n.onclick = ()=>{
-      if (n.dataset.end) endPlayerTurn();
-      else if (n.dataset.flee){ if (!n.classList.contains('off')) fleeCombat(); }
-      else if (n.dataset.use){ if (!n.classList.contains('off')) useItem(n.dataset.use); }
-      else if (!n.classList.contains('off')) selectAbility(+n.dataset.i);
+      if (n.classList.contains('off')) return;
+      // Arming something closes the drawer — you pick the target on the board
+      // next, and the board is the thing the drawer was covering up.
+      if (n.dataset.use){ CB.cat = null; useItem(n.dataset.use); }
+      else { CB.cat = null; selectAbility(+n.dataset.i); }
     };
   });
   drawPips();
+}
+function pickCat(id){
+  const c = actCats().find(x=>x.id===id);
+  if (!c || c.off) return;
+  SFX.ui && SFX.ui();
+  if (c.act === 'open'){ CB.cat = (CB.cat === id) ? null : id; drawActs(); return; }
+  CB.cat = null;
+  if (c.act === 'ability') selectAbility(c.i);
+  else if (c.act === 'move'){ selectAbility(-1); drawActs(); }
+  else if (c.act === 'flee') fleeCombat();
 }
 
 // world-space name tags + floating combat text
@@ -6336,7 +7622,7 @@ function updateTags(dt){
 }
 const COMPASS = ['N','NE','E','SE','S','SW','W','NW'];
 function updateHudText(){
-  const deg = ((-player.yaw * 180/Math.PI) % 360 + 360) % 360;
+  const deg = ((-viewYaw() * 180/Math.PI) % 360 + 360) % 360;
   document.getElementById('compass').textContent = COMPASS[Math.round(deg/45) % 8];
   const p = player.pos;
   document.getElementById('coords').innerHTML =
@@ -6506,19 +7792,36 @@ function drawTown(){
           <div class="orw">${q.coin} coin · ${q.xp} xp</div></span>
         <button class="tog" data-take="${i}">Take</button></div>`).join('')
       || `<div class="od3">The board is bare. Come back after you've settled something.</div>`;
-    body.innerHTML = `
-      <div class="od3" style="font-style:italic;margin-bottom:12px">“${townFolk.line}”</div>
-      ${ledger}
-      <div class="psec">In hand ${ready?`— <span style="color:#9ac25c">${ready} ready to settle</span>`:''}</div>
-      ${act}
-      ${ready?`<button class="btn small" id="tTurnIn" style="margin:4px 0 12px">Settle ${ready} errand${ready>1?'s':''}</button>`:''}
-      ${barrowOffered() ? `
+    // The commission goes FIRST. It used to sit below the errand board, behind a
+    // "settle one errand" gate, which is how the only authored dungeon in the game
+    // stayed invisible through a whole session of play.
+    const commission = barrowOffered() ? `
         <div class="psec" style="color:#ff9a6a;border-color:rgba(255,120,80,.4)">A standing commission</div>
         <div class="offer" style="border-color:rgba(255,120,80,.55);background:rgba(70,22,16,.28)">
           <span style="flex:1"><div class="on3">${BARROW_QUEST.title}</div>
             <div class="od3">${BARROW_QUEST.desc}</div>
+            <div class="od3" style="font-style:italic;color:#c9a48f;margin-top:3px">“It has waited long
+              enough. Nobody else will take it, and I'll not pretend that isn't why I'm asking you.”</div>
             <div class="orw">${BARROW_QUEST.coin} coin · ${BARROW_QUEST.xp} xp · and what it wears</div></span>
-          <button class="tog" id="tBarrow">Take</button></div>` : ''}
+          <button class="tog" id="tBarrow">Take</button></div>`
+      : player.q.barrow === 'taken' ? `
+        <div class="psec" style="color:#ff9a6a;border-color:rgba(255,120,80,.4)">A standing commission</div>
+        <div class="od3">The barrow is yours to open. South-west of the water, past the shore.</div>`
+      : '';
+    // A reeve with one enormous job outstanding leads with it, rather than with
+    // small talk that is identical whether or not the barrow has been opened.
+    const greet = player.q.barrow === 'none'
+      ? 'You\'re the lamplighter. Good. There is a barrow south-west of the water and I want it opened.'
+      : player.q.barrow === 'taken'
+      ? 'The barrow is still open, and you are still standing here.'
+      : townFolk.line;
+    body.innerHTML = `
+      <div class="od3" style="font-style:italic;margin-bottom:12px">“${greet}”</div>
+      ${ledger}
+      ${commission}
+      <div class="psec">In hand ${ready?`— <span style="color:#9ac25c">${ready} ready to settle</span>`:''}</div>
+      ${act}
+      ${ready?`<button class="btn small" id="tTurnIn" style="margin:4px 0 12px">Settle ${ready} errand${ready>1?'s':''}</button>`:''}
       <div class="psec">The board</div>${off}
       <div class="psec">Standing</div>
       <div class="od3">${t.name} — ${t.blurb}</div>`;
@@ -6586,29 +7889,40 @@ document.getElementById('tClose').onclick = closeTown;
 // ── objective tracker ───────────────────────────────────────────────────────
 function drawQuestHud(){
   const el = document.getElementById('quests');
-  if (!player.q.active.length){
-    el.innerHTML = player.q.done || repIndex()
-      ? `<div class="qd">No errand in hand — see the reeve in ${TOWN_NAME}</div>` : '';
-    return;
-  }
-  el.innerHTML = player.q.active.map(q=>{
+  const rows = player.q.active.map(q=>{
     const ready = q.have >= q.need;
     let where = '';
     if (ready) where = `return to ${TOWN_NAME}`;
     else if (q.site){
       const d = Math.round(Math.hypot(player.pos.x-q.site.x, player.pos.z-q.site.z));
-      const b = bearingTo(q.site.x, q.site.z);
-      where = `${b} · ${d}m`;
+      where = `${bearingTo(q.site.x, q.site.z)} · ${d}m`;
     } else where = 'anywhere in the vale';
-    return `<div class="qq ${ready?'ready':''}">
+    return `<div class="qq ${ready?'ready':''} ${q.main?'main':''}">
+      ${q.main ? `<div class="qmain">The commission</div>` : ''}
       <div class="qt">${q.title}</div>
       <div class="qp">${q.have}/${q.need}${ready?' — ready':''}</div>
       <div class="qd">${where}</div></div>`;
-  }).join('');
+  });
+  // The barrow is the one authored dungeon in the game. If it has been offered
+  // and not yet taken, SAY SO on the HUD — a quest you have to go and discover in
+  // a dialogue panel is a quest most players never find at all.
+  if (player.q.barrow === 'none' && G.mode !== 'title'){
+    const d = Math.round(Math.hypot(player.pos.x-BARROW.x, player.pos.z-BARROW.z));
+    rows.unshift(`<div class="qq main lead">
+      <div class="qmain">A standing commission</div>
+      <div class="qt">Open the barrow</div>
+      <div class="qd">Ask the reeve in ${TOWN_NAME} · ${d}m to the mouth</div></div>`);
+  }
+  if (!rows.length){
+    el.innerHTML = player.q.done || repIndex()
+      ? `<div class="qd">No errand in hand — see the reeve in ${TOWN_NAME}</div>` : '';
+    return;
+  }
+  el.innerHTML = rows.join('');
 }
 function bearingTo(x, z){
   const a = Math.atan2(x - player.pos.x, z - player.pos.z);
-  const rel = ((a - (player.yaw + Math.PI)) * 180/Math.PI % 360 + 540) % 360 - 180;
+  const rel = ((a - (viewYaw() + Math.PI)) * 180/Math.PI % 360 + 540) % 360 - 180;
   if (Math.abs(rel) < 22) return '▲ ahead';
   if (Math.abs(rel) > 158) return '▼ behind';
   return rel > 0 ? '► right' : '◄ left';
@@ -6636,12 +7950,30 @@ function drawPause(){
 
   if (pauseTab === 'char'){
     const w = WEAPONS.find(x=>x.id===player.weaponId), s = SPELLS.find(x=>x.id===player.spellId);
+    const pts = player.pts || 0;
+    // What each point would unlock, so spending is a choice with a visible reason
+    // rather than a number going up.
+    const gateHint = (id)=>{
+      const nxt = [...WEAPONS, ...SPELLS]
+        .filter(o=> o.req && o.req[0] === id && o.req[1] > player.st[id])
+        .sort((a,b)=> a.req[1]-b.req[1])[0];
+      return nxt ? `<div class="gate">${nxt.name} at ${nxt.req[1]}</div>` : '';
+    };
     const statLine = (id,name)=>{
       const bonus = est[id] - player.st[id];
-      return `<span>${name} <b>${est[id]}${bonus?` <span style="color:#8fbf6a">(+${bonus})</span>`:''}</b></span>`;
+      const capped = player.st[id] >= STAT_CAP;
+      return `<span class="statrow">
+        <span style="flex:1">${name}
+          <b>${est[id]}${bonus?` <span style="color:#8fbf6a">(+${bonus})</span>`:''}</b>
+          ${gateHint(id)}</span>
+        ${pts ? `<button class="plus" data-stat="${id}" ${capped?'disabled':''}>+</button>` : ''}
+      </span>`;
     };
     body.innerHTML = `
-      <div class="psec">Attributes</div>
+      <div class="psec">Attributes ${pts
+        ? `— <span style="color:var(--gold)">${pts} point${pts>1?'s':''} to spend</span>` : ''}</div>
+      ${pts ? `<div class="bd" style="color:#9aa4b4;font-size:11px;margin:-4px 0 8px">
+        Permanent. Two per level, and there is no unmaking it.</div>` : ''}
       <div class="pgrid">
         ${statLine('mgt','Might')}${statLine('vit','Vitality')}
         ${statLine('int','Intellect')}${statLine('agi','Agility')}
@@ -6704,6 +8036,60 @@ function drawPause(){
         : 'Sealed. The reeve will speak of it once you have settled something.'}</div>
       <div class="psec">Standing</div>
       <div class="od3">${repTier().name} — ${repTier().blurb} · ${player.q.done} settled · ${player.q.coin} coin</div>`;
+  }
+
+  else if (pauseTab === 'best'){
+    const seen = player.seenKinds || new Set();
+    const order = Object.keys(KINDS);
+    const known = order.filter(k=> seen.has(k));
+    const TACTIC = {
+      press:   ['Presses', 'Walks at you and swings. No preference about where it stands.'],
+      charge:  ['Charges', 'Closes the whole distance at once and knocks you off your line.'],
+      hold:    ['Holds',   'Weighted against moving. It will guard rather than trickle into the open — so it will not come to you.'],
+      flank:   ['Flanks',  'Works round to your side or your back. Put something solid behind you.'],
+      skirmish:['Skirmishes','Wants distance and cover, and backs OFF before it shoots if you are adjacent. Closing is the answer.'],
+    };
+    const entry = (k)=>{
+      const K = KINDS[k], n = (player.kills&&player.kills[k])||0, t = bestTier(k);
+      const swatch = `<span class="bsw" style="background:#${K.body.toString(16).padStart(6,'0')};
+        border-color:#${K.trim.toString(16).padStart(6,'0')}"></span>`;
+      // Tier 0: you have met it. That is all you get.
+      const stats = t >= 1 ? `
+        <div class="pgrid" style="margin:6px 0">
+          <span>Vigour <b>${K.hp}</b></span><span>Damage <b>${K.atk[0]}–${K.atk[1]}</b></span>
+          <span>Reach <b>${K.reach}</b></span><span>Movement <b>${K.mp}</b></span>
+        </div>` : `<div class="bd" style="color:#7d8798;font-size:11px">Kill one to learn what it can take and what it deals.</div>`;
+      const tac = TACTIC[K.tactic || 'press'];
+      const deep = t >= 2 ? `
+        <div class="bn" style="margin-top:4px">${tac[0]}</div>
+        <div class="bd">${tac[1]}</div>
+        ${K.soak ? `<div class="bd">Armoured — shrugs off ${Math.round(K.soak*100)}% of every blow.</div>` : ''}
+        ${K.knock ? `<div class="bd">Knocks you back ${K.knock} cell${K.knock>1?'s':''}.</div>` : ''}
+        ${K.status ? `<div class="bd">Applies <b style="color:#ff9a6a">${K.status}</b>.</div>` : ''}
+        ${K.reach > 1 ? `<div class="bd">Strikes from ${K.reach} cells — cover and closing both cut it down.</div>` : ''}
+        ${K.pack ? `<div class="bd">Never alone.</div>` : ''}`
+        : t >= 1 ? `<div class="bd" style="color:#7d8798;font-size:11px">Three kills and you will know how it fights.</div>` : '';
+      const mastered = t >= 3
+        ? `<div class="bd" style="color:#9ac25c;margin-top:4px">You have its measure.</div>` : '';
+      return `<div class="bagrow" style="align-items:flex-start">
+        ${swatch}
+        <span style="flex:1">
+          <div class="bn">${K.name}
+            <span style="color:#7d8798;font-weight:400;font-size:10px">· ${BEST_TIERS[t].label}</span></div>
+          <div class="bd" style="font-style:italic">${K.blurb || ''}</div>
+          ${stats}${deep}${mastered}
+        </span>
+        <span class="bq">${n}</span></div>`;
+    };
+    body.innerHTML = `
+      <div class="psec">Met — ${known.length} of ${order.length}</div>
+      ${known.length ? known.map(entry).join('')
+        : `<div class="bd" style="color:#7d8798;font-size:12px">Nothing yet. The bestiary
+           writes itself as you fight, and each entry says more the more of that kind you put down.</div>`}
+      ${known.length < order.length ? `<div class="psec">Unwritten</div>
+        <div class="bd" style="color:#7d8798;font-size:12px">${order.length - known.length}
+        ${order.length-known.length===1?'kind is':'kinds are'} out there you have not met.
+        Some of them only come out after dark.</div>` : ''}`;
   }
 
   else if (pauseTab === 'guide'){
@@ -6803,6 +8189,7 @@ function drawPause(){
       ? `A save exists — ${(raw.length/1024).toFixed(0)} KB. Loading discards anything since.`
       : 'No save yet.';
   }
+  body.querySelectorAll('[data-stat]').forEach(b=> b.onclick = ()=> spendPoint(b.dataset.stat));
   body.querySelectorAll('[data-use]').forEach(b=> b.onclick = ()=> useItem(b.dataset.use));
   body.querySelectorAll('[data-equip]').forEach(b=> b.onclick = ()=> equipItem(b.dataset.equip));
   body.querySelectorAll('[data-unequip]').forEach(b=> b.onclick = ()=> unequipItem(+b.dataset.unequip));
@@ -6888,7 +8275,8 @@ function saveGame(){
       p: { x:player.pos.x, y:player.pos.y, z:player.pos.z, yaw:player.yaw,
            hp:player.hp, mana:player.mana, lvl:player.level, xp:player.xp, xpNext:player.xpNext,
            st:player.st, weaponId:player.weaponId, spellId:player.spellId,
-           bonusHp:player.bonusHp||0, bonusMana:player.bonusMana||0,
+           bonusHp:player.bonusHp||0, bonusMana:player.bonusMana||0, pts:player.pts||0,
+           seen:[...(player.seenKinds||[])], kills:player.kills||{},
            bag:player.bag, worn:player.worn, q:player.q,
            look:player.look, gear:player.gear, rest:player.rest },
       tod: G.tod,
@@ -6910,6 +8298,9 @@ function loadGame(){
     player.yaw = s.p.yaw || 0;
     player.st = s.p.st; player.weaponId = s.p.weaponId; player.spellId = s.p.spellId;
     player.bonusHp = s.p.bonusHp || 0; player.bonusMana = s.p.bonusMana || 0;
+    player.pts = s.p.pts || 0;
+    player.seenKinds = new Set(s.p.seen || []);
+    player.kills = s.p.kills || {};
     player.level = s.p.lvl; player.xp = s.p.xp; player.xpNext = s.p.xpNext;
     player.hp = s.p.hp; player.mana = s.p.mana;
     player.bag = s.p.bag || {}; player.worn = s.p.worn || [null,null];
@@ -6951,6 +8342,8 @@ function newWorld(){
   player.pitch = -0.05; player.vel.set(0,0,0);
   G.tod = 0.30;                                 // you wake in the early morning
   player.bag = {}; player.worn = [null, null];  // a new run starts empty-handed
+  player.pts = 0;
+  player.seenKinds = new Set(); player.kills = {};   // an unwritten bestiary
   player.q = { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none', chests:{},
                beacons:{}, oil:OIL_MAX, lantern:true };
   // What happened since you last stood in front of the reeve. Deliberately NOT
@@ -7035,6 +8428,7 @@ function step(dt){
   tickAudio(dt);
   tickMusic(dt);
   tickBarrowLights(G.time);
+  tickWorldFires(G.time);
   tickLight(G.time, dt);
   if (G.mode === 'explore'){
     // A frame-parity gate (frames & 63) never fired here — G.frames does not
@@ -7160,6 +8554,7 @@ function enterWorld(){
   buildAtmosphere();
   buildTownsfolk();
   buildBarrowLights();
+  buildWorldFires();
   drawQuestHud();
   if (!entities.length && Math.hypot(player.pos.x-HOME.x, player.pos.z-HOME.z) < 40) seedValeEnemies();
   populate(player.pos.x, player.pos.z);
@@ -7578,6 +8973,15 @@ window.STRATA = {
   populateSites, repTier, buildTownsfolk, creditKill,
   get abilities(){ return ABILITIES; },
   WEAPONS, SPELLS, STATS, HOME, LAKE, TOWN,
+  // The pure terrain height, with nothing built or grown on it. surfaceY() sits on
+  // top of whatever is THERE — a canopy, a roof, a gate arch — so measuring a
+  // structure with it reports the wrong number in a way that looks plausible.
+  // Every wall-integrity check wants this instead.
+  heightAt, onPath, biomeTop,
+  CAM, viewYaw, toggleView, gainXp, spendPoint, drawPause, openPause,
+  worldCast, worldSpells, knownSpells, spellTargetInView, drawSpellbar,
+  landmarkAt, landmarksNear, inLandmark, LM_GRID, LM_KINDS,
+  noteSeen, noteKill, bestTier, ABILITIES:()=>ABILITIES, actCats, pickCat,
   teleport(x,z){
     player.pos.set(x+0.5, surfaceY(x,z)+0.2, z+0.5);
     updateStreaming(x,z); drainMeshQueue(2000);

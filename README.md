@@ -376,10 +376,22 @@ at somewhere that has not streamed in yet.
 
 ## Next
 
-1. **Playtest it.** Does the freeze-in-place transition feel good? Do high ground and
-   cover actually change your decisions, or are they invisible? Is Quarry/Raise fun?
-2. Pick the hook from what that playtest says.
-3. Then, and only then, balance.
+1. **Playtest it.** The hook is chosen (the lamplighter), so the questions are now
+   concrete: does spending your own oil to light the vale feel like a real trade?
+   Does the barrow read as something you can pull apart a piece at a time?
+2. **Ranged is still untouchable.** Bow and staff win 100% in the barrow against
+   axe 58% / sword 42%. The Wisp is meant to punish kiting and dies in one shot.
+   This is a composition problem and it wants a human read before more numbers.
+3. **The name is a fossil.** STRATA was named for the voxel-terrain / verticality /
+   world-as-weapon identity, and all three of those are dead. EMBERWATCH proposed.
+
+### The near-plain pass, and what it costs
+
+The ground was deliberately flattened to a ~6-block swell so that landmarks would
+have somewhere to stand. The cost is that **natural high ground is now rare**, and
+high ground is a ±25%/15% damage swing. Elevation was moved to things that are
+BUILT — rampart walks, ruin steps, boulder tops, the barrow dais. Whether a fight
+still has usable height in it is a playtest question, not a measured one.
 
 ## Audio credits
 
