@@ -202,18 +202,20 @@ well should find this much easier, and the numbers say nothing about whether it'
 
 ### The barrow, level 5, three foes, `'player'` policy (n=12 per build)
 
-Fought on even ground, after the melee follow-through pass:
+Fought on even ground. "Before" is the morning of 2026-08-16, prior to melee
+follow-through and the point-blank penalty:
 
-| build | win % | HP left on a win |
-|---|---|---|
-| Elm Staff / Fireball | 100% | 47% |
-| Hunting Bow / Piercing Shot | 100% | 37% |
-| Greataxe / Cleave | 58% | 44% |
-| Sword & Shield / Second Wind | 42% | 53% |
+| build | before | now | HP left on a win |
+|---|---|---|---|
+| Elm Staff / Fireball | 100% | 100% | 33% |
+| Greataxe / Cleave | 0% | 75% | 37% |
+| Hunting Bow / Piercing Shot | 100% | 50% | 11% |
+| Sword & Shield / Second Wind | 0% | 50% | 50% |
 
-**Ranged is still untouchable and that is the open problem.** The barrow does have an
-answer — the Wisp has reach 8 — but at 16 hp an archer deletes it in one shot and
-then kites the two brutes freely. Wants a human at the controls before guessing.
+A 50–100 band instead of 0–100. **The staff is the remaining outlier.** It is left
+alone deliberately: the auto-player never steps out of melee to clear the point-blank
+penalty, so the bow's 50% is a floor and a real archer sits somewhere between it and
+the old 100%. Tuning past here without someone actually playing is guesswork.
 
 Two findings here were **positional, not statistical**, and they matter more than any
 stat tweak:
