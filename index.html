@@ -411,7 +411,7 @@
     <div class="pfoot">
       <span class="cnote" id="pHint">ESC or I to close</span>
       <span style="flex:1"></span>
-      <button class="btn ghost small" id="pQuit">Abandon run</button>
+      <button class="btn ghost small" id="pQuit">Delete save &amp; start over</button>
       <button class="btn" id="pClose">Resume</button>
     </div>
   </div>
@@ -2131,6 +2131,24 @@ function surfaceY(x, z){
 }
 const DIRS4 = [[1,0],[-1,0],[0,1],[0,-1]];
 
+// Where a living thing may actually stand. surfaceY returns the topmost
+// standable cell, which on a wooded column is the top of the canopy and on a
+// house is the roof — hence lynxes in trees. heightAt is the pure terrain
+// height, ignoring trees, structures and scatter, so start from there.
+// Canopies, trunks and roofs — NOT plank, which is a house FLOOR. Listing plank
+// here silently deleted the reeve and the quartermaster, who stand indoors.
+const UNFOOTABLE = { [B.LEAF]:1, [B.PINE]:1, [B.TRUNK]:1, [B.BIRCH]:1,
+                     [B.THATCH]:1, [B.SHRUB]:1 };
+function spawnGroundY(x, z){
+  const h = heightAt(x, z);
+  for (const y of [h+1, h+2, h+3]){
+    if (!standable(x, y, z)) continue;
+    if (UNFOOTABLE[getBlock(x, y-1, z)]) continue;   // not on a canopy or a roof
+    return y;
+  }
+  return null;
+}
+
 // ── ground that acts on you ─────────────────────────────────────────────────
 // Terrain you cannot edit, but that is never neutral: wading is slow, loose
 // sand drags, and scrub hides you. Route choice matters without adding a verb.
@@ -3013,14 +3031,35 @@ function buildTownsfolk(){
       line:'Fendmere always has work. Little of it pleasant.' },
     { role:'quartermaster', name:'Quartermaster Hess', color:0x7a5a3a, hat:0x4e3a24, dx:-5, dz: 3,
       line:'Coin first. Then we talk about what I keep in the back.' },
+    { role:'innkeeper', name:'Maerin of the Kettle', color:0x8a5a5a, hat:0x5a3232, dx:-1, dz:-6,
+      line:'Bed\'s warm, roof\'s sound, and I lock the door at dark. Twelve coin.' },
+    // people who simply live here
+    { role:'idler', name:'Old Cobb',   color:0x5a6a4a, hat:0x3a442e, dx: 9, dz:-4, wander:7,
+      lines:['Rain coming. My knee says so.',
+             'They walled that barrow up for a reason, you know.',
+             'You\'re the one from the fire. Word gets round.'] },
+    { role:'idler', name:'Wren',       color:0x4a6a7a, hat:0x2e4450, dx:-8, dz:-2, wander:9,
+      lines:['I count the gate. Someone has to.',
+             'Wolves came near the fence twice this week.',
+             'Don\'t go out past dark. Just don\'t.'] },
+    { role:'idler', name:'Tomas Bell', color:0x7a6a4a, hat:0x4e442e, dx: 2, dz:11, wander:8,
+      lines:['Thatch wants redoing before the wet.',
+             'My brother went east and didn\'t come back. That was spring.',
+             'If you\'re selling, Hess is fair. Mostly.'] },
   ];
   for (const s of spots){
     const x = TOWN.x + s.dx, z = TOWN.z + s.dz;
-    const y = surfaceY(x, z);
+    // Hand-placed, in a town where trees are suppressed — so fall back to the
+    // plain surface. A house floor sits at the building's centre height, not the
+    // column's, which is why the strict check was dropping the two traders.
+    let y = spawnGroundY(x, z);
+    if (y === null) y = surfaceY(x, z);
+    if (y === null) continue;
     const m = makeVillager(s.color, s.hat);
     m.position.set(x+0.5, y, z+0.5);
     scene.add(m);
-    TOWNSFOLK.push({ ...s, x, y, z, mesh:m, bob:Math.random()*6 });
+    TOWNSFOLK.push({ ...s, x, y, z, hx:x, hz:z, mesh:m, bob:Math.random()*6,
+                     px:x+0.5, pz:z+0.5, py:y, tx:x, tz:z, wait:Math.random()*4 });
   }
 }
 function nearestFolk(){
@@ -3031,11 +3070,45 @@ function nearestFolk(){
   }
   return best;
 }
+// Villagers keep a rough day: about the town by daylight, drifting home after
+// dark. Traders hold their posts; the rest wander. They turn to you when you're
+// close, and otherwise get on with it.
 function tickTownsfolk(dt, t){
+  const night = isNight();
   for (const f of TOWNSFOLK){
     f.bob += dt*1.6;
-    f.mesh.position.y = f.y + Math.sin(f.bob)*0.03;
-    f.mesh.rotation.y = Math.atan2(player.pos.x-(f.x+0.5), player.pos.z-(f.z+0.5));
+    const near = Math.hypot(player.pos.x-f.px, player.pos.z-f.pz) < 5.5;
+
+    if (f.wander && !near){
+      f.wait -= dt;
+      if (f.wait <= 0){
+        f.wait = 2.5 + Math.random()*4;
+        // by night they head for their own doorstep; by day they roam
+        const r = night ? 1.5 : f.wander;
+        const a = Math.random()*Math.PI*2;
+        const nx = Math.round((night ? f.hx : f.hx) + Math.cos(a)*r);
+        const nz = Math.round((night ? f.hz : f.hz) + Math.sin(a)*r);
+        const ny = spawnGroundY(nx, nz);
+        if (ny !== null && Math.abs(ny - f.y) < 3){ f.tx = nx; f.tz = nz; f.y = ny; }
+      }
+      const dx = (f.tx+0.5) - f.px, dz = (f.tz+0.5) - f.pz;
+      const d = Math.hypot(dx, dz);
+      if (d > 0.08){
+        const sp = Math.min(d, dt*1.5);
+        f.px += dx/d*sp; f.pz += dz/d*sp;
+        f.mesh.rotation.y = Math.atan2(dx, dz);
+        const sw = Math.sin(f.bob*2.6)*0.38;
+        const lg = f.mesh.userData && f.mesh.userData.legs;
+        if (lg){ lg[0].rotation.x = sw; lg[1].rotation.x = -sw; }
+      } else {
+        const lg = f.mesh.userData && f.mesh.userData.legs;
+        if (lg){ lg[0].rotation.x = 0; lg[1].rotation.x = 0; }
+      }
+    } else if (near){
+      f.mesh.rotation.y = Math.atan2(player.pos.x-f.px, player.pos.z-f.pz);
+    }
+    f.x = Math.floor(f.px); f.z = Math.floor(f.pz);
+    f.mesh.position.set(f.px, f.y + Math.sin(f.bob)*0.03, f.pz);
   }
 }
 
@@ -3117,8 +3190,8 @@ function populateSites(){
       for (let i=0;i<q.need;i++){
         const x = q.site.x + Math.round((hash2(i,1,q.id)-0.5)*11);
         const z = q.site.z + Math.round((hash2(i,2,q.id)-0.5)*11);
-        const y = surfaceY(x, z);
-        if (y <= SEA+1) continue;
+        const y = spawnGroundY(x, z);
+        if (y === null || y <= SEA+1) continue;
         const e = spawnEntity(randomKind(x, z), x, y, z);
         e.siteFor = q.id;
       }
@@ -3186,8 +3259,8 @@ function populate(px, pz){
     const a = Math.random()*Math.PI*2;
     const r = (home < 45 ? 38 : 26) + Math.random()*44;
     const x = Math.round(px + Math.cos(a)*r), z = Math.round(pz + Math.sin(a)*r);
-    const y = surfaceY(x, z);
-    if (y <= SEA+1) continue;                 // no spawning in the sea
+    const y = spawnGroundY(x, z);
+    if (y === null || y <= SEA+1) continue;   // not in the sea, not up a tree
     if (Math.hypot(x-px, z-pz) < 20) continue;
     // Spawn in PACKS. Scattering creatures uniformly makes every ambush a 1v1,
     // which is the least interesting thing a tactics grid can do.
@@ -3195,8 +3268,8 @@ function populate(px, pz){
     for (let i=0; i<size && entities.length<want; i++){
       const ox = x + (i ? Math.round((Math.random()-0.5)*5) : 0);
       const oz = z + (i ? Math.round((Math.random()-0.5)*5) : 0);
-      const oy = surfaceY(ox, oz);
-      if (oy <= SEA+1 || Math.abs(oy-y) > 4) continue;
+      const oy = spawnGroundY(ox, oz);
+      if (oy === null || oy <= SEA+1 || Math.abs(oy-y) > 4) continue;
       const kind = randomKind(ox, oz);
       spawnEntity(kind, ox, oy, oz);
     }
@@ -3218,6 +3291,7 @@ const player = {
   q: { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none' },
   look: { skin:1, hair:1, tunic:0, cloak:0 },
   gear: {}, chests: {},
+  rest: null, graceT: 0,
   mp: 6, ap: 2, init: 0,
   mpMax: 6, apMax: 2,
   x:0, y:0, z:0,            // combat cell
@@ -3492,6 +3566,7 @@ function updateExplore(dt){
   }
   mouseDX = 0; mouseDY = 0;
 
+  if (player.graceT > 0) player.graceT -= dt;
   const p = player.pos;
   const feet = getBlock(Math.floor(p.x), Math.floor(p.y+0.3), Math.floor(p.z));
   player.inWater = (feet === B.WATER);
@@ -3599,6 +3674,7 @@ function updateExplore(dt){
     }
     e.notice = clamp((e.notice || 0) + (sees ? dt*(1.6 + (range-d)*0.10) : -dt*0.75), 0, 1);
     if (e.notice > 0.02){ anyAlert = true; closestSeen = Math.min(closestSeen, e.notice); }
+    if (player.graceT > 0){ e.notice = 0; continue; }
     if (e.notice >= 1){ e.spotted = true; startCombat(e); break; }
   }
   {
@@ -4066,8 +4142,11 @@ function endCombat(result){
   if (result === 'win') SFX.win(); else if (result === 'lose') SFX.lose();
   const TXT = {
     win:  ['VICTORY',   `+${CB.xpPot} experience`,                    'Continue', 'on win'],
-    lose: ['YOU FALL',  'You wake at your waystone, weakened.',       'Rise',     'on lose'],
+    lose: ['YOU FALL',  `You wake at ${(player.rest&&player.rest.name)||'the campfire'}, weakened.`,
+                                                                     'Rise',     'on lose'],
     draw: ['THEY LOSE INTEREST', 'Nothing could reach anything. The pack drifts away.',
+                                                                     'Continue', 'on'],
+    fled: ['YOU BREAK OFF',  'You put distance between you and them. No spoils.',
                                                                      'Continue', 'on'],
   }[result];
   document.getElementById('bTitle').textContent = TXT[0];
@@ -4091,13 +4170,23 @@ function leaveCombat(result){
         giveItem(LOOT_TABLE[Math.floor(Math.random()*LOOT_TABLE.length)]);
     }
     player.pos.set(player.px, player.py + 0.02, player.pz);
-    // a draw means the pack gave up — clear them so you aren't instantly re-jumped
-    if (result === 'draw') for (let i=entities.length-1;i>=0;i--) despawnEntity(entities[i]);
+    // draw or withdrawal: shake them off, and buy a moment before they can
+    // notice you again or you'd be straight back into the same fight
+    if (result === 'draw' || result === 'fled'){
+      for (let i=entities.length-1;i>=0;i--) despawnEntity(entities[i]);
+      player.graceT = 4.5;
+    }
   } else {
-    player.pos.copy(player.spawn);
-    player.pos.y = surfaceY(Math.floor(player.spawn.x), Math.floor(player.spawn.z)) + 0.1;
+    // you wake wherever you last rested — the campfire, or an inn you paid for
+    const h = player.rest || { x:HOME.x+3, z:HOME.z+2, name:'the campfire' };
+    const ry = spawnGroundY(Math.round(h.x), Math.round(h.z));
+    player.pos.set(h.x+0.5, (ry === null ? SHORE_Y+1 : ry) + 0.2, h.z+0.5);
     player.hp = Math.max(1, Math.round(player.maxHp*0.5));
+    player.mana = player.maxMana;
     player.alive = true;
+    player.graceT = 6;
+    G.tod = 0.28;                                  // you come round at first light
+    toast(`You wake at ${h.name}, weaker than you were`, 4);
     // clear the ambush so you don't get re-jumped on the spot
     for (let i=entities.length-1; i>=0; i--) despawnEntity(entities[i]);
   }
@@ -4241,6 +4330,22 @@ function refreshTargets(){
     if (canHit(a, t, ab)) cells.push([t.x, t.y, t.z]);
   }
   setTiles(tHit, cells, 0.05);
+}
+// Break off. Anything already on you gets a free swing as you turn your back —
+// so running is a real option with a real price, not a free reset.
+function fleeCombat(){
+  const a = actor();
+  if (!a || !a.isPlayer || CB.phase !== 'idle') return;
+  const th = threateners(a);
+  log(`<b>You break off.</b>`);
+  for (const o of th){
+    if (!o.alive || !player.alive) continue;
+    setAnim(o, 'attack', 0.38, 'slash');
+    resolveAttack(o, a, abilityOf(o));
+  }
+  if (!player.alive){ endCombat('lose'); return; }
+  CB.fled = true;
+  endCombat('fled');
 }
 function endPlayerTurn(){
   if (CB.phase !== 'idle' || !actor() || !actor().isPlayer) return;
@@ -4744,10 +4849,14 @@ function drawActs(){
     return `<div class="act ${CB.selAbility===i?'sel':''} ${off?'off':''} ${ab.probe?'probe':''}" data-i="${i}">
       <span class="ak">${i+1}</span>${cost}
       <div class="an">${ab.name}</div><div class="ad">${ab.desc}</div></div>`;
-  }).join('') + `<div class="act" data-end="1"><div class="an">End Turn</div><div class="ad">SPACE</div></div>`;
+  }).join('')
+    + `<div class="act ${yours?'':'off'}" data-flee="1"><div class="an">Withdraw</div>
+       <div class="ad">Break off · they get a swing</div></div>`
+    + `<div class="act" data-end="1"><div class="an">End Turn</div><div class="ad">SPACE</div></div>`;
   el.querySelectorAll('.act').forEach(n=>{
     n.onclick = ()=>{
       if (n.dataset.end) endPlayerTurn();
+      else if (n.dataset.flee){ if (!n.classList.contains('off')) fleeCombat(); }
       else if (!n.classList.contains('off')) selectAbility(+n.dataset.i);
     };
   });
@@ -4840,6 +4949,13 @@ function openTown(folk){
   townFolk = folk;
   G.paused = true;
   if (locked) document.exitPointerLock();
+  if (folk.role === 'idler'){                       // a word in passing, no panel
+    const l = folk.lines[Math.floor(Math.random()*folk.lines.length)];
+    toast(`${folk.name}: “${l}”`, 4.2);
+    townFolk = null; G.paused = false;
+    if (G.mode === 'explore') document.getElementById('lockmsg').style.display = 'flex';
+    return;
+  }
   if (folk.role === 'reeve' && !player.q.offers.length) refreshOffers();
   document.getElementById('town').classList.add('on');
   drawTown();
@@ -4892,6 +5008,35 @@ function drawTown(){
     const tb = document.getElementById('tBarrow');
     if (tb) tb.onclick = acceptBarrow;
     body.querySelectorAll('[data-take]').forEach(b=> b.onclick = ()=> acceptErrand(+b.dataset.take));
+  }
+
+  else if (townFolk.role === 'innkeeper'){
+    const cost = Math.max(6, 12 - repIndex()*2);
+    const canPay = player.q.coin >= cost;
+    const isHome = player.rest && player.rest.name === 'the Kettle';
+    body.innerHTML = `
+      <div class="od3" style="font-style:italic;margin-bottom:12px">“${townFolk.line}”</div>
+      <div class="psec">A bed at the Kettle</div>
+      <div class="od3">Sleep until morning. You wake healed, and if something kills you
+        out there, you wake back here rather than at that cold fire in the wood.</div>
+      <div class="offer" style="margin-top:10px">
+        <span style="flex:1"><div class="on3">Take a room</div>
+          <div class="od3">Full vigour and mana · morning · this becomes where you wake</div>
+          <div class="orw">${cost} coin${repIndex()?` (${TOWN_NAME} keeps a rate for you)`:''}</div></span>
+        <button class="tog" id="tRest" ${canPay?'':'disabled style="opacity:.35"'}>Rest</button></div>
+      <div class="od3" style="margin-top:10px;color:${isHome?'#9ac25c':'#8d97a7'}">
+        ${isHome ? 'Your things are here. This is where you wake.'
+                 : 'You currently wake at the campfire in the wood.'}</div>`;
+    const rb = document.getElementById('tRest');
+    if (rb) rb.onclick = ()=>{
+      if (player.q.coin < cost) return;
+      player.q.coin -= cost;
+      player.hp = player.maxHp; player.mana = player.maxMana;
+      player.rest = { x:TOWN.x-1, z:TOWN.z-8, name:'the Kettle' };
+      G.tod = 0.29; player.graceT = 5;
+      SFX.heal(); toast('You sleep until morning', 3);
+      drawVitals(); closeTown();
+    };
   }
 
   else {
@@ -5118,7 +5263,7 @@ function saveGame(){
            st:player.st, weaponId:player.weaponId, spellId:player.spellId,
            bonusHp:player.bonusHp||0, bonusMana:player.bonusMana||0,
            bag:player.bag, worn:player.worn, q:player.q,
-           look:player.look, gear:player.gear },
+           look:player.look, gear:player.gear, rest:player.rest },
       tod: G.tod,
       spawn: { x:player.spawn.x, y:player.spawn.y, z:player.spawn.z },
     }));
@@ -5145,6 +5290,7 @@ function loadGame(){
     if (!player.q.chests) player.q.chests = {};
     player.look = s.p.look || { skin:1, hair:1, tunic:0, cloak:0 };
     player.gear = s.p.gear || {};
+    player.rest = s.p.rest || null;
     for (const q of player.q.active) q.spawned = false;   // sites repopulate on return
     if (typeof s.tod === 'number') G.tod = s.tod;
     player.spawn.set(s.spawn.x, s.spawn.y, s.spawn.z);
@@ -5190,8 +5336,8 @@ function seedValeEnemies(){
     for (let tryN=0; tryN<8; tryN++){
       const x = HOME.x+ox+(tryN?Math.round((hash2(i,tryN,SEED)-0.5)*7):0);
       const z = HOME.z+oz+(tryN?Math.round((hash2(tryN,i,SEED)-0.5)*7):0);
-      const y = surfaceY(x, z);
-      if (y <= SEA+1) continue;
+      const y = spawnGroundY(x, z);
+      if (y === null || y <= SEA+1) continue;
       if (getBlock(x, y-1, z) === B.MOSS || getBlock(x, y-1, z) === B.STONE) continue;
       spawnEntity(kinds[i], x, y, z);
       return;
@@ -5698,7 +5844,7 @@ window.STRATA = {
   BARROW, BARROW_FLOOR, inBarrow, BARROW_QUEST,
   chests, refreshChests, openChest, nearestChest, rollGear, giveGear, itemDef,
   LOOKS, applyLook, tutStart, TUT, heroTick, heroAttach, heroDetach,
-  moveCostInto, concealed, budget, spawnEntity,
+  moveCostInto, concealed, budget, spawnEntity, spawnGroundY, fleeCombat, nearestFolk,
   get TIMESCALE(){ return TIMESCALE; }, get HITSTOP(){ return HITSTOP; },
   populateSites, repTier, buildTownsfolk, creditKill,
   get abilities(){ return ABILITIES; },
