@@ -39,6 +39,8 @@
   .btn:active{transform:translateY(1px)}
   .btn.small{padding:7px 15px;font-size:11px;letter-spacing:.14em}
   .btn.ghost{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.14)}
+  #story{max-width:600px;text-align:center;font-size:13px;line-height:1.85;color:#cbd3e0;
+    font-style:italic;text-shadow:0 2px 10px #000;animation:tfade 2.4s ease both}
   #keyhelp{font-size:11px;line-height:1.9;color:#98a2b2;text-align:center;max-width:560px}
   #bootfail{display:none;max-width:520px;padding:14px 18px;border-radius:6px;text-align:center;
     font-size:12px;line-height:1.7;color:#f0d6d2;background:rgba(88,30,26,.5);
@@ -125,6 +127,11 @@
   .copt .od{font-size:10px;color:#8d97a7;margin-top:3px;line-height:1.45}
   .copt .req{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#c88b7f;white-space:nowrap}
   .copt.sel .req,.copt:not(.lock) .req{color:#8fbf6a}
+  .lrow{display:flex;align-items:center;gap:6px;margin-bottom:7px}
+  .lrow .ll{font-size:10.5px;color:#9aa4b3;width:44px}
+  .sw2{width:19px;height:19px;border-radius:4px;cursor:pointer;
+    border:1px solid rgba(255,255,255,.2)}
+  .sw2.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 0 9px rgba(216,180,90,.5)}
   .cfoot{display:flex;align-items:center;gap:10px}
   .cnote{font-size:11px;color:#8d97a7}
 
@@ -245,6 +252,12 @@
   .pip.on{background:var(--gold);box-shadow:0 0 7px rgba(216,180,90,.7)}
   .pip.ap.on{background:#cf5a4c;box-shadow:0 0 7px rgba(207,90,76,.7)}
 
+  #tut{position:absolute;left:50%;top:64px;transform:translateX(-50%);display:none;
+    max-width:560px;padding:11px 20px;border-radius:8px;font-size:12.5px;line-height:1.65;
+    text-align:center;color:#efe8d8;background:rgba(20,26,36,.94);
+    border:1px solid var(--gold);box-shadow:0 8px 30px rgba(0,0,0,.7);pointer-events:none}
+  #tut.on{display:block;animation:tfade .5s ease both}
+  #tut b{color:var(--gold);margin-right:6px}
   #clog{position:absolute;right:16px;bottom:16px;width:268px;max-height:190px;overflow:hidden;
     padding:8px 10px;font-size:11px;line-height:1.62;color:#b7c0cf;display:flex;
     flex-direction:column-reverse}
@@ -325,6 +338,7 @@
 <div id="combat">
   <div id="order"></div>
   <div id="hint"></div>
+  <div id="tut"></div>
   <div id="pips">
     <span class="pipset"><span style="margin-right:5px">Move</span><span id="mpPips"></span></span>
     <span class="pipset"><span style="margin-right:5px">Action</span><span id="apPips"></span></span>
@@ -350,6 +364,8 @@
       <div class="ccol">
         <div class="chead">Ability</div>
         <div id="cSpells" class="clist"></div>
+        <div class="chead" style="margin-top:14px">Appearance</div>
+        <div id="cLook"></div>
       </div>
     </div>
     <div class="cfoot">
@@ -401,7 +417,14 @@
 
 <div id="title">
   <h1>STRATA</h1>
-  <div class="sub">an open world of blocks &amp; turns</div>
+  <div class="sub">you wake in a wood that is not yours</div>
+  <div id="story">
+    You do not remember arriving. There is a fire, still warm, that someone else built.
+    There is water below, and old stone around you that was raised for a reason nobody
+    left written down. Smoke rises over the hill to the north-east.<br>
+    <span style="color:#8d97a7">Whoever banked this fire meant to come back. Go and find
+    out where you are.</span>
+  </div>
   <div id="keyhelp">
     <b>WASD</b> move &nbsp;·&nbsp; <b>SPACE</b> jump &nbsp;·&nbsp; <b>MOUSE</b> look &nbsp;·&nbsp; <b>SHIFT</b> sprint<br>
     <b>LEFT CLICK</b> mine &nbsp;·&nbsp; <b>E</b> or walk close to a creature to start a fight<br>
@@ -546,6 +569,15 @@ const SPELLS = [
 ];
 const meets = (st, req)=> !req || st[req[0]] >= req[1];
 
+// ── appearance ─────────────────────────────────────────────────────────────
+const LOOKS = {
+  skin:  { label:'Skin',  opts:[0xf0c9a4,0xd6b48f,0xb98a63,0x8d6142,0x62402c,0x40281b] },
+  hair:  { label:'Hair',  opts:[0x2b2119,0x5a3a22,0x8a5a2c,0xc49a4a,0xb0b4bc,0x7a2f22] },
+  tunic: { label:'Tunic', opts:[0x4f6f9a,0x6a7a4a,0x8a4a4a,0x5c4a76,0x7a6a3a,0x3a4a52] },
+  cloak: { label:'Cloak', opts:[0x2c3f5c,0x3c4a34,0x5a3030,0x40364a,0x4a4238,0x243034] },
+};
+const LOOK_KEYS = Object.keys(LOOKS);
+
 // ── items ──────────────────────────────────────────────────────────────────
 // Consumables you drink in a fight, and trinkets you wear (two slots).
 const ITEMS = {
@@ -562,6 +594,37 @@ const ITEMS = {
     st:{mgt:2, vit:2}, soak:0.08, unique:true },
 };
 const LOOT_TABLE = ['salve','salve','draught','ember','charm','ward','lens','feather','torc'];
+
+// ── procedurally generated gear ─────────────────────────────────────────────
+// Rolled items live on the player, not in ITEMS, so lookups go through itemDef.
+const GEAR_BASE  = ['Band','Torc','Amulet','Sigil','Fetish','Circlet','Knot','Pendant'];
+const GEAR_PRE   = ['Barrow','Ash','Fen','Iron','Elder','Grave','Thorn','Moss','Storm','Wither'];
+const GEAR_SUF   = ['of the Bear','of the Wolf','of Long Nights','of the Quiet Hall',
+                    'of Nine Winters', 'of the Drowned', 'of the First Fire'];
+const GEAR_STATS = ['mgt','vit','int','agi'];
+const STAT_NAME  = { mgt:'Might', vit:'Vitality', int:'Intellect', agi:'Agility' };
+let gearSeq = 0;
+function rollGear(level){
+  const r = ()=> Math.random();
+  const nAff = level >= 3 ? 3 : level >= 2 ? 2 : 1;
+  const st = {}, parts = [];
+  const pool = GEAR_STATS.slice();
+  for (let i=0;i<nAff && pool.length;i++){
+    const k = pool.splice(Math.floor(r()*pool.length), 1)[0];
+    const v = 1 + Math.floor(r()*(1 + level));
+    st[k] = v; parts.push(`+${v} ${STAT_NAME[k]}`);
+  }
+  let soak = 0;
+  if (r() < 0.34){ soak = 0.04 + Math.round(r()*level)*0.03; parts.push(`${Math.round(soak*100)}% less damage taken`); }
+  const name = `${GEAR_PRE[Math.floor(r()*GEAR_PRE.length)]} `
+             + `${GEAR_BASE[Math.floor(r()*GEAR_BASE.length)]} `
+             + (r() < 0.55 ? GEAR_SUF[Math.floor(r()*GEAR_SUF.length)] : '');
+  const id = 'gear' + (++gearSeq) + '_' + Math.floor(r()*9999);
+  return { id, name:name.trim(), kind:'trinket', icon:'✵', rolled:true, level,
+           desc: parts.join(' · '), st, soak };
+}
+// every item lookup goes through here so rolled gear behaves like the fixed kind
+function itemDef(id){ return ITEMS[id] || (player.gear && player.gear[id]) || null; }
 
 // ── the town: errands, standing, coin ──────────────────────────────────────
 const TOWN_NAME = 'Fendmere';
@@ -2106,6 +2169,20 @@ function pathFrom(map, x, y, z){
 
 // ───────────────────────────── entities ─────────────────────────────
 const KINDS = {
+  // ── beasts: what actually lives in a wood, and what you meet first ──
+  wolf:      { name:'Wolf',      hp:20, mp:8, atk:[5,9],   reach:1, init:16, xp:14,
+               body:0x6e6a63, trim:0x3b3833, scale:0.92, aggro:14, shape:'beast',
+               beast:true, wild:true, blurb:'Quick, and never alone.' },
+  boar:      { name:'Boar',      hp:34, mp:6, atk:[7,12],  reach:1, init:11, xp:20,
+               body:0x5c4a3a, trim:0x342a20, scale:1.00, aggro:11, shape:'beast',
+               beast:true, wild:true, knock:1, blurb:'Charges, and knocks you off your line.' },
+  bear:      { name:'Bear',      hp:58, mp:4, atk:[10,16], reach:1, init:7,  xp:40,
+               body:0x4a3a2c, trim:0x2a2018, scale:1.30, aggro:10, shape:'beast',
+               beast:true, wild:true, soak:0.15, blurb:'Slow. Enormous. Do not be surrounded with it.' },
+  lynx:      { name:'Lynx',      hp:16, mp:9, atk:[6,10],  reach:1, init:18, xp:18,
+               body:0x8a7a5e, trim:0x4e442f, scale:0.78, aggro:15, shape:'beast',
+               beast:true, wild:true, blurb:'Comes out of the scrub at you.' },
+  // ── the other things, further from the fire ──
   husk:      { name:'Husk',      hp:32, mp:4, atk:[6,11],  reach:1, init:8,  xp:16,
                body:0x6b5f4a, trim:0x3f3627, scale:1.00, aggro:11, shape:'brute' },
   sprig:     { name:'Sprig',     hp:19, mp:6, atk:[4,8],   reach:1, init:14, xp:12,
@@ -2172,26 +2249,89 @@ function tickStatus(a){
 const statusText = a => a.status ? Object.keys(a.status).map(k=>STATUS[k].name[0]).join('') : '';
 // Weighted so the nasty newcomers stay uncommon — an even roll across eight
 // types means a level-1 character meets two Wardens in their first fight.
-const KIND_WEIGHTS = { husk:26, sprig:24, slinger:18, ashling:10, stalker:9,
+const KIND_WEIGHTS = { wolf:30, boar:18, lynx:14, bear:6,
+                       husk:26, sprig:24, slinger:18, ashling:10, stalker:9,
                        delver:7, cairnwight:4, warden:3,
                        nightjar:22, barrowkin:12, wisp:14 };
 const KIND_KEYS = Object.keys(KINDS);
-const DAY_POOL = [], NIGHT_POOL = [];
+const DAY_POOL = [], NIGHT_POOL = [], WILD_POOL = [];
 for (const k of KIND_KEYS){
   const n = KIND_WEIGHTS[k] || 1;
+  if (KINDS[k].wild) for (let i=0;i<n;i++) WILD_POOL.push(k);
   // night things only come out at night; day things thin out but don't vanish
   if (KINDS[k].night) for (let i=0;i<n;i++) NIGHT_POOL.push(k);
   else { for (let i=0;i<n;i++) DAY_POOL.push(k);
          for (let i=0;i<Math.ceil(n*0.35);i++) NIGHT_POOL.push(k); }
 }
-const randomKind = ()=>{
+// Near the fire you meet animals. The stranger things live further out — so the
+// opening reads as "lost in a wood", not "besieged by shadow people".
+function randomKind(x, z){
+  const d = (x === undefined) ? 999 : Math.hypot(x-HOME.x, z-HOME.z);
+  const wildOnly = d < 62;
+  const wildish  = d < 105;
+  if (wildOnly) return WILD_POOL[Math.floor(Math.random()*WILD_POOL.length)];
+  if (wildish && Math.random() < 0.62) return WILD_POOL[Math.floor(Math.random()*WILD_POOL.length)];
   const pool = isNight() ? NIGHT_POOL : DAY_POOL;
   return pool[Math.floor(Math.random()*pool.length)];
-};
+}
 const entities = [];        // living creatures in the world (not the player)
 
+// Four legs, a barrel body, a head slung forward. Reads as an animal at a glance,
+// which is the whole point of meeting one first.
+function makeBeast(K){
+  const g = new THREE.Group();
+  const bm = new THREE.MeshLambertMaterial({ color:K.body, flatShading:true });
+  const tm = new THREE.MeshLambertMaterial({ color:K.trim, flatShading:true });
+  const heavy = K.name === 'Bear';
+  const bodyL = heavy ? 1.15 : 1.00, bodyR = heavy ? 0.38 : 0.28;
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(bodyR*0.9, bodyR, bodyL, 8), bm);
+  barrel.rotation.x = Math.PI/2; barrel.position.set(0, heavy?0.78:0.66, 0);
+  const chest = new THREE.Mesh(new THREE.SphereGeometry(bodyR*1.05, 8, 6), bm);
+  chest.position.set(0, heavy?0.80:0.68, bodyL*0.42);
+  const rump = new THREE.Mesh(new THREE.SphereGeometry(bodyR*0.95, 8, 6), bm);
+  rump.position.set(0, heavy?0.76:0.64, -bodyL*0.44);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(bodyR*0.42, bodyR*0.55, 0.30, 6), bm);
+  neck.position.set(0, heavy?0.88:0.78, bodyL*0.60); neck.rotation.x = 0.7;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(bodyR*0.95, bodyR*0.85, bodyR*1.25), tm);
+  head.position.set(0, heavy?0.94:0.86, bodyL*0.78);
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(bodyR*0.5, bodyR*0.42, bodyR*0.6), tm);
+  snout.position.set(0, heavy?0.86:0.79, bodyL*0.95);
+  const earL = new THREE.Mesh(new THREE.ConeGeometry(bodyR*0.26, bodyR*0.5, 4), tm);
+  earL.position.set(-bodyR*0.36, heavy?1.14:1.06, bodyL*0.74);
+  const earR = earL.clone(); earR.position.x = bodyR*0.36;
+  const eye = new THREE.Mesh(new THREE.BoxGeometry(0.07,0.07,0.03),
+    new THREE.MeshBasicMaterial({ color:0xffe08a }));
+  eye.position.set(-bodyR*0.34, heavy?0.99:0.91, bodyL*0.90);
+  const eye2 = eye.clone(); eye2.position.x = bodyR*0.34;
+  const legGeo = new THREE.CylinderGeometry(bodyR*0.20, bodyR*0.26, heavy?0.62:0.56, 5);
+  const legs = [];
+  for (const [lx,lz] of [[-1,1],[1,1],[-1,-1],[1,-1]]){
+    const L = new THREE.Mesh(legGeo, tm);
+    L.position.set(lx*bodyR*0.72, heavy?0.31:0.28, lz*bodyL*0.34);
+    g.add(L); legs.push(L);
+  }
+  const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.04, bodyR*0.22, heavy?0.22:0.46, 5), bm);
+  tail.position.set(0, heavy?0.80:0.70, -bodyL*0.62); tail.rotation.x = -0.9;
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.52, 14).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({ color:0x0a0d12, transparent:true, opacity:0.26, depthWrite:false }));
+  shadow.position.y = 0.03; shadow.renderOrder = 1;
+  const wedge = new THREE.Mesh(
+    new THREE.RingGeometry(0.50, 0.80, 12, 1, -0.62, 1.24).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({ color:0xff8a6a, transparent:true, opacity:0.55,
+      depthWrite:false, side:THREE.DoubleSide }));
+  wedge.position.set(0, 0.05, 0); wedge.renderOrder = 2; wedge.visible = false;
+  g.add(barrel, chest, rump, neck, head, snout, earL, earR, eye, eye2, tail, shadow, wedge);
+  g.scale.setScalar(K.scale);
+  // front pair drives the "arms" slot so the existing anim code still reads
+  g.userData.legs = [legs[0], legs[1]];
+  g.userData.arms = [legs[2], legs[3]];
+  g.userData.wedge = wedge;
+  g.userData.beast = true;
+  return g;
+}
 function makeBody(kind){
   const K = KINDS[kind];
+  if (K.shape === 'beast') return makeBeast(K);
   const g = new THREE.Group();
   const bm = new THREE.MeshLambertMaterial({ color:K.body });
   const tm = new THREE.MeshLambertMaterial({ color:K.trim });
@@ -2686,6 +2826,93 @@ function tickCampfire(t, dt){
   ea.needsUpdate = true; sa.needsUpdate = true;
 }
 
+// ── chests ──────────────────────────────────────────────────────────────────
+// Deterministic on a coarse grid, so the same world always has the same chests,
+// plus a few placed by hand in the barrow. Opened state lives on the player.
+const CHEST_GRID = 34;
+const chests = [];
+function chestSpotsNear(px, pz){
+  const out = [];
+  const gx = Math.floor(px/CHEST_GRID), gz = Math.floor(pz/CHEST_GRID);
+  for (let dz=-3; dz<=3; dz++) for (let dx=-3; dx<=3; dx++){
+    const cx = gx+dx, cz = gz+dz;
+    if (hash2(cx, cz, SEED+5150) > 0.34) continue;
+    const x = cx*CHEST_GRID + Math.floor(hash2(cx,cz,SEED+7)*CHEST_GRID);
+    const z = cz*CHEST_GRID + Math.floor(hash2(cz,cx,SEED+8)*CHEST_GRID);
+    if (inTown(x,z) || inCamp(x,z)) continue;
+    const y = surfaceY(x, z);
+    if (y <= SEA+1 || y > 52) continue;
+    out.push({ id:`c${cx}_${cz}`, x, y, z, tier:1 });
+  }
+  // hand-placed in the barrow
+  const D = BARROW, F = BARROW_FLOOR;
+  for (const [i,ox,oz,t] of [[0,-4,4,1],[1,4,6,1],[2,-6,19,2],[3,6,27,2]]){
+    const x = D.x+ox, z = D.z+oz;
+    if (Math.hypot(px-x, pz-z) < 110) out.push({ id:`b${i}`, x, y:F, z, tier:t });
+  }
+  return out;
+}
+function makeChest(tier){
+  const g = new THREE.Group();
+  const wood = new THREE.MeshLambertMaterial({ color: tier>1 ? 0x6a4a6a : 0x6b4a2b });
+  const iron = new THREE.MeshLambertMaterial({ color: tier>1 ? 0xd8b45a : 0x8a8f98 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.72,0.42,0.5), wood); base.position.y = 0.21;
+  const lid  = new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.25,0.72,8,1,false,0,Math.PI), wood);
+  lid.rotation.z = Math.PI/2; lid.position.y = 0.42;
+  const band = new THREE.Mesh(new THREE.BoxGeometry(0.76,0.08,0.54), iron); band.position.y = 0.30;
+  const lock = new THREE.Mesh(new THREE.BoxGeometry(0.12,0.14,0.08), iron); lock.position.set(0,0.34,0.27);
+  g.add(base, lid, band, lock);
+  g.userData.lid = lid;
+  g.castShadow = true;
+  return g;
+}
+function refreshChests(){
+  const want = chestSpotsNear(player.pos.x, player.pos.z);
+  const keep = new Set(want.map(c=>c.id));
+  for (let i=chests.length-1;i>=0;i--){
+    if (!keep.has(chests[i].id)){ scene.remove(chests[i].mesh); chests.splice(i,1); }
+  }
+  const have = new Set(chests.map(c=>c.id));
+  for (const s of want){
+    if (have.has(s.id)) continue;
+    const m = makeChest(s.tier);
+    m.position.set(s.x+0.5, s.y, s.z+0.5);
+    m.rotation.y = hash2(s.x, s.z, SEED+9)*6.28;
+    if (player.q.chests && player.q.chests[s.id]) m.userData.lid.rotation.x = -1.5;
+    scene.add(m);
+    chests.push({ ...s, mesh:m });
+  }
+}
+function nearestChest(){
+  let best = null, bd = 3.4;
+  for (const c of chests){
+    if (player.q.chests && player.q.chests[c.id]) continue;
+    const d = Math.hypot(player.pos.x-(c.x+0.5), player.pos.z-(c.z+0.5));
+    if (d < bd && Math.abs(player.pos.y - c.y) < 4){ bd = d; best = c; }
+  }
+  return best;
+}
+function openChest(c){
+  player.q.chests[c.id] = 1;
+  c.mesh.userData.lid.rotation.x = -1.5;
+  SFX.ui(); boom(c.x, c.y, c.z, 0xffd27a);
+  const coin = 8 + Math.floor(Math.random()*(c.tier>1 ? 46 : 22));
+  player.q.coin += coin;
+  const lines = [`${coin} coin`];
+  const rolls = c.tier > 1 ? 2 : 1;
+  for (let i=0;i<rolls;i++){
+    if (Math.random() < (c.tier>1 ? 0.55 : 0.30)){
+      const g = rollGear(c.tier);
+      giveGear(g); lines.push(g.name);
+    } else {
+      const id = LOOT_TABLE[Math.floor(Math.random()*LOOT_TABLE.length)];
+      giveItem(id); lines.push(itemDef(id).name);
+    }
+  }
+  toast(lines.join(' · '), 3.4);
+  drawVitals();
+}
+
 // ── barrow lighting ─────────────────────────────────────────────────────────
 // The sun can't reach a burial hall, and the sky ambient alone renders it flat.
 // A small pool of point lights follows you to the nearest braziers.
@@ -2856,7 +3083,7 @@ function populateSites(){
         const z = q.site.z + Math.round((hash2(i,2,q.id)-0.5)*11);
         const y = surfaceY(x, z);
         if (y <= SEA+1) continue;
-        const e = spawnEntity(randomKind(), x, y, z);
+        const e = spawnEntity(randomKind(x, z), x, y, z);
         e.siteFor = q.id;
       }
     }
@@ -2892,6 +3119,8 @@ function turnInErrands(){
     if (q.kind === 'barrow'){
       player.q.barrow = 'done';
       giveItem('barrowlight');
+      giveGear(rollGear(3));                    // the barrow's own reward, rolled
+      giveGear(rollGear(2));
       toast('Aelthwyn is put out. Fendmere will remember it.', 4);
     }
     // clean up anything still standing that belonged to this errand
@@ -2907,7 +3136,9 @@ function turnInErrands(){
 
 // keep a light population of creatures around the player
 function populate(px, pz){
-  const want = 16;
+  // thinner near the fire, normal density once you're properly out in it
+  const home = Math.hypot(px-HOME.x, pz-HOME.z);
+  const want = home < 45 ? 5 : home < 90 ? 10 : 15;
   for (let i=entities.length-1; i>=0; i--){
     const e = entities[i];
     // errand quarry sticks around even if you wander off, or hunts never finish
@@ -2917,7 +3148,7 @@ function populate(px, pz){
   let guard = 0;
   while (entities.length < want && guard++ < 60){
     const a = Math.random()*Math.PI*2;
-    const r = 26 + Math.random()*44;
+    const r = (home < 45 ? 38 : 26) + Math.random()*44;
     const x = Math.round(px + Math.cos(a)*r), z = Math.round(pz + Math.sin(a)*r);
     const y = surfaceY(x, z);
     if (y <= SEA+1) continue;                 // no spawning in the sea
@@ -2930,7 +3161,7 @@ function populate(px, pz){
       const oz = z + (i ? Math.round((Math.random()-0.5)*5) : 0);
       const oy = surfaceY(ox, oz);
       if (oy <= SEA+1 || Math.abs(oy-y) > 4) continue;
-      const kind = randomKind();
+      const kind = randomKind(ox, oz);
       spawnEntity(kind, ox, oy, oz);
     }
   }
@@ -2949,6 +3180,8 @@ const player = {
   weaponId: 'blade', spellId: 'wind',
   bag: {}, worn: [null, null],
   q: { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none' },
+  look: { skin:1, hair:1, tunic:0, cloak:0 },
+  gear: {}, chests: {},
   mp: 6, ap: 2, init: 0,
   mpMax: 6, apMax: 2,
   x:0, y:0, z:0,            // combat cell
@@ -2962,14 +3195,14 @@ const player = {
 function effStats(){
   const s = { ...player.st };
   for (const id of player.worn){
-    const it = id && ITEMS[id];
+    const it = id && itemDef(id);
     if (it && it.st) for (const k of Object.keys(it.st)) s[k] += it.st[k];
   }
   return s;
 }
 function wornSoak(){
   let v = 0;
-  for (const id of player.worn){ const it = id && ITEMS[id]; if (it && it.soak) v += it.soak; }
+  for (const id of player.worn){ const it = id && itemDef(id); if (it && it.soak) v += it.soak; }
   return v;
 }
 function applyBuild(refill){
@@ -2986,6 +3219,7 @@ function applyBuild(refill){
     const sh = player.mesh.userData.shield;
     if (sh){ sh.parent.remove(sh); player.mesh.userData.shield = null; }
     buildWeaponProp();
+    applyLook();
   }
 }
 // third-person avatar, only shown during combat
@@ -3023,9 +3257,22 @@ function applyBuild(refill){
   g.userData.wedge = wedge;
   g.userData.legs = [legL, legR];
   g.userData.arms = [armL, armR];
+  g.userData.skin = head.material;
+  g.userData.hair = cm;
+  g.userData.tunic = bm;
+  g.userData.cloakMat = cloak.material;
   g.visible = false;
   scene.add(g);
   player.mesh = g;
+}
+function applyLook(){
+  const u = player.mesh && player.mesh.userData;
+  if (!u) return;
+  const L = player.look || { skin:1, hair:1, tunic:0, cloak:0 };
+  u.skin.color.setHex(LOOKS.skin.opts[L.skin % LOOKS.skin.opts.length]);
+  u.hair.color.setHex(LOOKS.hair.opts[L.hair % LOOKS.hair.opts.length]);
+  u.tunic.color.setHex(LOOKS.tunic.opts[L.tunic % LOOKS.tunic.opts.length]);
+  u.cloakMat.color.setHex(LOOKS.cloak.opts[L.cloak % LOOKS.cloak.opts.length]);
 }
 // A weapon in hand does more for readability than any amount of HUD text.
 function buildWeaponProp(){
@@ -3131,10 +3378,17 @@ addEventListener('keydown', e=>{
   if (G.paused) return;
   if (e.code === 'KeyI'){ openPause('bag'); return; }
   if (e.code === 'KeyC'){ openPause('char'); return; }
+  if (e.code === 'KeyV'){
+    SETTINGS.thirdPerson = !SETTINGS.thirdPerson; saveSettings();
+    toast(SETTINGS.thirdPerson ? 'Third person' : 'First person', 1.2);
+    return;
+  }
   if (G.mode === 'explore'){
     if (e.code === 'KeyE'){
-      const f = nearestFolk();
-      if (f) openTown(f); else tryEngage();
+      const f = nearestFolk(), c = f ? null : nearestChest();
+      if (f) openTown(f);
+      else if (c) openChest(c);
+      else tryEngage();
     }
   } else if (G.mode === 'combat'){
     const n = ['Digit1','Digit2','Digit3','Digit4'].indexOf(e.code);
@@ -3239,10 +3493,27 @@ function updateExplore(dt){
   if (player.onGround && !wasGround && player.vel.y < -6) SFX.step();
   if (p.y < -10){ p.copy(player.spawn); player.vel.set(0,0,0); }
 
-  // camera
-  camera.position.set(p.x, p.y + EYE, p.z);
+  // camera — first person, or over the shoulder with terrain collision
   camera.rotation.set(0,0,0);
   camera.rotateY(player.yaw); camera.rotateX(player.pitch);
+  if (SETTINGS.thirdPerson){
+    player.mesh.visible = true;
+    player.mesh.position.set(p.x, p.y, p.z);
+    player.mesh.rotation.y = player.yaw + Math.PI;
+    const sw = wl > 0 ? Math.sin(G.time*speed*1.6)*0.42 : 0;
+    const lg = player.mesh.userData.legs, ar = player.mesh.userData.arms;
+    if (lg){ lg[0].rotation.x = sw; lg[1].rotation.x = -sw; }
+    if (ar){ ar[0].rotation.x = -sw*0.55; ar[1].rotation.x = sw*0.55; }
+    const back = new THREE.Vector3(0,0,1).applyQuaternion(camera.quaternion);
+    const eye = new THREE.Vector3(p.x, p.y + EYE, p.z);
+    const want = 4.6;
+    const hit = raycastVoxel(eye, back, want);
+    const d = hit.hit ? Math.max(1.1, hit.dist - 0.35) : want;
+    camera.position.set(eye.x + back.x*d, eye.y + back.y*d + 0.35, eye.z + back.z*d);
+  } else {
+    player.mesh.visible = false;
+    camera.position.set(p.x, p.y + EYE, p.z);
+  }
 
   // mine / place
   digCooldown -= dt;
@@ -3265,9 +3536,11 @@ function updateExplore(dt){
   tickTownsfolk(dt, G.time);
   populateSites();
   const folk = nearestFolk();
+  const chest = folk ? null : nearestChest();
   const pr = document.getElementById('prompt');
-  pr.classList.toggle('on', !!folk);
+  pr.classList.toggle('on', !!(folk || chest));
   if (folk) pr.textContent = `E — speak with ${folk.name}`;
+  else if (chest) pr.textContent = 'E — open the chest';
 
   // creature wander + aggro
   for (const e of entities){
@@ -3692,10 +3965,12 @@ function startCombat(trigger){
   clogEl.innerHTML = '';
   SFX.alarm();
   log(`<b>Ambush.</b> ${foes.length} creature${foes.length>1?'s':''} close in.`);
+  tutStart();
   drawActs(); drawOrder();
   setHint('Combat — the ground you were standing on is the board.');
 }
 function endCombat(result){
+  tutEnd();
   CB.active = false;
   CB.phase = 'over';
   CB.result = result;
@@ -3877,6 +4152,7 @@ function refreshTargets(){
 }
 function endPlayerTurn(){
   if (CB.phase !== 'idle' || !actor() || !actor().isPlayer) return;
+  tutAdvance('ended');
   tMove.count = 0; tHit.count = 0; tPath.count = 0;
   nextTurn();
 }
@@ -3961,6 +4237,7 @@ function handleCombatClick(){
         resolveAttack(a, t, ab);
       }
       CB.selAbility = -1;
+      tutAdvance('attacked');
       afterPlayerAction();
       return;
     }
@@ -3974,7 +4251,7 @@ function handleCombatClick(){
   if (!node || node.cost === 0) return;
   const path = pathFrom(CB.reach, cell.x, cell.y, cell.z);
   a.mp -= node.cost;
-  startWalk(a, path, ()=>{ afterPlayerAction(); });
+  startWalk(a, path, ()=>{ tutAdvance('moved'); afterPlayerAction(); });
 }
 function afterPlayerAction(){
   drawPips(); drawActs(); drawOrder();
@@ -4271,6 +4548,47 @@ function updateCombat(dt){
 // ═══════════════════════════════════════════════════════════════════════
 //  UI
 // ═══════════════════════════════════════════════════════════════════════
+// ── first-fight tutorial ────────────────────────────────────────────────────
+// Gated on what you've actually DONE, not on timers — it waits for you to move
+// before it explains attacking, and it only ever runs once.
+const TUT_STEPS = [
+  { id:'move',   text:'Your turn. Click a BLUE TILE to move — the blue dots are your movement.' },
+  { id:'intent', text:'Above each animal: what it will do to you IF YOU STOP HERE. Move and watch it change.' },
+  { id:'back',   text:'A wall, rock or tree AT YOUR BACK stops things getting behind you. So does GUARD.' },
+  { id:'attack', text:'Pick STRIKE, then click the animal. Attacks from behind hit far harder.' },
+  { id:'end',    text:'Out of moves? END TURN, or press SPACE.' },
+];
+const TUT = { on:false, i:0, moved:false, attacked:false };
+function tutStart(){
+  if (localStorage.getItem('strata-tut')) return;
+  TUT.on = true; TUT.i = 0; TUT.moved = false; TUT.attacked = false;
+  tutShow();
+}
+function tutShow(){
+  const el = document.getElementById('tut');
+  if (!TUT.on || TUT.i >= TUT_STEPS.length){ el.classList.remove('on'); return; }
+  el.classList.add('on');
+  el.innerHTML = `<b>${TUT.i+1}/${TUT_STEPS.length}</b> ${TUT_STEPS[TUT.i].text}`;
+}
+function tutAdvance(what){
+  if (!TUT.on) return;
+  const cur = TUT_STEPS[TUT.i];
+  if (!cur) return;
+  if (cur.id === 'move'   && what === 'moved')   TUT.i = 1;
+  else if (cur.id === 'intent' && what === 'moved') TUT.i = 2;
+  else if (cur.id === 'back'   && what === 'moved') TUT.i = 3;
+  else if (cur.id === 'attack' && what === 'attacked') TUT.i = 4;
+  else if (cur.id === 'end'    && what === 'ended') { TUT.on = false;
+    localStorage.setItem('strata-tut','1'); }
+  else return;
+  tutShow();
+}
+function tutEnd(){
+  if (!TUT.on) return;
+  TUT.on = false;
+  localStorage.setItem('strata-tut','1');
+  document.getElementById('tut').classList.remove('on');
+}
 function setHint(t){ document.getElementById('hint').textContent = t; }
 function drawVitals(){
   document.getElementById('vHp').textContent = `${Math.round(player.hp)} / ${player.maxHp}`;
@@ -4393,7 +4711,7 @@ function updateHudText(){
 // ═══════════════════════════════════════════════════════════════════════
 //  PAUSE MENU — character sheet, satchel, settings
 // ═══════════════════════════════════════════════════════════════════════
-const SETTINGS = { vol:0.34, sens:1.0, shadows:true, view:7, sfx:true };
+const SETTINGS = { vol:0.34, sens:1.0, shadows:true, view:7, sfx:true, thirdPerson:false };
 try { Object.assign(SETTINGS, JSON.parse(localStorage.getItem('strata-set')||'{}')); } catch(e){}
 function saveSettings(){ try { localStorage.setItem('strata-set', JSON.stringify(SETTINGS)); } catch(e){} }
 function applySettings(){
@@ -4570,7 +4888,7 @@ function drawPause(){
   else if (pauseTab === 'bag'){
     const ids = Object.keys(player.bag).filter(k=>player.bag[k] > 0);
     const wornRows = player.worn.map((id,i)=>{
-      const it = id && ITEMS[id];
+      const it = id && itemDef(id);
       return `<div class="bagrow ${it?'eq':''}">
         <span class="bi">${it?it.icon:'·'}</span>
         <span style="flex:1"><div class="bn">${it?it.name:'— empty trinket slot —'}</div>
@@ -4579,7 +4897,7 @@ function drawPause(){
     }).join('');
     body.innerHTML = `<div class="psec">Worn</div>${wornRows}
       <div class="psec">Satchel</div>` + (ids.length ? ids.map(id=>{
-        const it = ITEMS[id];
+        const it = itemDef(id); if (!it) return '';
         const act = it.kind === 'trinket'
           ? `<button class="tog" data-equip="${id}">Wear</button>`
           : `<button class="tog" data-use="${id}" ${G.mode!=='combat'&&it.icon==='✦'?'disabled style="opacity:.4"':''}>Use</button>`;
@@ -4599,6 +4917,7 @@ function drawPause(){
         <input type="range" min="0" max="100" value="${Math.round(SETTINGS.vol*100)}" data-set="vol">
         <span class="sv">${Math.round(SETTINGS.vol*100)}</span></div>
       <div class="psec">Controls</div>
+      ${t('thirdPerson','Third-person view (V)')}
       <div class="srow2"><label>Mouse sensitivity</label>
         <input type="range" min="30" max="250" value="${Math.round(SETTINGS.sens*100)}" data-set="sens">
         <span class="sv">${SETTINGS.sens.toFixed(2)}</span></div>
@@ -4626,11 +4945,18 @@ function drawPause(){
 }
 function giveItem(id, n){
   player.bag[id] = (player.bag[id] || 0) + (n || 1);
-  toast(`Found: ${ITEMS[id].name}`);
+  const d = itemDef(id);
+  toast(`Found: ${d ? d.name : id}`);
+}
+function giveGear(g){
+  player.gear[g.id] = g;
+  player.bag[g.id] = 1;
+  toast(`Found: ${g.name}`, 3.4);
+  log(`<b>${g.name}</b> — ${g.desc}`);
 }
 function useItem(id){
-  const it = ITEMS[id];
-  if (!player.bag[id]) return;
+  const it = itemDef(id);
+  if (!it || !player.bag[id]) return;
   if (id === 'salve'){ player.hp = Math.min(player.maxHp, player.hp + 26); SFX.heal(); }
   else if (id === 'draught'){ player.mana = Math.min(player.maxMana, player.mana + 18); SFX.heal(); }
   else if (id === 'ember'){
@@ -4679,7 +5005,8 @@ function saveGame(){
            hp:player.hp, mana:player.mana, lvl:player.level, xp:player.xp, xpNext:player.xpNext,
            st:player.st, weaponId:player.weaponId, spellId:player.spellId,
            bonusHp:player.bonusHp||0, bonusMana:player.bonusMana||0,
-           bag:player.bag, worn:player.worn, q:player.q },
+           bag:player.bag, worn:player.worn, q:player.q,
+           look:player.look, gear:player.gear },
       tod: G.tod,
       spawn: { x:player.spawn.x, y:player.spawn.y, z:player.spawn.z },
     }));
@@ -4703,6 +5030,9 @@ function loadGame(){
     player.bag = s.p.bag || {}; player.worn = s.p.worn || [null,null];
     player.q = s.p.q || { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none' };
     if (!player.q.barrow) player.q.barrow = 'none';
+    if (!player.q.chests) player.q.chests = {};
+    player.look = s.p.look || { skin:1, hair:1, tunic:0, cloak:0 };
+    player.gear = s.p.gear || {};
     for (const q of player.q.active) q.spawned = false;   // sites repopulate on return
     if (typeof s.tod === 'number') G.tod = s.tod;
     player.spawn.set(s.spawn.x, s.spawn.y, s.spawn.z);
@@ -4729,15 +5059,19 @@ function newWorld(){
   player.pitch = -0.05; player.vel.set(0,0,0);
   G.tod = 0.30;                                 // you wake in the early morning
   player.bag = {}; player.worn = [null, null];  // a new run starts empty-handed
-  player.q = { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none' };
+  player.q = { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none', chests:{} };
+  player.gear = {};
+  for (const c of chests) scene.remove(c.mesh);
+  chests.length = 0;
   applyBuild(true);
 }
 // A handful of creatures prowling the ruins, so there is something to fight
 // within sight of the fire without them walking into you the moment you stand up.
 function seedValeEnemies(){
-  const spots = [[-19,-14],[-22,-6],[14,12],[19,17],[9,-19],[-6,22],[24,-3],[-13,15]];
-  // the opening vale stays gentle — one of each newcomer at most, out at the edges
-  const kinds = ['husk','sprig','husk','slinger','sprig','ashling','stalker','delver'];
+  // Three animals, well out from the fire. Waking into eight things that all
+  // want you dead is not an opening, it's an ambush.
+  const spots = [[-26,-21],[27,24],[13,-30]];
+  const kinds = ['wolf','boar','lynx'];
   spots.forEach(([ox,oz], i)=>{
     // nudge off anything perched on a ruin wall — a creature on a 4-block wall
     // is unreachable by melee and turns the fight into a stalemate
@@ -4778,6 +5112,7 @@ function step(dt){
       G.streamT = 0.35;
       updateStreaming(player.pos.x, player.pos.z);
       populate(player.pos.x, player.pos.z);
+      refreshChests();
     }
     G.saveT -= dt;
     if (G.saveT <= 0){ G.saveT = 20; saveGame(); }
@@ -4891,12 +5226,24 @@ function enterWorld(){
   populate(player.pos.x, player.pos.z);
   drawVitals();
   document.getElementById('lockmsg').style.display = 'flex';
-  toast(`${TOWN_NAME} lies over the hill — they have work`, 3.6);
+  // A guided opening: a few beats, spaced out, rather than one wall of text.
+  if (!localStorage.getItem('strata-seen-intro')){
+    localStorage.setItem('strata-seen-intro','1');
+    const beats = [
+      [0.6, 'You wake beside a fire you did not build'],
+      [5.5, 'WASD to walk · mouse to look · V for third person'],
+      [11,  'Ruins around you. Water below. Smoke over the hill'],
+      [17,  'Follow the worn path north-east to find who lit it'],
+    ];
+    for (const [t,msg] of beats) setTimeoutFX(()=> toast(msg, 4.4), t);
+  } else {
+    toast(`${TOWN_NAME} lies over the hill`, 3.2);
+  }
 }
 // ═══════════════════════════════════════════════════════════════════════
 //  CHARACTER CREATOR
 // ═══════════════════════════════════════════════════════════════════════
-const CC = { st:null, weaponId:'blade', spellId:'wind' };
+const CC = { st:null, weaponId:'blade', spellId:'wind', look:{ skin:1, hair:1, tunic:0, cloak:0 } };
 function ccSpent(){ return STATS.reduce((n,s)=> n + (CC.st[s.id]-STAT_BASE), 0); }
 function ccLeft(){ return STAT_POOL - ccSpent(); }
 
@@ -4943,6 +5290,14 @@ function drawCreator(){
   document.getElementById('cSpells').innerHTML =
     SPELLS.map(s=> optHtml(s, s.id===CC.spellId, 'spell')).join('');
 
+  document.getElementById('cLook').innerHTML = LOOK_KEYS.map(k=>{
+    const L = LOOKS[k];
+    return `<div class="lrow"><span class="ll">${L.label}</span>` +
+      L.opts.map((c,i)=>`<span class="sw2 ${CC.look[k]===i?'on':''}" data-look="${k}"
+        data-i="${i}" style="background:#${c.toString(16).padStart(6,'0')}"></span>`).join('') +
+      `</div>`;
+  }).join('');
+
   document.getElementById('cNote').textContent = left > 0
     ? `${left} point${left>1?'s':''} unspent — raise a stat to unlock better gear.`
     : 'Strike comes free with whatever you carry.';
@@ -4958,6 +5313,8 @@ function drawCreator(){
   root.querySelectorAll('[data-spell]').forEach(el=> el.onclick = ()=>{
     if (el.classList.contains('lock')) return;
     CC.spellId = el.dataset.spell; drawCreator(); });
+  root.querySelectorAll('[data-look]').forEach(el=> el.onclick = ()=>{
+    CC.look[el.dataset.look] = +el.dataset.i; drawCreator(); });
 }
 document.getElementById('cBack').onclick = ()=>{
   document.getElementById('creator').classList.remove('on');
@@ -4966,6 +5323,7 @@ document.getElementById('cBack').onclick = ()=>{
 document.getElementById('cGo').onclick = ()=>{
   player.st = { ...CC.st };
   player.weaponId = CC.weaponId; player.spellId = CC.spellId;
+  player.look = { ...CC.look };
   player.level = 1; player.xp = 0; player.xpNext = 40; player.hp = 0;
   applyBuild();
   player.hp = player.maxHp;
@@ -5136,6 +5494,8 @@ window.STRATA = {
   flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners, backCovered, isSolid,
   TOWNSFOLK, openTown, closeTown, acceptErrand, acceptBarrow, turnInErrands, refreshOffers,
   BARROW, BARROW_FLOOR, inBarrow, BARROW_QUEST,
+  chests, refreshChests, openChest, nearestChest, rollGear, giveGear, itemDef,
+  LOOKS, applyLook, tutStart, TUT,
   populateSites, repTier, buildTownsfolk, creditKill,
   get abilities(){ return ABILITIES; },
   WEAPONS, SPELLS, STATS, HOME, LAKE, TOWN,
