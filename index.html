@@ -2699,6 +2699,7 @@ function makeBeast(K){
   neck.position.set(0, heavy?0.88:0.78, bodyL*0.60); neck.rotation.x = 0.7;
   const head = new THREE.Mesh(new THREE.BoxGeometry(bodyR*0.95, bodyR*0.85, bodyR*1.25), tm);
   head.position.set(0, heavy?0.94:0.86, bodyL*0.78);
+  addFace(head, bodyR*0.95, { depth: bodyR*0.62, eyeCol:0x2a2016, small:true });
   const snout = new THREE.Mesh(new THREE.BoxGeometry(bodyR*0.5, bodyR*0.42, bodyR*0.6), tm);
   snout.position.set(0, heavy?0.86:0.79, bodyL*0.95);
   const earL = new THREE.Mesh(new THREE.ConeGeometry(bodyR*0.26, bodyR*0.5, 4), tm);
@@ -2753,6 +2754,7 @@ function makeBody(kind){
     .scale(1, 1, td/tw*1.5), tm);
   hip.position.y = 0.50;
   const head  = new THREE.Mesh(new THREE.BoxGeometry(0.44,0.42,0.42), tm); head.position.y = 1.44;
+  addFace(head, 0.42, { eyeCol: K.glow || 0xcfd6df, sunken:true });
   const neck  = new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.15,0.16,6), tm); neck.position.y=1.22;
   const limb = (r0,r1,len)=> new THREE.CylinderGeometry(r0, r1, len, 6);
   const legL  = new THREE.Mesh(limb(0.09,0.12,0.50), tm); legL.position.set(-0.16,0.24,0);
@@ -3511,6 +3513,156 @@ function tickBarrowLights(t){
   }
 }
 
+// ── wildlife ────────────────────────────────────────────────────────────────
+// Nothing in this world existed that didn't want to kill you, which makes a
+// wilderness read as an arena. These are pure scenery: no hp, no turn order, they
+// never enter combat. They graze, they startle when you get close, and they run.
+// Cheap enough to be everywhere — one group of instanced boxes each, ticked by a
+// few lines of drift.
+const CRITTERS = [];
+let CRITTER_T = 0;
+const CRITTER_KINDS = {
+  hare: { body:0xa08a66, r:0.16, h:0.20, hop:true, flee:7,
+          regions:['meadow','heath','ruinfield'] },
+  deer: { body:0x8a6a44, r:0.26, h:0.62, flee:12,
+          regions:['oldwood','meadow','pinewood'] },
+  fowl: { body:0x6a5a48, r:0.14, h:0.18, flee:5,
+          regions:['marsh','meadow'] },
+  fox:  { body:0xa85c2c, r:0.17, h:0.24, flee:9,
+          regions:['oldwood','heath','ruinfield'] },
+};
+const CRITTER_KEYS = Object.keys(CRITTER_KINDS);
+function makeCritter(K){
+  const g = new THREE.Group();
+  const m = new THREE.MeshLambertMaterial({ color:K.body });
+  const dark = new THREE.MeshLambertMaterial({ color:0x2a2016 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(K.r*1.5, K.h*0.62, K.r*2.4), m);
+  body.position.y = K.h*0.72; g.add(body);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(K.r*1.1, K.r*1.1, K.r*1.2), m);
+  head.position.set(0, K.h*1.02, K.r*1.35); g.add(head);
+  addFace(head, K.r*1.1, { depth:K.r*0.6, eyeCol:0x120e0a, small:true });
+  for (const s of [-1,1]) for (const f of [-1,1]){
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(K.r*0.34, K.h*0.62, K.r*0.34), dark);
+    leg.position.set(s*K.r*0.5, K.h*0.31, f*K.r*0.85); g.add(leg);
+  }
+  if (K.h > 0.5){                                   // antlers, for the deer
+    for (const s of [-1,1]){
+      const a = new THREE.Mesh(new THREE.BoxGeometry(K.r*0.14, K.r*0.9, K.r*0.14), dark);
+      a.position.set(s*K.r*0.35, K.h*1.4, K.r*1.2); a.rotation.z = s*0.3; g.add(a);
+    }
+  }
+  g.castShadow = true;
+  return g;
+}
+function populateCritters(){
+  const px = player.pos.x, pz = player.pos.z;
+  for (let i=CRITTERS.length-1; i>=0; i--){
+    const c = CRITTERS[i];
+    if (Math.hypot(c.px-px, c.pz-pz) > 90){ scene.remove(c.mesh); CRITTERS.splice(i,1); }
+  }
+  let guard = 0;
+  while (CRITTERS.length < 9 && guard++ < 30){
+    const a = Math.random()*Math.PI*2, r = 26 + Math.random()*48;
+    const x = Math.round(px + Math.cos(a)*r), z = Math.round(pz + Math.sin(a)*r);
+    if (inTown(x,z) || inBarrow(x,z)) continue;
+    const reg = regionAt(x, z);
+    const opts = CRITTER_KEYS.filter(k => CRITTER_KINDS[k].regions.includes(reg));
+    if (!opts.length) continue;
+    const y = spawnGroundY(x, z);
+    if (y === null) continue;
+    const key = opts[Math.floor(Math.random()*opts.length)];
+    const K = CRITTER_KINDS[key];
+    const mesh = makeCritter(K);
+    mesh.position.set(x+0.5, y, z+0.5);
+    scene.add(mesh);
+    CRITTERS.push({ K, key, mesh, px:x+0.5, pz:z+0.5, y, tx:x+0.5, tz:z+0.5,
+                    wait:Math.random()*4, bob:Math.random()*6.28, spooked:0 });
+  }
+}
+function tickCritters(dt, t){
+  const px = player.pos.x, pz = player.pos.z;
+  for (const c of CRITTERS){
+    const K = c.K;
+    const d = Math.hypot(c.px-px, c.pz-pz);
+    // Startling is the whole point of them: something moves at the edge of your
+    // vision and you look. A lit lantern gives you away from further off.
+    if (d < K.flee * (lanternOn() && isNight() ? 1.5 : 1)) c.spooked = 1.6;
+    c.spooked = Math.max(0, c.spooked - dt);
+    if (c.spooked > 0){
+      const ax = Math.atan2(c.px-px, c.pz-pz);
+      c.tx = c.px + Math.sin(ax)*6; c.tz = c.pz + Math.cos(ax)*6;
+    } else {
+      c.wait -= dt;
+      if (c.wait <= 0){
+        c.wait = 3 + Math.random()*6;
+        const a = Math.random()*Math.PI*2, rr = 2 + Math.random()*5;
+        c.tx = c.px + Math.cos(a)*rr; c.tz = c.pz + Math.sin(a)*rr;
+      }
+    }
+    const dx = c.tx-c.px, dz = c.tz-c.pz, dd = Math.hypot(dx,dz);
+    if (dd > 0.1){
+      const sp = Math.min(dd, dt * (c.spooked > 0 ? 7.5 : 1.1));
+      const nx = c.px + dx/dd*sp, nz = c.pz + dz/dd*sp;
+      const cx = Math.floor(nx), cz = Math.floor(nz);
+      const gy = groundAt(cx, c.y+2, cz, 4);
+      if (gy !== null && !isSolid(cx, gy, cz)){ c.px = nx; c.pz = nz; c.y = gy; }
+      else c.wait = 0;
+      c.mesh.rotation.y = Math.atan2(dx, dz);
+      c.bob += dt * (c.spooked > 0 ? 14 : 5);
+    }
+    const hop = K.hop ? Math.max(0, Math.sin(c.bob))*0.14 : Math.sin(c.bob)*0.02;
+    c.mesh.position.set(c.px, c.y + hop, c.pz);
+  }
+}
+// ── faces ───────────────────────────────────────────────────────────────────
+// ── faces ───────────────────────────────────────────────────────────────────
+// A blank box for a head is the difference between a character and a prop. Two
+// eyes and a brow is all it takes — at tactical camera distance you read the
+// direction something is looking long before you read anything else about it.
+const _faceGeo = new THREE.BoxGeometry(1, 1, 1);
+const _eyeWhiteMat = new THREE.MeshBasicMaterial({ color:0xf2ece0 });
+const _faceMats = new Map();
+function faceMat(col, glow){
+  const k = col + (glow ? 'g' : '');
+  if (!_faceMats.has(k))
+    _faceMats.set(k, glow ? new THREE.MeshBasicMaterial({ color:col })
+                          : new THREE.MeshLambertMaterial({ color:col }));
+  return _faceMats.get(k);
+}
+function addFace(head, w, o={}){
+  const d = o.depth !== undefined ? o.depth : w*0.5;
+  const eyeCol = o.eyeCol || 0x241c14;
+  const glow = !!o.eyeCol && o.eyeCol !== 0x241c14 && o.eyeCol !== 0x2a2016;
+  const ew = o.small ? w*0.16 : w*0.20, eh = o.small ? w*0.12 : w*0.16;
+  const ex = w*0.24, ey = o.sunken ? w*0.06 : w*0.08;
+  for (const s of [-1, 1]){
+    // a sliver of white behind the pupil gives the eye somewhere to sit
+    if (!o.small && !glow){
+      const wsl = new THREE.Mesh(_faceGeo, _eyeWhiteMat);
+      wsl.scale.set(ew*1.35, eh*1.35, w*0.04);
+      wsl.position.set(s*ex, ey, d - w*0.005);
+      head.add(wsl);
+    }
+    const eye = new THREE.Mesh(_faceGeo, faceMat(eyeCol, glow));
+    eye.scale.set(ew, eh, w*0.06);
+    eye.position.set(s*ex, ey, d + w*0.01);
+    head.add(eye);
+    if (o.brow){
+      const brow = new THREE.Mesh(_faceGeo, faceMat(0x3a2a1c, false));
+      brow.scale.set(ew*1.5, w*0.055, w*0.05);
+      brow.position.set(s*ex, ey + eh*1.15, d);
+      brow.rotation.z = s * -0.12;
+      head.add(brow);
+    }
+  }
+  if (o.brow){                                     // a plain line of a mouth
+    const m = new THREE.Mesh(_faceGeo, faceMat(0x8a5f4a, false));
+    m.scale.set(w*0.26, w*0.045, w*0.05);
+    m.position.set(0, -w*0.16, d);
+    head.add(m);
+  }
+}
+
 // ── the lantern, and the beacons you leave behind ───────────────────────────
 // Same pooled-light trick as the barrow braziers: a handful of real lights that
 // follow you to whatever is nearest, so a hundred lit beacons cost nothing.
@@ -3579,6 +3731,7 @@ function makeVillager(color, hat){
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.58,0.76,0.40), bm); torso.position.y=0.86;
   const head  = new THREE.Mesh(new THREE.BoxGeometry(0.44,0.44,0.44),
                   new THREE.MeshLambertMaterial({ color:0xd6b48f })); head.position.y=1.46;
+  addFace(head, 0.44, { brow:true });
   const cap   = new THREE.Mesh(new THREE.BoxGeometry(0.50,0.14,0.50),
                   new THREE.MeshLambertMaterial({ color:hat })); cap.position.y=1.75;
   const legL  = new THREE.Mesh(new THREE.BoxGeometry(0.19,0.50,0.21), tm); legL.position.set(-0.15,0.25,0);
@@ -3958,6 +4111,7 @@ function applyBuild(refill){
   hip.position.y=0.52;
   const head  = new THREE.Mesh(new THREE.BoxGeometry(0.42,0.42,0.42),
                   new THREE.MeshLambertMaterial({ color:0xd6b48f })); head.position.y=1.46;
+  addFace(head, 0.42, { brow:true });
   const neck  = new THREE.Mesh(new THREE.CylinderGeometry(0.10,0.15,0.16,6), tm); neck.position.y=1.24;
   const hat   = new THREE.Mesh(new THREE.ConeGeometry(0.34,0.24,8), cm); hat.position.y=1.76;
   const cloak = new THREE.Mesh(new THREE.CylinderGeometry(0.30,0.44,0.78,8,1,true)
@@ -6432,6 +6586,13 @@ function step(dt){
   tickMusic(dt);
   tickBarrowLights(G.time);
   tickLight(G.time, dt);
+  if (G.mode === 'explore'){
+    // A frame-parity gate (frames & 63) never fired here — G.frames does not
+    // advance on the path this runs from. A plain accumulator always works.
+    CRITTER_T -= dt;
+    if (CRITTER_T <= 0){ CRITTER_T = 2.0; populateCritters(); }
+    tickCritters(dt, G.time);
+  }
   tickCampfire(G.time, dt);
   // sky dome rides with the camera; clouds wrap around it
   skyDome.position.copy(camera.position);
@@ -6924,7 +7085,7 @@ window.STRATA = {
   keys, get pendingClick(){ return pendingClick; },
   isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,
   daylight, lightAt, playerLight, lanternOn, litBeacons, lightBeacon, nearestWaymark,
-  regionAt, REGION_RULES, featureAt, treeAt,
+  regionAt, REGION_RULES, featureAt, treeAt, CRITTERS, populateCritters,
   OIL_MAX, BEACON_COST, BEACON_R,
   openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
   flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners, backCovered, isSolid,
