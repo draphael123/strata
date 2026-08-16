@@ -632,6 +632,11 @@ const SPELLS = [
     desc:'Ignores cover entirely.' },
   { id:'hamstring', name:'Hamstring', req:['mgt',8], mana:2, ap:1, target:'melee', dmg:[6,10],
     desc:'A low cut that roots a foe in place for 2 turns.' },
+  // Two more, both of which read the lamplighter hook rather than ignoring it.
+  { id:'kindle', name:'Kindle',      req:['int',7],  mana:3, ap:1, target:'self',
+    desc:'Draw light into the lamp — 22 oil, and a moment of daylight around you.' },
+  { id:'gloom',  name:'Gutter',      req:['agi',8],  mana:3, ap:1, target:'ranged', range:7,
+    desc:'Snuff the light around a foe. It cannot see past its own reach for 2 turns.' },
 ];
 const meets = (st, req)=> !req || st[req[0]] >= req[1];
 
@@ -2103,8 +2108,10 @@ function daylight(){
 }
 // How lit a spot in the world is, 0..1, ignoring the lantern in your own hand —
 // callers add that themselves when they mean "how visible is the PLAYER".
+let KINDLE_T = 0;
 function lightAt(x, z){
   let v = daylight();
+  if (KINDLE_T > 0 && Math.hypot(x-player.pos.x, z-player.pos.z) < 7) v = Math.max(v, 0.95);
   if (v >= 1) return 1;
   const near = (cx, cz, r)=>{
     const d = Math.hypot(x-cx, z-cz);
@@ -2624,6 +2631,7 @@ const KINDS = {
                blurb:'A cold light that will not be pinned down.' },
 };
 const STATUS = {
+  gutter:{ name:'Guttered', col:'#8fa4c4' },     // blinded past its own reach
   burn:  { name:'Burning', col:'#ff8a5c', dmg:4, tick:'damage' },
   root:  { name:'Rooted',  col:'#8fbf6a', mp:1,  tick:'slow'   },
   dread: { name:'Dread',   col:'#9fb6d8', tick:'weaken' },   // −30% damage dealt
@@ -3397,6 +3405,47 @@ function refreshChests(){
     chests.push({ ...s, mesh:m, mark:w });
   }
 }
+// ── sitting down ────────────────────────────────────────────────────────────
+// Somewhere to stop. A fire or a shrine restores you, tops the lamp up, and moves
+// the clock on — resting is time spent, which matters in a game with a night in
+// it. Shrines are the barrow's version: the only safe ground down there.
+const SHRINES = (()=>{
+  const D = BARROW, F = BARROW_FLOOR;
+  return [ { x:D.x-1, y:F, z:D.z+13, kind:'shrine' },      // in the throat
+           { x:D.x+5, y:F, z:D.z+3,  kind:'shrine' } ];    // off the antechamber
+})();
+function nearestHearth(){
+  const P = player.pos;
+  if (Math.hypot(P.x-(HOME.x+0.5), P.z-(HOME.z+0.5)) < 5.5 && Math.abs(P.y-SHORE_Y) < 5)
+    return { kind:'fire', name:'the campfire', x:HOME.x, y:SHORE_Y, z:HOME.z };
+  for (const s of SHRINES)
+    if (Math.hypot(P.x-(s.x+0.5), P.z-(s.z+0.5)) < 3.2 && Math.abs(P.y-s.y) < 4)
+      return { ...s, name:'the shrine' };
+  for (const b of litBeacons())
+    if (Math.hypot(P.x-b.x, P.z-b.z) < 3.4 && Math.abs(P.y-b.y) < 4)
+      return { kind:'beacon', name:'your beacon', x:b.x, y:b.y, z:b.z };
+  return null;
+}
+let restT = 0;
+function sitAt(h){
+  if (hostilesAdjacent && hostilesAdjacent()){ toast('Not with something on you.', 2); return; }
+  const full = player.hp >= player.maxHp && player.mana >= player.maxMana
+            && (player.q.oil||0) >= OIL_MAX;
+  if (full){ toast(`You sit a while at ${h.name}. Nothing to mend.`, 2.6); return; }
+  player.hp = player.maxHp;
+  player.mana = player.maxMana;
+  // A fire in town or at camp refills the lamp; a beacon out in the vale only
+  // tops it up, or you would never have to come home.
+  const give = h.kind === 'beacon' ? 34 : OIL_MAX;
+  player.q.oil = Math.min(OIL_MAX, (player.q.oil||0) + give);
+  // Time passes. Four hours of it, which is the real cost of stopping.
+  G.tod = (G.tod + 0.17) % 1;
+  restT = 1.4;
+  SFX.heal(); boom(Math.floor(h.x), Math.floor(h.y)+1, Math.floor(h.z), 0xffb35e);
+  toast(`You rest at ${h.name}. Vigour, mana and lamp restored — and the hour has moved on.`, 4);
+  drawVitals(); saveGame();
+}
+
 // You light the vale with oil out of your own lamp. That is the whole trade the
 // game is built on: every beacon is a piece of your own safety spent on ground
 // that will still be lit when you come back through it at midnight.
@@ -3700,6 +3749,7 @@ function tickLight(t, dt){
     q.oil = Math.max(0, q.oil - OIL_BURN*dt);
     if (q.oil === 0) toast('Your lantern gutters out.', 3.0);
   }
+  if (KINDLE_T > 0) KINDLE_T -= dt;
   const on = lanternOn();
   lanternLight.visible = on;
   lanternLight.position.set(player.pos.x, player.pos.y + 1.3, player.pos.z);
@@ -4263,9 +4313,12 @@ addEventListener('keydown', e=>{
   }
   if (G.mode === 'explore'){
     if (e.code === 'KeyE'){
-      const f = nearestFolk(), c = f ? null : nearestChest(), w = (f||c) ? null : nearestWaymark();
+      const f = nearestFolk(), c = f ? null : nearestChest();
+      const fire = (f||c) ? null : nearestHearth();
+      const w = (f||c||fire) ? null : nearestWaymark();
       if (f) openTown(f);
       else if (c) openChest(c);
+      else if (fire) sitAt(fire);
       else if (w) lightBeacon(w);
       else tryEngage();
     }
@@ -4928,6 +4981,22 @@ function castSpell(a, ab, target, cell){
     SFX.heal();
     fct(a, '+'+(a.hp-before), '#a8cf72');
     log(`You draw a <b>Second Wind</b>.`);
+  } else if (sp.id === 'kindle'){
+    // The lamplighter's own spell: mana into oil, and a breath of daylight that
+    // strips the concealment darkness was giving everything around you.
+    const before = player.q.oil || 0;
+    player.q.oil = Math.min(OIL_MAX, before + 22);
+    KINDLE_T = 8;
+    ring(a.x, a.y, a.z, 0xffd27a, 5.5); SFX.heal();
+    fct(a, '+'+Math.round(player.q.oil-before)+' oil', '#ffc26a');
+    log(`You <b>Kindle</b> the lamp. The dark pulls back.`);
+    drawVitals();
+  } else if (sp.id === 'gloom'){
+    if (target){
+      applyStatus(target, 'gutter', 2);
+      boom(target.x, target.y, target.z, 0x2a3550); SFX.cast();
+      log(`You <b>gutter</b> the light around <b>${target.name}</b>.`);
+    }
   } else if (sp.id === 'bash'){
     faceToward(a, target.x, target.z);
     resolveAttack(a, target, ab);
@@ -5551,6 +5620,12 @@ function aiPlan(a){
   const ab = abilityOf(a);
   const target = player;
   const q = [];
+  // Guttered: the light around it is out, so it cannot find you past arm's reach.
+  // It gropes forward instead of coming straight at you.
+  if (a.status && a.status.gutter){
+    const gap = Math.max(Math.abs(a.x-target.x), Math.abs(a.z-target.z));
+    if (gap > (a.K.reach || 1)){ q.push({ t:'guard' }); return q; }
+  }
   const tac = a.K.tactic || 'press';
   const gap = Math.max(Math.abs(a.x-target.x), Math.abs(a.z-target.z));
 
@@ -7086,6 +7161,7 @@ window.STRATA = {
   isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,
   daylight, lightAt, playerLight, lanternOn, litBeacons, lightBeacon, nearestWaymark,
   regionAt, REGION_RULES, featureAt, treeAt, CRITTERS, populateCritters,
+  nearestHearth, sitAt, SHRINES, SPELLS,
   OIL_MAX, BEACON_COST, BEACON_R,
   openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
   flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners, backCovered, isSolid,
