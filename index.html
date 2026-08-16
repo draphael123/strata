@@ -363,7 +363,7 @@ const COL = {
   [B.LEAF ]: [0x54823c, 0x4b7635, 0x426a2f],
   [B.SNOW ]: [0xeef3fa, 0xe3e9f2, 0xd6dde8],
   [B.SLATE]: [0x5d636e, 0x565c66, 0x4c525b],
-  [B.MOSS ]: [0x6d7a5c, 0x6a7159, 0x5c6350],   // weathered, lichen-blotched ruin stone
+  [B.MOSS ]: [0x8b9679, 0x848c72, 0x767e68],   // weathered, lichen-blotched ruin stone
   [B.PLANK]: [0x9c7444, 0x8a663c, 0x775833],
   [B.THATCH]:[0xb08a4a, 0x8d6d39, 0x775c30],
   [B.EMBER]: [0xff9a3c, 0xe8742a, 0xc2551c],
@@ -910,14 +910,21 @@ function markDirty(cx,cz){ const c = CHUNKS.get(ckey(cx,cz)); if (c) c.dirty = t
 // ───────────────────────────── meshing ─────────────────────────────
 // Face corner lists are wound CCW as seen from outside. AO is the classic
 // 3-neighbour sample; the quad flips its diagonal to keep shading symmetric.
+// Each face also names its two tangent AXES, which the bevel needs in order to
+// ask "is there a neighbour this way, or is this a silhouette edge?"
 const FACES = [
-  { n:[ 1,0,0], v:[[1,0,1],[1,0,0],[1,1,0],[1,1,1]], shade:0.84, ci:1 },
-  { n:[-1,0,0], v:[[0,0,0],[0,0,1],[0,1,1],[0,1,0]], shade:0.84, ci:1 },
-  { n:[0, 1,0], v:[[0,1,1],[1,1,1],[1,1,0],[0,1,0]], shade:1.00, ci:0 },
-  { n:[0,-1,0], v:[[0,0,0],[1,0,0],[1,0,1],[0,0,1]], shade:0.55, ci:2 },
-  { n:[0,0, 1], v:[[0,0,1],[1,0,1],[1,1,1],[0,1,1]], shade:0.72, ci:1 },
-  { n:[0,0,-1], v:[[1,0,0],[0,0,0],[0,1,0],[1,1,0]], shade:0.72, ci:1 },
+  { n:[ 1,0,0], v:[[1,0,1],[1,0,0],[1,1,0],[1,1,1]], shade:0.84, ci:1, ta:1, tb:2 },
+  { n:[-1,0,0], v:[[0,0,0],[0,0,1],[0,1,1],[0,1,0]], shade:0.84, ci:1, ta:1, tb:2 },
+  { n:[0, 1,0], v:[[0,1,1],[1,1,1],[1,1,0],[0,1,0]], shade:1.00, ci:0, ta:0, tb:2 },
+  { n:[0,-1,0], v:[[0,0,0],[1,0,0],[1,0,1],[0,0,1]], shade:0.55, ci:2, ta:0, tb:2 },
+  { n:[0,0, 1], v:[[0,0,1],[1,0,1],[1,1,1],[0,1,1]], shade:0.72, ci:1, ta:0, tb:1 },
+  { n:[0,0,-1], v:[[1,0,0],[0,0,0],[0,1,0],[1,1,0]], shade:0.72, ci:1, ta:0, tb:1 },
 ];
+// How far a silhouette edge is chamfered. Perfect unit cubes are the single
+// loudest "this is Minecraft" signal there is; pulling the exposed edges in and
+// bridging them with a short 45° strip makes blocks read as hewn rather than
+// printed. Interior edges are left untouched, so flat ground costs nothing.
+const BEVEL = 0.09;
 const AO_LEVEL = [0.50, 0.68, 0.84, 1.0];
 // Per-voxel brightness jitter. Big flat stone surfaces (ruin walls, cliffs) look
 // like painted cardboard without it, so masonry gets far more than turf.
@@ -952,6 +959,15 @@ function buildChunkGeometry(cx, cz){
       const arrP = water?wP:P, arrN = water?wN:N, arrC = water?wC:C, arrI = water?wI:I;
       const vStart = arrP.length/3;
       const ao = [0,0,0,0];
+      // A side is a silhouette edge when there is no neighbour block that way,
+      // so a flat wall or plain keeps tiling seamlessly and costs nothing extra.
+      const insetHi = {}, insetLo = {}, corner = [null,null,null,null];
+      if (!water) for (const t of [F.ta, F.tb]){
+        const dp = [wx, y, wz], dn = [wx, y, wz];
+        dp[t] += 1; dn[t] -= 1;
+        insetHi[t] = !SOLID[getBlock(dp[0], dp[1], dp[2])];
+        insetLo[t] = !SOLID[getBlock(dn[0], dn[1], dn[2])];
+      }
       // how close this water face is to dry land (foam), and how deep it is
       // (colour + opacity). Depth is what buries the stepped lake bed — without
       // it you are looking through clear glass at a flight of stairs.
@@ -992,7 +1008,18 @@ function buildChunkGeometry(cx, cz){
         ao[i] = (s1 && s2) ? 0 : 3 - (s1+s2+cn);
 
         const vy = water && F.n[1] === 1 ? y + 0.88 : y + V[1];
-        arrP.push(wx+V[0], vy, wz+V[2]);
+        // pull the corner in on any side that is a silhouette edge
+        let ox2 = V[0], oy2 = V[1], oz2 = V[2];
+        if (!water){
+          const o = [ox2, oy2, oz2];
+          for (const t of [F.ta, F.tb]){
+            if (V[t] === 1 && insetHi[t]) o[t] = 1 - BEVEL;
+            else if (V[t] === 0 && insetLo[t]) o[t] = BEVEL;
+          }
+          ox2 = o[0]; oy2 = o[1]; oz2 = o[2];
+          corner[i] = [wx+ox2, y+oy2, wz+oz2];
+        }
+        arrP.push(wx+ox2, water && F.n[1] === 1 ? vy : y+oy2, wz+oz2);
         arrN.push(F.n[0], F.n[1], F.n[2]);
         const k = F.shade * jit * (water ? 1 : AO_LEVEL[ao[i]]);
         tmp.setHex(base);
@@ -1004,6 +1031,68 @@ function buildChunkGeometry(cx, cz){
         arrI.push(vStart+1, vStart+2, vStart+3, vStart+1, vStart+3, vStart+0);
       else
         arrI.push(vStart+0, vStart+1, vStart+2, vStart+0, vStart+2, vStart+3);
+
+      // ── chamfer strips along the exposed edges ──
+      if (!water){
+        for (let e=0; e<4; e++){
+          const i0 = e, i1 = (e+1) & 3;
+          const A = F.v[i0], Bv = F.v[i1];
+          // which side does this edge sit on?
+          let t = -1, hi = false;
+          for (const ax of [F.ta, F.tb]) if (A[ax] === Bv[ax]){ t = ax; hi = A[ax] === 1; }
+          if (t < 0) continue;
+          if (!(hi ? insetHi[t] : insetLo[t])) continue;      // interior edge, skip
+
+          const cA = corner[i0], cB = corner[i1];
+          const outA = cA.slice(), outB = cB.slice();
+          const baseW = [wx, y, wz];
+          outA[t] = outB[t] = baseW[t] + (hi ? 1 : 0);
+          const na = F.n[0]!==0?0 : F.n[1]!==0?1 : 2;         // pull back along -normal
+          const sgn = F.n[na] > 0 ? 1 : -1;
+          outA[na] -= sgn*BEVEL; outB[na] -= sgn*BEVEL;
+
+          const s = P.length/3;
+          const nrm = [F.n[0], F.n[1], F.n[2]];
+          nrm[t] += hi ? 1 : -1;
+          const nl = Math.hypot(nrm[0],nrm[1],nrm[2]) || 1;
+          const kk = F.shade * jit * AO_LEVEL[Math.min(ao[i0], ao[i1])] * 0.93;
+          tmp.setHex(base);
+          // winding: [inset_j, inset_i, outer_i, outer_j] faces outward
+          for (const p of [cB, cA, outA, outB]){
+            P.push(p[0], p[1], p[2]);
+            N.push(nrm[0]/nl, nrm[1]/nl, nrm[2]/nl);
+            C.push(tmp.r*kk, tmp.g*kk, tmp.b*kk);
+          }
+          I.push(s, s+1, s+2, s, s+2, s+3);
+        }
+
+        // Corner patches. Where two chamfers meet at a convex corner they leave a
+        // triangular notch, which catches the low sun and reads as a bright chip
+        // of light. Emitted both ways round so a winding slip can't punch a hole.
+        const na2 = F.n[0]!==0?0 : F.n[1]!==0?1 : 2;
+        const sgn2 = F.n[na2] > 0 ? 1 : -1;
+        const baseW2 = [wx, y, wz];
+        for (let i=0;i<4;i++){
+          const V = F.v[i];
+          const hiA = V[F.ta] === 1, hiB = V[F.tb] === 1;
+          if (!((hiA ? insetHi[F.ta] : insetLo[F.ta]) && (hiB ? insetHi[F.tb] : insetLo[F.tb]))) continue;
+          const p0 = corner[i];
+          const p1 = p0.slice(); p1[F.ta] = baseW2[F.ta] + (hiA?1:0); p1[na2] -= sgn2*BEVEL;
+          const p2 = p0.slice(); p2[F.tb] = baseW2[F.tb] + (hiB?1:0); p2[na2] -= sgn2*BEVEL;
+          const nx2 = F.n[0] + (F.ta===0?(hiA?1:-1):0) + (F.tb===0?(hiB?1:-1):0);
+          const ny2 = F.n[1] + (F.ta===1?(hiA?1:-1):0) + (F.tb===1?(hiB?1:-1):0);
+          const nz2 = F.n[2] + (F.ta===2?(hiA?1:-1):0) + (F.tb===2?(hiB?1:-1):0);
+          const nl2 = Math.hypot(nx2,ny2,nz2) || 1;
+          const kc = F.shade * jit * AO_LEVEL[ao[i]] * 0.88;
+          tmp.setHex(base);
+          const s2 = P.length/3;
+          for (const p of [p0,p1,p2]){
+            P.push(p[0],p[1],p[2]); N.push(nx2/nl2, ny2/nl2, nz2/nl2);
+            C.push(tmp.r*kc, tmp.g*kc, tmp.b*kc);
+          }
+          I.push(s2, s2+1, s2+2, s2, s2+2, s2+1);
+        }
+      }
     }
   }
   // ─────────────── ground decoration ───────────────
@@ -1184,15 +1273,18 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const SKY_COL = 0x9dc0dc, HAZE_COL = 0xcfdde6;
+const SKY_COL = 0x6f9ec9, HAZE_COL = 0xe8c9a0;   // warm haze at the horizon
 scene.background = new THREE.Color(SKY_COL);
 // fog matches the sky dome's HORIZON, not its zenith, so distance melts away
-scene.fog = new THREE.Fog(HAZE_COL, VIEW*CX*0.55, VIEW*CX*1.02);
+scene.fog = new THREE.Fog(HAZE_COL, VIEW*CX*0.42, VIEW*CX*1.02);
 
 const camera = new THREE.PerspectiveCamera(74, innerWidth/innerHeight, 0.1, 600);
 
-const SUN_DIR = new THREE.Vector3(0.42, 0.86, 0.28).normalize();
-const sun = new THREE.DirectionalLight(0xfff2d8, 1.5);
+// GOLDEN HOUR. A low raking sun catches every bevel and splits the world into
+// warm lit faces and cool shadowed ones — which is exactly what voxel geometry
+// needs, and the furthest thing from flat overhead noon.
+const SUN_DIR = new THREE.Vector3(0.62, 0.30, 0.42).normalize();
+const sun = new THREE.DirectionalLight(0xffcf8a, 1.55);   // hot enough to gild, not to blow out
 sun.position.copy(SUN_DIR);
 scene.add(sun);
 
@@ -1200,9 +1292,9 @@ scene.add(sun);
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
   uniforms: {
-    uTop:{value:new THREE.Color(0x4d86c4)}, uMid:{value:new THREE.Color(0x9dc0dc)},
-    uHaze:{value:new THREE.Color(0xdfe9ee)}, uSun:{value:SUN_DIR.clone()},
-    uSunCol:{value:new THREE.Color(0xfff4d6)},
+    uTop:{value:new THREE.Color(0x2f5f9e)}, uMid:{value:new THREE.Color(0x8fb4d8)},
+    uHaze:{value:new THREE.Color(0xf2cf9c)}, uSun:{value:SUN_DIR.clone()},
+    uSunCol:{value:new THREE.Color(0xffd9a0)},
   },
   vertexShader:`varying vec3 vD;
     void main(){ vD = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
@@ -1214,9 +1306,10 @@ const skyMat = new THREE.ShaderMaterial({
       vec3 col = mix(uHaze, uMid, smoothstep(-0.02, 0.30, h));
       col = mix(col, uTop, smoothstep(0.22, 0.92, h));
       float sd = max(dot(d, normalize(uSun)), 0.0);
-      col += uSunCol * pow(sd, 620.0) * 1.5;                 // disc
-      col += uSunCol * pow(sd, 12.0) * 0.16;                 // bloom
-      col += uSunCol * pow(max(1.0-abs(h),0.0), 8.0) * 0.05; // horizon warmth
+      col += uSunCol * pow(sd, 900.0) * 2.2;                 // disc
+      col += uSunCol * pow(sd, 5.0)  * 0.42;                 // wide low-sun bloom
+      col += uSunCol * pow(sd, 30.0) * 0.30;
+      col += uSunCol * pow(max(1.0-abs(h),0.0), 5.0) * 0.16; // horizon warmth
       gl_FragColor = vec4(col, 1.0);
     }`,
 });
@@ -1225,11 +1318,13 @@ skyDome.frustumCulled = false;
 skyDome.renderOrder = -1;
 scene.add(skyDome);
 
-// ── blocky drifting clouds, in keeping with the rest of the world ──
+// Soft drifting cloud banks. The blocky Minecraft-style cumulus that used to be
+// here was the single most recognisable borrowed element in the whole scene.
 const CLOUD_N = 130;
 const cloudMesh = new THREE.InstancedMesh(
-  new THREE.BoxGeometry(1,1,1),
-  new THREE.MeshLambertMaterial({ color:0xffffff, transparent:true, opacity:0.9, fog:false }),
+  new THREE.SphereGeometry(0.5, 9, 6),
+  new THREE.MeshLambertMaterial({ color:0xffe6c8, transparent:true, opacity:0.5,
+    fog:false, depthWrite:false }),
   CLOUD_N);
 cloudMesh.frustumCulled = false;
 cloudMesh.renderOrder = -1;
@@ -1246,8 +1341,8 @@ const CLOUDS = [];
       CLOUDS.push({
         x: bx + (hash2(puff,k+10,99)-0.5)*44, y: by + (hash2(puff,k+20,99)-0.5)*7,
         z: bz + (hash2(puff,k+30,99)-0.5)*30,
-        sx: 22 + hash2(puff,k+40,99)*30, sy: 5 + hash2(puff,k+50,99)*5,
-        sz: 16 + hash2(puff,k+60,99)*20,
+        sx: 40 + hash2(puff,k+40,99)*46, sy: 11 + hash2(puff,k+50,99)*9,
+        sz: 32 + hash2(puff,k+60,99)*34,
       });
     }
   }
@@ -1270,10 +1365,9 @@ function tickClouds(t, camX, camZ){
   }
   cloudMesh.instanceMatrix.needsUpdate = true;
 }
-// Generous bounce: faces turned away from the sun otherwise crush to near-black,
-// and a ruin wall in shade should read as stone, not as a hole in the world.
-scene.add(new THREE.HemisphereLight(0xc6dff5, 0x5b5540, 0.95));
-scene.add(new THREE.AmbientLight(0xffffff, 0.30));
+// Cool bounce against the warm key — the warm/cool split does most of the work.
+scene.add(new THREE.HemisphereLight(0x9cc0ec, 0x7a6748, 1.05));
+scene.add(new THREE.AmbientLight(0xc8d6ea, 0.38));
 
 const matSolid = new THREE.MeshLambertMaterial({ vertexColors:true });
 // Water: gentle swell, a foam band baked from distance-to-shore, and a real sun
