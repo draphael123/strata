@@ -127,6 +127,9 @@
   .copt .od{font-size:10px;color:#8d97a7;margin-top:3px;line-height:1.45}
   .copt .req{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#c88b7f;white-space:nowrap}
   .copt.sel .req,.copt:not(.lock) .req{color:#8fbf6a}
+  #cHero{width:100%;max-width:220px;height:auto;display:block;margin:0 auto;
+    background:radial-gradient(ellipse at 50% 62%,rgba(216,180,90,.10) 0%,rgba(0,0,0,0) 68%)}
+  .cturn{text-align:center;margin-top:4px}
   .lrow{display:flex;align-items:center;gap:6px;margin-bottom:7px}
   .lrow .ll{font-size:10.5px;color:#9aa4b3;width:44px}
   .sw2{width:19px;height:19px;border-radius:4px;cursor:pointer;
@@ -356,6 +359,9 @@
         <div class="chead">Stats</div>
         <div id="cStats"></div>
         <div class="cderived" id="cDerived"></div>
+        <div class="chead" style="margin-top:14px">You</div>
+        <canvas id="cHero" width="440" height="520"></canvas>
+        <div class="cturn"><button class="tog" id="cSpin">⟲ turn</button></div>
       </div>
       <div class="ccol">
         <div class="chead">Weapon</div>
@@ -572,7 +578,7 @@ const meets = (st, req)=> !req || st[req[0]] >= req[1];
 // ── appearance ─────────────────────────────────────────────────────────────
 const LOOKS = {
   skin:  { label:'Skin',  opts:[0xf0c9a4,0xd6b48f,0xb98a63,0x8d6142,0x62402c,0x40281b] },
-  hair:  { label:'Hair',  opts:[0x2b2119,0x5a3a22,0x8a5a2c,0xc49a4a,0xb0b4bc,0x7a2f22] },
+  hair:  { label:'Cap',   opts:[0x2b2119,0x5a3a22,0x8a5a2c,0xc49a4a,0xb0b4bc,0x7a2f22] },
   tunic: { label:'Tunic', opts:[0x4f6f9a,0x6a7a4a,0x8a4a4a,0x5c4a76,0x7a6a3a,0x3a4a52] },
   cloak: { label:'Cloak', opts:[0x2c3f5c,0x3c4a34,0x5a3030,0x40364a,0x4a4238,0x243034] },
 };
@@ -5186,7 +5192,7 @@ function frame(now){
   requestAnimationFrame(frame);
   const dt = Math.min((now - lastT)/1000, 0.05); lastT = now;
   rafOK = now;
-  if (G.mode === 'title'){ updateIntro(dt); render(); return; }
+  if (G.mode === 'title'){ updateIntro(dt); render(); heroTick(dt); return; }
   step(dt);
   render();
 }
@@ -5244,6 +5250,61 @@ function enterWorld(){
 //  CHARACTER CREATOR
 // ═══════════════════════════════════════════════════════════════════════
 const CC = { st:null, weaponId:'blade', spellId:'wind', look:{ skin:1, hair:1, tunic:0, cloak:0 } };
+
+// ── live 3D hero preview ────────────────────────────────────────────────────
+// The avatar is MOVED into a preview scene rather than duplicated — an Object3D
+// has one parent, so adding it here takes it out of the world automatically and
+// there is no second copy to keep in sync.
+let heroR = null, heroScene = null, heroCam = null, heroSpin = 0.6, heroAuto = true;
+function heroInit(){
+  if (heroR) return;
+  const cv = document.getElementById('cHero');
+  heroR = new THREE.WebGLRenderer({ canvas:cv, antialias:true, alpha:true });
+  heroR.setPixelRatio(Math.min(devicePixelRatio, 2));
+  heroR.setSize(440, 520, false);
+  heroR.outputColorSpace = THREE.SRGBColorSpace;
+  heroScene = new THREE.Scene();
+  heroCam = new THREE.PerspectiveCamera(30, 440/520, 0.1, 40);
+  heroCam.position.set(0, 1.30, 4.3);
+  heroCam.lookAt(0, 0.95, 0);
+  const key = new THREE.DirectionalLight(0xffd9a8, 2.2); key.position.set(0.7, 1.1, 0.9);
+  const rim = new THREE.DirectionalLight(0x8fb6e8, 1.1); rim.position.set(-0.8, 0.5, -0.9);
+  heroScene.add(key, rim, new THREE.HemisphereLight(0x9cc0ec, 0x40382c, 0.8));
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(0.85, 28).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({ color:0x1a1f2a, transparent:true, opacity:0.55 }));
+  disc.position.y = 0.005; heroScene.add(disc);
+  // drag to turn
+  let drag = false, lx = 0;
+  cv.addEventListener('pointerdown', e=>{ drag = true; lx = e.clientX; heroAuto = false; });
+  addEventListener('pointerup', ()=> drag = false);
+  addEventListener('pointermove', e=>{ if (drag){ heroSpin += (e.clientX-lx)*0.012; lx = e.clientX; } });
+  document.getElementById('cSpin').onclick = ()=>{ heroAuto = !heroAuto; SFX.ui(); };
+}
+function heroAttach(){
+  heroInit();
+  heroScene.add(player.mesh);          // removes it from the world scene
+  player.mesh.visible = true;
+  player.mesh.position.set(0,0,0);
+  player.mesh.rotation.set(0,0,0);
+  player.mesh.scale.setScalar(1);
+  if (player.mesh.userData.wedge) player.mesh.userData.wedge.visible = false;
+}
+function heroDetach(){
+  if (!player.mesh) return;
+  scene.add(player.mesh);
+  player.mesh.visible = false;
+}
+function heroTick(dt){
+  if (!heroR || !document.getElementById('creator').classList.contains('on')) return;
+  if (heroAuto) heroSpin += dt*0.55;
+  player.mesh.rotation.y = heroSpin;
+  player.mesh.position.y = Math.sin(performance.now()*0.0015)*0.012;
+  const arms = player.mesh.userData.arms, legs = player.mesh.userData.legs;
+  const b = Math.sin(performance.now()*0.0018);
+  if (arms){ arms[0].rotation.x = b*0.06; arms[1].rotation.x = -b*0.06; }
+  if (legs){ legs[0].rotation.x = 0; legs[1].rotation.x = 0; }
+  heroR.render(heroScene, heroCam);
+}
 function ccSpent(){ return STATS.reduce((n,s)=> n + (CC.st[s.id]-STAT_BASE), 0); }
 function ccLeft(){ return STAT_POOL - ccSpent(); }
 
@@ -5252,6 +5313,7 @@ function openCreator(){
   CC.weaponId = 'blade'; CC.spellId = 'wind';
   document.getElementById('title').style.display = 'none';
   document.getElementById('creator').classList.add('on');
+  heroAttach();
   drawCreator();
 }
 function drawCreator(){
@@ -5298,6 +5360,12 @@ function drawCreator(){
       `</div>`;
   }).join('');
 
+  // push the creator's choices onto the live character so the preview IS the hero
+  player.st = { ...CC.st };
+  player.weaponId = CC.weaponId; player.spellId = CC.spellId;
+  player.look = { ...CC.look };
+  applyBuild(true);
+
   document.getElementById('cNote').textContent = left > 0
     ? `${left} point${left>1?'s':''} unspent — raise a stat to unlock better gear.`
     : 'Strike comes free with whatever you carry.';
@@ -5317,6 +5385,7 @@ function drawCreator(){
     CC.look[el.dataset.look] = +el.dataset.i; drawCreator(); });
 }
 document.getElementById('cBack').onclick = ()=>{
+  heroDetach();
   document.getElementById('creator').classList.remove('on');
   document.getElementById('title').style.display = 'flex';
 };
@@ -5325,6 +5394,7 @@ document.getElementById('cGo').onclick = ()=>{
   player.weaponId = CC.weaponId; player.spellId = CC.spellId;
   player.look = { ...CC.look };
   player.level = 1; player.xp = 0; player.xpNext = 40; player.hp = 0;
+  heroDetach();
   applyBuild();
   player.hp = player.maxHp;
   document.getElementById('creator').classList.remove('on');
@@ -5495,7 +5565,7 @@ window.STRATA = {
   TOWNSFOLK, openTown, closeTown, acceptErrand, acceptBarrow, turnInErrands, refreshOffers,
   BARROW, BARROW_FLOOR, inBarrow, BARROW_QUEST,
   chests, refreshChests, openChest, nearestChest, rollGear, giveGear, itemDef,
-  LOOKS, applyLook, tutStart, TUT,
+  LOOKS, applyLook, tutStart, TUT, heroTick, heroAttach, heroDetach,
   populateSites, repTier, buildTownsfolk, creditKill,
   get abilities(){ return ABILITIES; },
   WEAPONS, SPELLS, STATS, HOME, LAKE, TOWN,
