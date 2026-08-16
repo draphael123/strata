@@ -468,6 +468,12 @@ let VIEW = 7;                              // chunk render radius (the town sits
 const GEN = VIEW + 2;                      // data-gen radius (meshing needs neighbours)
 const MESH_BUDGET = 7;                     // ms/frame spent building chunk meshes
 const SAVE_KEY = 'strata-save-v1';
+// Declared up here, not down with the vale: BARROW_QUEST is a const object built
+// at module load and reads BARROW.x, so a later declaration is a dead-zone error.
+const BARROW = { x:-64, z:52 };                 // the dungeon mouth
+const BARROW_FLOOR = 18;
+const inBarrow = (x,z)=> x > BARROW.x-11 && x < BARROW.x+11 &&
+                         z > BARROW.z-19 && z < BARROW.z+34;
 
 const B = { AIR:0, GRASS:1, DIRT:2, STONE:3, SAND:4, WATER:5, WOOD:6, LEAF:7, SNOW:8, SLATE:9,
             MOSS:10, PLANK:11, THATCH:12, EMBER:13, BIRCH:14, PINE:15, TRUNK:16, SHRUB:17 };
@@ -551,6 +557,9 @@ const ITEMS = {
   lens:    { name:'Scrying Lens',  kind:'trinket', icon:'❖', desc:'+2 Intellect.',  st:{int:2} },
   feather: { name:'Kite Feather',  kind:'trinket', icon:'❖', desc:'+2 Agility.',    st:{agi:2} },
   torc:    { name:'Iron Torc',     kind:'trinket', icon:'❖', desc:'Take 10% less damage.', soak:0.10 },
+  barrowlight: { name:'Barrowlight', kind:'trinket', icon:'✸',
+    desc:'Taken from the barrow. +2 Might, +2 Vitality, 8% less damage taken.',
+    st:{mgt:2, vit:2}, soak:0.08, unique:true },
 };
 const LOOT_TABLE = ['salve','salve','draught','ember','charm','ward','lens','feather','torc'];
 
@@ -597,6 +606,16 @@ function rollErrand(slot, seed, tier){
     desc:`A nest of ${n} has settled ${Math.round(dist)} paces out. Turn them out of it.`,
     coin:pay+8, xp:20+tier*9, site:{x:sx,z:sz}, spawned:false };
 }
+// The one hand-written commission. Offered once, and only after you've proved
+// useful — a stranger doesn't get sent into the barrow.
+const BARROW_QUEST = {
+  kind:'barrow', id:'barrow', need:1, have:0,
+  title:'Open the barrow',
+  desc:'There is a mouth in the hillside south-west of the water, and something in it that '
+     + 'the old people walled up rather than fight. Go down. Put out whatever is still burning.',
+  coin:120, xp:180, site:{ x:BARROW.x, z:BARROW.z-16 }, spawned:false,
+};
+function barrowOffered(){ return player.q.done >= 1 && player.q.barrow === 'none'; }
 function refreshOffers(){
   player.q.offerSeed = (Math.random()*1e9)|0;
   const tier = repIndex();
@@ -749,7 +768,7 @@ function treeDensity(x, z){
 function featureAt(x, z){
   const topY = heightAt(x, z);
   if (topY <= SEA+1 || topY > 52) return null;
-  if (inCamp(x,z) || inTown(x,z) || onPath(x,z)) return null;
+  if (inCamp(x,z) || inTown(x,z) || onPath(x,z) || inBarrow(x,z)) return null;
   const slope = Math.abs(heightAt(x+1,z)-topY) + Math.abs(heightAt(x,z+1)-topY);
   const h = hash2(x, z, SEED+4242);
   if (h < 0.0105) return { t:'boulder', topY, r:1+Math.floor(hash2(x,z,SEED+11)*2),
@@ -770,7 +789,7 @@ function featureAt(x, z){
 // deterministic tree test for a column
 function treeAt(x, z){
   if (inCamp(x,z) || inTown(x,z)) return null;   // keep the camp and streets clear
-  if (onPath(x,z)) return null;
+  if (onPath(x,z) || inBarrow(x,z)) return null;
   const topY = heightAt(x, z);
   if (topY <= SEA+1 || topY > 46) return null;
   if (hash2(x, z, SEED+31337) > 0.022 * treeDensity(x, z)) return null;
@@ -876,6 +895,69 @@ function structures(){
       }
       put(LAKE.x-1, SEA+2, jz+13, B.WOOD);           // mooring posts at the end
       put(LAKE.x+1, SEA+2, jz+13, B.WOOD);
+    });
+  }
+
+  // ══════════════ THE BARROW ══════════════
+  // A hand-authored dungeon. Open-field fights give you whatever cover the world
+  // happened to scatter; here the SPACE is the design — chokepoints, pillars to
+  // put your back against, and a hall wide enough to get surrounded in.
+  {
+    const D = BARROW, FY = BARROW_FLOOR;
+    const carve = (put, x0,z0,x1,z1, fy, h, lined)=>{
+      for (let x=x0-1; x<=x1+1; x++) for (let z=z0-1; z<=z1+1; z++){
+        const edge = x<x0 || x>x1 || z<z0 || z>z1;
+        put(x, fy-1, z, edge ? B.MOSS : B.SLATE);              // floor / footing
+        for (let y=fy; y<fy+h; y++) put(x, y, z, edge ? (lined?B.MOSS:B.STONE) : B.AIR);
+        put(x, fy+h, z, B.MOSS);                                // ceiling
+      }
+    };
+    const pillar = (put, x, z, fy, h)=>{ for (let y=fy; y<fy+h; y++) put(x, y, z, B.MOSS); };
+    const brazier = (put, x, z, fy)=>{ put(x, fy, z, B.STONE); put(x, fy+1, z, B.EMBER); };
+
+    box(D.x-9, D.z-17, D.x+9, D.z+32, (put)=>{
+      // ── descending stair from the hillside ──
+      for (let i=0; i<15; i++){
+        const z = D.z-15+i;
+        const y = Math.max(FY, heightAt(D.x, D.z-15) - i);
+        for (let x=D.x-1; x<=D.x+1; x++){
+          put(x, y-1, z, B.SLATE);
+          for (let k=0;k<4;k++) put(x, y+k, z, B.AIR);
+          put(x-2 < D.x-1 ? x-2 : x, y+4, z, B.MOSS);
+        }
+        put(D.x-2, y+0, z, B.MOSS); put(D.x+2, y+0, z, B.MOSS);
+        put(D.x-2, y+1, z, B.MOSS); put(D.x+2, y+1, z, B.MOSS);
+        put(D.x-2, y+2, z, B.MOSS); put(D.x+2, y+2, z, B.MOSS);
+        put(D.x-2, y+3, z, B.MOSS); put(D.x+2, y+3, z, B.MOSS);
+        for (let x=D.x-2; x<=D.x+2; x++) put(x, y+4, z, B.MOSS);
+      }
+      // a lintel and two standing stones so the mouth reads from outside
+      {
+        const gy = heightAt(D.x, D.z-16);
+        for (let y=1;y<=4;y++){ put(D.x-2, gy+y, D.z-16, B.MOSS); put(D.x+2, gy+y, D.z-16, B.MOSS); }
+        for (let x=D.x-2;x<=D.x+2;x++) put(x, gy+5, D.z-16, B.MOSS);
+        for (let x=D.x-1;x<=D.x+1;x++) for (let y=1;y<=4;y++) put(x, gy+y, D.z-16, B.AIR);
+      }
+      // ── antechamber: four pillars, cover in the middle of the room ──
+      carve(put, D.x-5, D.z, D.x+5, D.z+8, FY, 6, true);
+      for (const [px,pz] of [[-3,2],[3,2],[-3,6],[3,6]]) pillar(put, D.x+px, D.z+pz, FY, 6);
+      brazier(put, D.x-5, D.z+1, FY); brazier(put, D.x+5, D.z+7, FY);
+      // ── the throat: a genuine chokepoint, two wide ──
+      carve(put, D.x-1, D.z+9, D.x, D.z+16, FY, 3, true);
+      brazier(put, D.x-1, D.z+13, FY);
+      // ── burial hall ──
+      carve(put, D.x-7, D.z+17, D.x+7, D.z+29, FY, 7, true);   // tall enough to see in
+      for (const [px,pz] of [[-5,20],[5,20],[-5,26],[5,26],[-2,23],[2,23]])
+        pillar(put, D.x+px, D.z+pz, FY, 7);
+      brazier(put, D.x-7, D.z+18, FY); brazier(put, D.x+7, D.z+18, FY);
+      brazier(put, D.x-7, D.z+28, FY); brazier(put, D.x+7, D.z+28, FY);
+      // the dais, raised so the thing on it has the high ground
+      for (let x=D.x-3; x<=D.x+3; x++) for (let z=D.z+26; z<=D.z+29; z++){
+        put(x, FY, z, B.MOSS);
+        put(x, FY+1, z, B.AIR);
+      }
+      for (let x=D.x-3; x<=D.x+3; x++) put(x, FY+1, D.z+26, B.AIR);
+      put(D.x, FY+1, D.z+28, B.EMBER);
     });
   }
 
@@ -2604,6 +2686,38 @@ function tickCampfire(t, dt){
   ea.needsUpdate = true; sa.needsUpdate = true;
 }
 
+// ── barrow lighting ─────────────────────────────────────────────────────────
+// The sun can't reach a burial hall, and the sky ambient alone renders it flat.
+// A small pool of point lights follows you to the nearest braziers.
+const BARROW_BRAZIERS = (()=>{
+  const D = BARROW, F = BARROW_FLOOR;
+  return [[D.x-5,F+1,D.z+1],[D.x+5,F+1,D.z+7],[D.x-1,F+1,D.z+13],
+          [D.x-7,F+1,D.z+18],[D.x+7,F+1,D.z+18],[D.x-7,F+1,D.z+28],
+          [D.x+7,F+1,D.z+28],[D.x,F+2,D.z+28]];
+})();
+const barrowLights = [];
+function buildBarrowLights(){
+  if (barrowLights.length) return;
+  for (let i=0;i<5;i++){
+    const l = new THREE.PointLight(0xffa24a, 0, 30, 1.8);
+    barrowLights.push(l);
+    scene.add(l);
+  }
+}
+function tickBarrowLights(t){
+  if (!barrowLights.length) return;
+  const inside = inBarrow(player.pos.x, player.pos.z) && player.pos.y < BARROW_FLOOR + 8;
+  const near = BARROW_BRAZIERS
+    .map(b=>({ b, d:Math.hypot(b[0]-player.pos.x, b[1]-player.pos.y, b[2]-player.pos.z) }))
+    .sort((p,q)=>p.d-q.d).slice(0, barrowLights.length);
+  for (let i=0;i<barrowLights.length;i++){
+    const L = barrowLights[i], n = near[i];
+    if (!inside || !n || n.d > 34){ L.intensity = 0; continue; }
+    L.position.set(n.b[0]+0.5, n.b[1]+0.4, n.b[2]+0.5);
+    L.intensity = 3.6 + Math.sin(t*7 + i*2.1)*0.5;
+  }
+}
+
 // ── townsfolk ───────────────────────────────────────────────────────────────
 // Two people and a board. The town was visible from the campfire for four
 // versions and completely inert — a promise the game kept making and breaking.
@@ -2689,7 +2803,8 @@ function creditKill(e){
   for (const q of player.q.active){
     if (q.have >= q.need) continue;
     if (q.kind === 'cull' && e.kind === q.k){ q.have++; changed = true; }
-    else if (q.kind === 'hunt' && e.eliteFor === q.id){ q.have++; changed = true; }
+    else if ((q.kind === 'hunt' || q.kind === 'barrow') && e.eliteFor === q.id){
+      q.have++; changed = true; }
     else if (q.kind === 'clear' && e.siteFor === q.id){ q.have++; changed = true; }
     if (changed && q.have >= q.need) toast(`${q.title} — done. Return to ${TOWN_NAME}.`, 3.2);
   }
@@ -2700,6 +2815,33 @@ function populateSites(){
   for (const q of player.q.active){
     if (!q.site || q.spawned || q.have >= q.need) continue;
     if (Math.hypot(player.pos.x-q.site.x, player.pos.z-q.site.z) > 74) continue;
+    if (q.kind === 'barrow'){
+      // Guards through the rooms, and the thing on the dais. Placed by hand so
+      // the fights use the architecture: pillars to break line, a two-wide
+      // throat, then a hall wide enough to be surrounded in.
+      const D = BARROW, F = BARROW_FLOOR;
+      const guards = [
+        ['husk',   D.x-3, D.z+3], ['husk',   D.x+3, D.z+5],
+        ['warden', D.x,   D.z+7],
+        ['nightjar', D.x, D.z+12],
+        ['barrowkin', D.x-4, D.z+21], ['barrowkin', D.x+4, D.z+21],
+        ['wisp',   D.x-5, D.z+25], ['wisp',   D.x+5, D.z+25],
+      ];
+      for (const [k,x,z] of guards){
+        const e = spawnEntity(k, x, F+1, z);
+        e.siteFor = q.id;
+      }
+      const boss = spawnEntity('barrowkin', D.x, F+2, D.z+28);
+      boss.name = 'Aelthwyn, the Barrow-Lord';
+      boss.eliteFor = q.id;
+      boss.maxHp = 190; boss.hp = 190;
+      boss.mesh.scale.multiplyScalar(1.5);
+      boss.K = { ...boss.K, atk:[13,21], mp:4, xp:220, soak:0.30,
+                 onHit:{ kind:'dread', turns:3 } };
+      q.spawned = true;
+      toast('Something below is awake', 3.4);
+      continue;
+    }
     if (q.kind === 'hunt'){
       const y = surfaceY(q.site.x, q.site.z);
       if (y <= SEA+1) { q.spawned = true; continue; }
@@ -2721,6 +2863,13 @@ function populateSites(){
     q.spawned = true;
   }
 }
+function acceptBarrow(){
+  if (player.q.active.length >= 2){ toast('You can carry two errands'); return; }
+  player.q.barrow = 'taken';
+  player.q.active.push({ ...BARROW_QUEST });
+  SFX.ui(); toast('Taken: Open the barrow', 3);
+  drawQuestHud(); drawTown();
+}
 function acceptErrand(i){
   if (player.q.active.length >= 2){ toast('You can carry two errands'); return; }
   const q = player.q.offers[i];
@@ -2737,9 +2886,14 @@ function turnInErrands(){
     const q = player.q.active[i];
     if (q.have < q.need) continue;
     player.q.coin += q.coin;
-    player.q.rep  += 1;
+    player.q.rep  += (q.kind === 'barrow' ? 4 : 1);
     player.q.done += 1;
     gainXp(q.xp);
+    if (q.kind === 'barrow'){
+      player.q.barrow = 'done';
+      giveItem('barrowlight');
+      toast('Aelthwyn is put out. Fendmere will remember it.', 4);
+    }
     // clean up anything still standing that belonged to this errand
     for (let j=entities.length-1;j>=0;j--)
       if (entities[j].eliteFor === q.id || entities[j].siteFor === q.id) despawnEntity(entities[j]);
@@ -2794,7 +2948,7 @@ const player = {
   st: { mgt:STAT_BASE, vit:STAT_BASE, int:STAT_BASE, agi:STAT_BASE },
   weaponId: 'blade', spellId: 'wind',
   bag: {}, worn: [null, null],
-  q: { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0 },
+  q: { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none' },
   mp: 6, ap: 2, init: 0,
   mpMax: 6, apMax: 2,
   x:0, y:0, z:0,            // combat cell
@@ -3968,7 +4122,14 @@ function updateCombat(dt){
       (a.py !== undefined ? a.py : a.y) + 0.9,
       a.pz !== undefined ? a.pz : a.z+0.5);
   }
-  const ct = CB.tilt, co = CB.orbit;
+  // Indoors the camera cannot look down from above — it jams into the ceiling and
+  // pulls in to the minimum, leaving you staring at the back of your own head.
+  // Flatten the angle instead of shortening the arm.
+  let headroom = 0;
+  while (headroom < 9 && !isSolid(Math.floor(CB.focus.x), Math.floor(CB.focus.y)+headroom+1,
+                                  Math.floor(CB.focus.z))) headroom++;
+  const ct = headroom < 6 ? Math.min(CB.tilt, 0.10 + headroom*0.055) : CB.tilt;
+  const co = CB.orbit;
   let ux = Math.sin(co)*Math.cos(ct), uy = Math.sin(ct), uz = Math.cos(co)*Math.cos(ct);
   const ul = Math.hypot(ux,uy,uz) || 1; ux/=ul; uy/=ul; uz/=ul;
 
@@ -4286,11 +4447,20 @@ function drawTown(){
       <div class="psec">In hand ${ready?`— <span style="color:#9ac25c">${ready} ready to settle</span>`:''}</div>
       ${act}
       ${ready?`<button class="btn small" id="tTurnIn" style="margin:4px 0 12px">Settle ${ready} errand${ready>1?'s':''}</button>`:''}
+      ${barrowOffered() ? `
+        <div class="psec" style="color:#ff9a6a;border-color:rgba(255,120,80,.4)">A standing commission</div>
+        <div class="offer" style="border-color:rgba(255,120,80,.55);background:rgba(70,22,16,.28)">
+          <span style="flex:1"><div class="on3">${BARROW_QUEST.title}</div>
+            <div class="od3">${BARROW_QUEST.desc}</div>
+            <div class="orw">${BARROW_QUEST.coin} coin · ${BARROW_QUEST.xp} xp · and what it wears</div></span>
+          <button class="tog" id="tBarrow">Take</button></div>` : ''}
       <div class="psec">The board</div>${off}
       <div class="psec">Standing</div>
       <div class="od3">${t.name} — ${t.blurb}</div>`;
     const ti = document.getElementById('tTurnIn');
     if (ti) ti.onclick = ()=>{ turnInErrands(); refreshOffers(); drawTown(); };
+    const tb = document.getElementById('tBarrow');
+    if (tb) tb.onclick = acceptBarrow;
     body.querySelectorAll('[data-take]').forEach(b=> b.onclick = ()=> acceptErrand(+b.dataset.take));
   }
 
@@ -4531,7 +4701,8 @@ function loadGame(){
     player.level = s.p.lvl; player.xp = s.p.xp; player.xpNext = s.p.xpNext;
     player.hp = s.p.hp; player.mana = s.p.mana;
     player.bag = s.p.bag || {}; player.worn = s.p.worn || [null,null];
-    player.q = s.p.q || { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0 };
+    player.q = s.p.q || { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none' };
+    if (!player.q.barrow) player.q.barrow = 'none';
     for (const q of player.q.active) q.spawned = false;   // sites repopulate on return
     if (typeof s.tod === 'number') G.tod = s.tod;
     player.spawn.set(s.spawn.x, s.spawn.y, s.spawn.z);
@@ -4558,7 +4729,7 @@ function newWorld(){
   player.pitch = -0.05; player.vel.set(0,0,0);
   G.tod = 0.30;                                 // you wake in the early morning
   player.bag = {}; player.worn = [null, null];  // a new run starts empty-handed
-  player.q = { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0 };
+  player.q = { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none' };
   applyBuild(true);
 }
 // A handful of creatures prowling the ruins, so there is something to fight
@@ -4618,6 +4789,7 @@ function step(dt){
   }
   drainMeshQueue(MESH_BUDGET);
   tickAudio(dt);
+  tickBarrowLights(G.time);
   tickCampfire(G.time, dt);
   // sky dome rides with the camera; clouds wrap around it
   skyDome.position.copy(camera.position);
@@ -4713,6 +4885,7 @@ function enterWorld(){
   buildCampfire();
   buildAtmosphere();
   buildTownsfolk();
+  buildBarrowLights();
   drawQuestHud();
   if (!entities.length && Math.hypot(player.pos.x-HOME.x, player.pos.z-HOME.z) < 40) seedValeEnemies();
   populate(player.pos.x, player.pos.z);
@@ -4961,7 +5134,8 @@ window.STRATA = {
   isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,
   openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
   flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners, backCovered, isSolid,
-  TOWNSFOLK, openTown, closeTown, acceptErrand, turnInErrands, refreshOffers,
+  TOWNSFOLK, openTown, closeTown, acceptErrand, acceptBarrow, turnInErrands, refreshOffers,
+  BARROW, BARROW_FLOOR, inBarrow, BARROW_QUEST,
   populateSites, repTier, buildTownsfolk, creditKill,
   get abilities(){ return ABILITIES; },
   WEAPONS, SPELLS, STATS, HOME, LAKE, TOWN,
