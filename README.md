@@ -230,6 +230,37 @@ stat tweak:
 
 ---
 
+## The Scribe (optional)
+
+`api/scribe.js` is the game's only server-side seam. It exists because an Anthropic
+API key must never reach the browser. Three jobs, all of them **flavour laid over
+content the game already generated deterministically**:
+
+| | when | what it writes |
+|---|---|---|
+| **chronicle** | once per arrival at the reeve | the ledger entry for the trip you just made — beacons lit, things killed, times you fell, oil burned, which quarters are still dark |
+| **contract** | when the board refreshes | the *reason* Fendmere wants an errand done. The errand itself is still a pure function of (slot, seed, tier) |
+| **gearname** | when a trinket rolls | a name from where you were standing and what it does, instead of two words off a list |
+
+Three rules hold it together, and they are the design:
+
+1. **Nothing ever waits on it.** Every call is fire-and-forget with the fallback
+   already on screen. If it never answers you cannot tell by playing.
+2. **It never invents mechanics.** The errand, the trinket, and its stats all exist
+   before the scribe is asked.
+3. **No key means no change.** The endpoint 503s, the client goes quiet, and the
+   game is exactly the game it was — which is also how it behaves offline, on
+   localhost, and for anyone who switches it off in settings. It gives up after
+   three consecutive failures rather than retrying forever.
+
+To turn it on, set the key on the Vercel project (never in the repo):
+
+```bash
+npx vercel@latest env add ANTHROPIC_API_KEY production
+```
+
+Then redeploy. Settings → The Scribe reports whether it actually connected.
+
 ## The hook: the lamplighter
 
 **The vale is dark, and Fendmere pays you to change that.** Light is a real quantity the
