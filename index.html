@@ -37,6 +37,12 @@
   .btn.small{padding:7px 15px;font-size:11px;letter-spacing:.14em}
   .btn.ghost{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.14)}
   #keyhelp{font-size:11px;line-height:1.9;color:#98a2b2;text-align:center;max-width:560px}
+  #bootfail{display:none;max-width:520px;padding:14px 18px;border-radius:6px;text-align:center;
+    font-size:12px;line-height:1.7;color:#f0d6d2;background:rgba(88,30,26,.5);
+    border:1px solid rgba(207,90,76,.55)}
+  #bootfail b{color:#ffb3a6}
+  #bootwhy{margin-top:6px;font-family:ui-monospace,Consolas,monospace;font-size:11px;color:#e8a99f;
+    word-break:break-word}
   #keyhelp b{color:var(--gold);font-weight:600}
 
   /* ---------- explore hud ---------- */
@@ -150,8 +156,11 @@
 
   @media (max-width:820px){ #clog{display:none} .act{width:78px} }
 </style>
+<!-- Three.js is VENDORED, not pulled from a CDN. A CDN miss leaves the static title
+     screen sitting there with dead buttons and no error in sight, which is
+     indistinguishable from "the game is broken". -->
 <script type="importmap">
-{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+{ "imports": { "three": "./vendor/three.module.js" } }
 </script>
 </head>
 <body>
@@ -205,8 +214,43 @@
     <button class="btn" id="btnPlay">Enter the world</button>
     <button class="btn ghost small" id="btnNew">New world</button>
   </div>
+  <div id="bootfail">
+    <b>The game engine didn't load.</b>
+    <div id="bootwhy"></div>
+    <div style="margin-top:8px;color:#8d97a7">
+      Open this over <b>http://</b> (not a file:// path) — ES modules won't run from a
+      file. If you're already on http://, reload once; the details above say what broke.
+    </div>
+  </div>
   <div class="ver">prototype · M0–M1 · hook undecided</div>
 </div>
+
+<script>
+/* Plain (non-module) watchdog. If the module never finishes evaluating, the title
+   screen would otherwise sit there with buttons that silently do nothing — which is
+   exactly what a dead CDN, a file:// origin, or a syntax error looks like to a
+   player. Surface it instead. */
+(function(){
+  var shown = false;
+  function fail(why){
+    if (shown) return; shown = true;
+    var box = document.getElementById('bootfail');
+    var w   = document.getElementById('bootwhy');
+    if (w && why) w.textContent = String(why).slice(0, 300);
+    if (box) box.style.display = 'block';
+    var h = document.getElementById('keyhelp'); if (h) h.style.display = 'none';
+    ['btnPlay','btnNew'].forEach(function(id){
+      var b = document.getElementById(id); if (b){ b.disabled = true; b.style.opacity = .35; }
+    });
+  }
+  window.addEventListener('error', function(e){
+    if (e.message && /Script error/i.test(e.message)) return;
+    if (!window.STRATA) fail(e.message || (e.error && e.error.message));
+  }, true);
+  if (location.protocol === 'file:') fail('Loaded from file:// — ES modules are blocked.');
+  setTimeout(function(){ if (!window.STRATA) fail('Timed out waiting for the engine module.'); }, 8000);
+})();
+</script>
 
 <script type="module">
 import * as THREE from 'three';
