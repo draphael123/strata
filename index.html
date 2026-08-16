@@ -975,6 +975,42 @@ function treeDensity(x, z){
   return f;
 }
 
+// ───────────────────────────── REGIONS ─────────────────────────────
+// Scattering boulders, logs and scrub at one uniform density everywhere makes a
+// world of random blocks: nothing means anything because everything is possible
+// everywhere. A region field decides what KIND of place you are standing in, and
+// every scatter decision reads it — so a pine wood is a pine wood, a heath is bare
+// and rocky, and a ruin is a ruin rather than one lonely mossy block in a field.
+const REGIONS = ['oldwood','pinewood','heath','meadow','marsh','ruinfield'];
+function regionAt(x, z){
+  // Marsh is decided by the ground, not the dice: low, flat land near the water.
+  const h = heightAt(x, z);
+  if (h <= SEA+2 && Math.hypot(x-LAKE.x, z-LAKE.z) < LAKE.r*2.2) return 'marsh';
+  // Two low-frequency fields, so regions are big and their borders wander.
+  const a = fbm(x*0.0042, z*0.0042, 3, SEED+1717);
+  const b = fbm(x*0.0055, z*0.0055, 2, SEED+2929);
+  if (h > 46) return 'heath';                       // above the treeline it's stone
+  if (a < 0.40) return b < 0.45 ? 'meadow' : 'heath';
+  if (a > 0.62) return b < 0.50 ? 'oldwood' : 'pinewood';
+  return b < 0.30 ? 'ruinfield' : b > 0.74 ? 'pinewood' : 'meadow';
+}
+// What grows and what lies about, per region. `trees` multiplies the density
+// field; `feat` scales scatter; `species` biases which tree gets planted.
+const REGION_RULES = {
+  oldwood:  { trees:1.55, feat:1.25, species:{ oak:0.68, birch:0.24, pine:0.08 },
+              log:2.2, snag:1.8, bush:1.2, rocks:0.5, boulder:0.7 },
+  pinewood: { trees:1.40, feat:0.95, species:{ oak:0.06, birch:0.10, pine:0.84 },
+              log:1.4, snag:2.4, bush:0.6, rocks:0.8, boulder:0.9 },
+  heath:    { trees:0.16, feat:1.45, species:{ oak:0.15, birch:0.25, pine:0.60 },
+              log:0.4, snag:1.1, bush:1.5, rocks:2.6, boulder:2.4 },
+  meadow:   { trees:0.34, feat:0.70, species:{ oak:0.55, birch:0.40, pine:0.05 },
+              log:0.8, snag:0.4, bush:1.6, rocks:0.6, boulder:0.5 },
+  marsh:    { trees:0.28, feat:1.05, species:{ oak:0.20, birch:0.70, pine:0.10 },
+              log:2.6, snag:2.2, bush:1.8, rocks:0.3, boulder:0.2 },
+  ruinfield:{ trees:0.45, feat:1.15, species:{ oak:0.45, birch:0.35, pine:0.20 },
+              log:0.9, snag:0.9, bush:1.1, rocks:1.6, boulder:0.8 },
+};
+
 // Scattered landscape features. A world of nothing but trees and turf has no
 // mid-scale geometry at all — the eye needs boulders, deadfall and scrub between
 // the grass blades and the canopy.
@@ -984,18 +1020,27 @@ function featureAt(x, z){
   if (inCamp(x,z) || inTown(x,z) || onPath(x,z) || inBarrow(x,z)) return null;
   const slope = Math.abs(heightAt(x+1,z)-topY) + Math.abs(heightAt(x,z+1)-topY);
   const h = hash2(x, z, SEED+4242);
-  if (h < 0.0105) return { t:'boulder', topY, r:1+Math.floor(hash2(x,z,SEED+11)*2),
-                           hh:1+Math.floor(hash2(x,z,SEED+12)*3) };
+  const R = REGION_RULES[regionAt(x, z)] || REGION_RULES.meadow;
+  const s = R.feat;
+  // Each band is scaled by the region, so a heath is stone and scrub while an old
+  // wood is deadfall — the same dice, read differently depending on where you are.
+  let a = 0;
+  if (h < (a += 0.0105*R.boulder*s))
+    return { t:'boulder', topY, r:1+Math.floor(hash2(x,z,SEED+11)*2),
+             hh:1+Math.floor(hash2(x,z,SEED+12)*3) };
   if (slope > 2) return null;
   // Density raised deliberately: with the flank rule, something solid to put your
   // back against IS the counter, and open ground offered one in only 27% of
   // ambushes. Furniture is now tactical infrastructure, not decoration.
-  if (h < 0.0125) return { t:'log',   topY, len:3+Math.floor(hash2(x,z,SEED+13)*4),
-                           dir:hash2(x,z,SEED+14) < 0.5 };
-  if (h < 0.0175) return { t:'stump', topY };
-  if (h < 0.0215) return { t:'snag',  topY, hh:5+Math.floor(hash2(x,z,SEED+15)*5) };
-  if (h < 0.0470) return { t:'bush',  topY, r:1, hh:1+Math.floor(hash2(x,z,SEED+16)*2) };
-  if (h < 0.0560) return { t:'rocks', topY };
+  if (h < (a += 0.0020*R.log*s))
+    return { t:'log', topY, len:3+Math.floor(hash2(x,z,SEED+13)*4),
+             dir:hash2(x,z,SEED+14) < 0.5 };
+  if (h < (a += 0.0050*R.log*s)) return { t:'stump', topY };
+  if (h < (a += 0.0040*R.snag*s))
+    return { t:'snag', topY, hh:5+Math.floor(hash2(x,z,SEED+15)*5) };
+  if (h < (a += 0.0255*R.bush*s))
+    return { t:'bush', topY, r:1, hh:1+Math.floor(hash2(x,z,SEED+16)*2) };
+  if (h < (a += 0.0090*R.rocks*s)) return { t:'rocks', topY };
   return null;
 }
 
@@ -1005,14 +1050,18 @@ function treeAt(x, z){
   if (onPath(x,z) || inBarrow(x,z)) return null;
   const topY = heightAt(x, z);
   if (topY <= SEA+1 || topY > 46) return null;
-  if (hash2(x, z, SEED+31337) > 0.022 * treeDensity(x, z)) return null;
+  const R = REGION_RULES[regionAt(x, z)] || REGION_RULES.meadow;
+  if (hash2(x, z, SEED+31337) > 0.022 * treeDensity(x, z) * R.trees) return null;
   // thin them out on steep slopes so trees don't hang off cliffs
   const slope = Math.abs(heightAt(x+1,z)-topY) + Math.abs(heightAt(x,z+1)-topY);
   if (slope > 2) return null;
-  // Three species. A forest of one silhouette repeated is the single loudest
-  // "this is a prototype" signal a voxel world can send.
+  // Three species, mixed according to where you are. A forest of one silhouette
+  // repeated is the loudest "prototype" signal a voxel world can send — but so is
+  // an even scatter of all three everywhere, which is just noise. A pine wood
+  // should be overwhelmingly pine, with the odd birch in it.
   const r = hash2(x, z, SEED+555);
-  const kind = r < 0.34 ? 'pine' : r < 0.60 ? 'birch' : 'oak';
+  const sp = R.species;
+  const kind = r < sp.pine ? 'pine' : r < sp.pine + sp.birch ? 'birch' : 'oak';
   const trunk = kind === 'pine'  ? 6 + Math.floor(hash2(x,z,SEED+777)*5)
               : kind === 'birch' ? 6 + Math.floor(hash2(x,z,SEED+777)*4)
               :                    4 + Math.floor(hash2(x,z,SEED+777)*4);
@@ -1382,6 +1431,65 @@ function genChunk(cx, cz){
     data[idx(lx,ly,lz)] = v;
     if (v !== B.AIR && ly > maxY) maxY = ly;
   }
+  // ── ruins, as BUILDINGS ──────────────────────────────────────────────────
+  // A single mossy block in a meadow is a random block. A broken rectangle of
+  // wall with a doorway, a flagged floor and a fallen column is a place someone
+  // lived. Sites sit on a coarse grid so they are far apart and never overlap.
+  const RG = 56;
+  for (let sz=-1; sz<=1; sz++) for (let sx=-1; sx<=1; sx++){
+    const gx = Math.floor(ox/RG)+sx, gz = Math.floor(oz/RG)+sz;
+    const rx = gx*RG + 8 + Math.floor(hash2(gx,gz,SEED+62)*(RG-16));
+    const rz = gz*RG + 8 + Math.floor(hash2(gz,gx,SEED+63)*(RG-16));
+    if (inCamp(rx,rz) || inTown(rx,rz) || inBarrow(rx,rz)) continue;
+    // Gating on the ruinfield region ALONE made these vanish: ruinfield is 2.5% of
+    // the map, so a 34% site roll on top put one ruin in roughly every 370,000
+    // square metres. Ruins are common where the old field is and occasional
+    // everywhere else, which is how ruins actually sit in a landscape.
+    const ruinland = regionAt(rx, rz) === 'ruinfield';
+    if (hash2(gx, gz, SEED+6161) > (ruinland ? 0.85 : 0.30)) continue;
+    const gy = heightAt(rx, rz);
+    if (gy <= SEA+1 || gy > 46) continue;
+    const w = 5 + Math.floor(hash2(gx,gz,SEED+64)*5);
+    const d = 5 + Math.floor(hash2(gz,gx,SEED+65)*5);
+    const put = (px,py,pz,b)=>{
+      // Each chunk writes only its own slice; a ruin straddling a border is written
+      // identically by both sides because the site is a pure function of the grid.
+      const lx = px-ox, lz = pz-oz;
+      if (lx<0||lx>=CX||lz<0||lz>=CZ||py<0||py>=CY) return;
+      const i = idx(lx,py,lz);
+      if (data[i] !== B.AIR && data[i] !== B.SHRUB && data[i] !== B.LEAF) return;
+      data[i] = b; if (py > maxY) maxY = py;
+    };
+    for (let dx=0; dx<w; dx++) for (let dz=0; dz<d; dz++){
+      const px = rx+dx, pz = rz+dz;
+      const edge = dx===0 || dx===w-1 || dz===0 || dz===d-1;
+      const g2 = heightAt(px, pz);
+      if (Math.abs(g2-gy) > 2) continue;                 // don't march up a hillside
+      if (edge){
+        // A ruin is mostly gone: the wall survives in stretches, waist to head
+        // high, with a doorway punched through one side.
+        const keep = hash2(px, pz, SEED+66);
+        if (keep < 0.34) continue;                       // fallen away entirely
+        const hgt = keep < 0.62 ? 1 : keep < 0.86 ? 2 : 3;
+        for (let y=1; y<=hgt; y++) put(px, gy+y, pz, B.MOSS);
+      } else {
+        put(px, gy, pz, hash2(px,pz,SEED+67) < 0.72 ? B.SLATE : B.MOSS);
+      }
+    }
+    // a couple of stubs of column, and one that came down across the floor
+    for (let i=0;i<3;i++){
+      const cx2 = rx + 1 + Math.floor(hash2(gx+i, gz, SEED+68)*(w-2));
+      const cz2 = rz + 1 + Math.floor(hash2(gz, gx+i, SEED+69)*(d-2));
+      const ch  = 1 + Math.floor(hash2(cx2, cz2, SEED+70)*3);
+      for (let y=1; y<=ch; y++) put(cx2, gy+y, cz2, B.STONE);
+    }
+    const fx = rx + 1 + Math.floor(hash2(gx, gz, SEED+71)*(w-3));
+    const fz = rz + 1 + Math.floor(hash2(gz, gx, SEED+72)*(d-3));
+    const along = hash2(gx, gz, SEED+73) < 0.5;
+    for (let i=0;i<3+Math.floor(hash2(gx,gz,SEED+74)*3);i++)
+      put(fx + (along?i:0), gy+1, fz + (along?0:i), B.STONE);
+  }
+
   // snags ride along with the trees so one instancing pass draws both
   for (const s of snags) trees.push(s);
   return { data, trees, maxY: Math.min(maxY+1, CY-1), mesh:null, wmesh:null, dirty:true };
@@ -6816,6 +6924,7 @@ window.STRATA = {
   keys, get pendingClick(){ return pendingClick; },
   isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,
   daylight, lightAt, playerLight, lanternOn, litBeacons, lightBeacon, nearestWaymark,
+  regionAt, REGION_RULES, featureAt, treeAt,
   OIL_MAX, BEACON_COST, BEACON_R,
   openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
   flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners, backCovered, isSolid,
