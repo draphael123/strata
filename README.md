@@ -230,6 +230,40 @@ stat tweak:
 
 ---
 
+## Creature tactics
+
+Each kind carries a `tactic` that decides what a good *cell* is, so a Wisp wants a
+different square from a Warden even when both could reach you from either.
+
+| tactic | who | what it does |
+|---|---|---|
+| `skirmish` | wisp, ashling, slinger, cairnwight | wants distance and concealment; with you adjacent it **backs off first**, paying the opportunity attack, and fires from there |
+| `hold` | warden, barrowkin, bear | movement is weighted against it; out of patience it **sets itself** rather than trickling into the open |
+| `flank` | stalker, nightjar, lynx | doubles a preference the planner already had — the least distinct of the four |
+| `charge` | boar | closes hard |
+| `press` | everything else | the old behaviour |
+
+Measured: a Wisp goes from gap 0.7 to 6.5 ten times out of ten; a Slinger, with less
+movement, manages 1.2 → 3.0 — same intention, worse legs.
+
+## Gear traits
+
+Trinkets used to be +2 Might forever, so a build diverged at character creation and
+then never again. Items can now carry a **trait**, each hooking a system that already
+existed as a fixed constant: `reach` (weapon range), `step` (movement pool), `bulwark`
+(the Guard action), `hunter` (the point-blank penalty), `carry` (melee follow-through),
+`vigil` (the kill). Rolled gear rolls one about a third of the time and takes a
+different icon when it does. Hess stocks all six.
+
+## Waymarks
+
+Every cache stands under a marker whose silhouette states its worth — cairn, standing
+stone, lit trilith — in **pale dressed stone with an ochre rag**, because a grey stone
+in a world of grey boulders is not a signal. Distance from Fendmere is the difficulty
+and reward dial (tier 1 inside 130, 2 to 240, 3 beyond), and opening one names the
+bearing to the nearest unopened site, sweeping the deterministic grid so it can point
+at somewhere that has not streamed in yet.
+
 ## Gotchas found building this (don't re-learn these)
 
 - **Search wide, walk short.** Capping a creature's pathfinding at its movement
