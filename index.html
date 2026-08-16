@@ -64,6 +64,7 @@
   .bar.hp>i{background:linear-gradient(90deg,#8e3630,#cf5a4c)}
   .bar.xp>i{background:linear-gradient(90deg,#5c7c3a,#9ac25c)}
   .bar.mn>i{background:linear-gradient(90deg,#3a5c8e,#6ea8e0)}
+  .bar.oil>i{background:linear-gradient(90deg,#8a5a1e,#ffc26a)}
   .row{display:flex;justify-content:space-between;align-items:baseline}
   .val{font-size:12px;color:#dfd8c8;font-variant-numeric:tabular-nums}
 
@@ -364,9 +365,12 @@
     <div class="bar hp"><i id="vHpB"></i></div>
     <div class="row" style="margin-top:6px"><span class="lbl">Mana</span><span class="val" id="vMana">18 / 18</span></div>
     <div class="bar mn"><i id="vManaB"></i></div>
+    <div class="row" style="margin-top:6px"><span class="lbl">Oil</span><span class="val" id="vOil">100 / 100</span></div>
+    <div class="bar oil"><i id="vOilB"></i></div>
     <div class="row" style="margin-top:6px"><span class="lbl" id="vLvl">Level 1</span><span class="val" id="vXp">0 / 40</span></div>
     <div class="bar xp"><i id="vXpB" style="width:0%"></i></div>
-    <div id="vGear" class="lbl" style="margin-top:7px;color:#8d97a7"></div>
+    <div id="vLamp" class="lbl" style="margin-top:7px;color:#e0a24a"></div>
+    <div id="vGear" class="lbl" style="margin-top:3px;color:#8d97a7"></div>
   </div>
   <div id="toast"></div>
   <div id="quests"></div>
@@ -1875,11 +1879,13 @@ const CLOUDS = [];
 // tod runs 0..1: 0 midnight, 0.25 dawn, 0.5 noon, 0.75 dusk.
 const DAY_LENGTH = 600;                       // seconds for a full cycle
 const SKY_KEYS = [
-  { t:0.00, top:0x070c1c, mid:0x0d1730, haze:0x1a2340, sun:0x9fb6d8, key:0x2c3f66, kI:0.16,
-    hemiS:0x1b2c4d, hemiG:0x14161f, hemiI:0.42, amb:0x2a3550, ambI:0.20, fog:0x141d33 },
+  // Night is genuinely DARK now — it has to be, or a lantern is a decoration and
+  // shuttering it costs you nothing. These were bright enough to walk by.
+  { t:0.00, top:0x04060f, mid:0x070c1c, haze:0x0d1322, sun:0x9fb6d8, key:0x1a2440, kI:0.07,
+    hemiS:0x101c34, hemiG:0x0b0d14, hemiI:0.20, amb:0x18203a, ambI:0.10, fog:0x0a0e1a },
   // an extra key so dawn's colour doesn't bleed back into the small hours
-  { t:0.16, top:0x0a1226, mid:0x14203c, haze:0x27304e, sun:0xa8bcd8, key:0x33466e, kI:0.20,
-    hemiS:0x22355a, hemiG:0x171a24, hemiI:0.46, amb:0x303c58, ambI:0.21, fog:0x1c2740 },
+  { t:0.16, top:0x060a18, mid:0x0c1428, haze:0x161d33, sun:0xa8bcd8, key:0x1f2b4a, kI:0.09,
+    hemiS:0x142240, hemiG:0x0d1018, hemiI:0.24, amb:0x1c2542, ambI:0.11, fog:0x111726 },
   { t:0.22, top:0x1d3a63, mid:0x6a5f80, haze:0xd98f63, sun:0xffb066, key:0xff9d55, kI:0.85,
     hemiS:0x6a7fae, hemiG:0x5a4636, hemiI:0.75, amb:0x8c86a0, ambI:0.30, fog:0xc98a68 },
   { t:0.32, top:0x2f5f9e, mid:0x8fb4d8, haze:0xf2cf9c, sun:0xffd9a0, key:0xffcf8a, kI:1.55,
@@ -1890,13 +1896,67 @@ const SKY_KEYS = [
     hemiS:0x9cc0ec, hemiG:0x7a6748, hemiI:1.05, amb:0xc8d6ea, ambI:0.38, fog:0xe8c9a0 },
   { t:0.80, top:0x21365f, mid:0x7a5a7e, haze:0xc46f55, sun:0xff8c52, key:0xff8a4c, kI:0.70,
     hemiS:0x5a6a9a, hemiG:0x4a3830, hemiI:0.68, amb:0x7a7290, ambI:0.28, fog:0xb0705c },
-  { t:0.88, top:0x0c1428, mid:0x172140, haze:0x2b3050, sun:0xa8bcd8, key:0x36486e, kI:0.22,
-    hemiS:0x22355a, hemiG:0x171a24, hemiI:0.46, amb:0x303c58, ambI:0.21, fog:0x1e2742 },
-  { t:1.00, top:0x070c1c, mid:0x0d1730, haze:0x1a2340, sun:0x9fb6d8, key:0x2c3f66, kI:0.16,
-    hemiS:0x1b2c4d, hemiG:0x14161f, hemiI:0.42, amb:0x2a3550, ambI:0.20, fog:0x141d33 },
+  { t:0.88, top:0x070e1e, mid:0x0e1730, haze:0x181f38, sun:0xa8bcd8, key:0x223052, kI:0.10,
+    hemiS:0x152340, hemiG:0x0d1018, hemiI:0.25, amb:0x1d2644, ambI:0.11, fog:0x121828 },
+  { t:1.00, top:0x04060f, mid:0x070c1c, haze:0x0d1322, sun:0x9fb6d8, key:0x1a2440, kI:0.07,
+    hemiS:0x101c34, hemiG:0x0b0d14, hemiI:0.20, amb:0x18203a, ambI:0.10, fog:0x0a0e1a },
 ];
 const hemi = scene.children.find(o=>o.isHemisphereLight);
 const ambient = scene.children.find(o=>o.isAmbientLight);
+
+// ═══════════════════════════ LIGHT ═══════════════════════════
+// The vale is dark and you are paid to change that. Light is not decoration here:
+// it is what the world is measured in, what creatures find you by, and the thing
+// you spend to claim ground. Everything downstream reads lightAt().
+const BEACON_R = 22;                          // a lit beacon holds this much road
+const LANTERN_R = 9;
+const OIL_MAX = 100;
+const OIL_BURN = 1.35;                        // per second of night, lantern lit
+const BEACON_COST = 24;                       // you give up your OWN light to set one
+// 0 at midnight, 1 in full day — the same curve the sky keys ride.
+function daylight(){
+  const t = G.tod;
+  if (t < 0.18 || t > 0.86) return 0;
+  if (t < 0.32) return (t-0.18)/0.14;
+  if (t > 0.72) return 1 - (t-0.72)/0.14;
+  return 1;
+}
+// How lit a spot in the world is, 0..1, ignoring the lantern in your own hand —
+// callers add that themselves when they mean "how visible is the PLAYER".
+function lightAt(x, z){
+  let v = daylight();
+  if (v >= 1) return 1;
+  const near = (cx, cz, r)=>{
+    const d = Math.hypot(x-cx, z-cz);
+    if (d < r) v = Math.max(v, 1 - (d/r)*(d/r)*0.85);
+  };
+  near(HOME.x, HOME.z, 13);                   // the campfire you woke beside
+  if (inTown(x, z)) v = Math.max(v, 0.85);    // Fendmere keeps its own lamps
+  for (const b of litBeacons()) near(b.x, b.z, BEACON_R);
+  return Math.min(1, v);
+}
+// How visible the PLAYER is — this is what everything hunting you actually reads.
+function playerLight(){
+  const l = lightAt(player.pos.x, player.pos.z);
+  return Math.min(1, Math.max(l, lanternOn() ? 0.80 : 0));
+}
+const lanternOn = ()=> !!(player.q && player.q.lantern && (player.q.oil||0) > 0);
+// Beacon bookkeeping lives in player.q, so it saves and loads with everything else.
+// The cache starts as an empty ARRAY, not null: with no beacons yet the key is ''
+// too, so a null cache matched the "unchanged" test and was returned as-is.
+let _beaconCache = [], _beaconKey = ' ';
+function litBeacons(){
+  const q = player.q; if (!q || !q.beacons) return [];
+  const key = Object.keys(q.beacons).join(',');
+  if (key !== _beaconKey){
+    _beaconKey = key;
+    _beaconCache = Object.keys(q.beacons).map(id=>{
+      const p = q.beacons[id];
+      return { id, x:p[0], y:p[1], z:p[2] };
+    });
+  }
+  return _beaconCache;
+}
 const _kc = [new THREE.Color(), new THREE.Color(), new THREE.Color(),
              new THREE.Color(), new THREE.Color(), new THREE.Color(), new THREE.Color()];
 function skyAt(tod){
@@ -2251,6 +2311,10 @@ function concealed(x, y, z){
     const b = getBlock(x+dx, y, z+dz);
     if (b === B.SHRUB || b === B.LEAF) return true;
   }
+  // Unlit ground after dark conceals as well as scrub does. This is the rule that
+  // turns "where is the light" into a positional question during a fight, not just
+  // while you are walking around: a shooter cannot pick you out of the dark.
+  if (typeof lightAt === 'function' && lightAt(x, z) < 0.22) return true;
   return false;
 }
 
@@ -3120,6 +3184,31 @@ function refreshChests(){
     chests.push({ ...s, mesh:m, mark:w });
   }
 }
+// You light the vale with oil out of your own lamp. That is the whole trade the
+// game is built on: every beacon is a piece of your own safety spent on ground
+// that will still be lit when you come back through it at midnight.
+function nearestWaymark(){
+  let best = null, bd = 4.0;
+  for (const c of chests){
+    if (player.q.beacons && player.q.beacons[c.id]) continue;
+    const d = Math.hypot(player.pos.x-c.mark.position.x, player.pos.z-c.mark.position.z);
+    if (d < bd && Math.abs(player.pos.y - c.y) < 5){ bd = d; best = c; }
+  }
+  return best;
+}
+function lightBeacon(c){
+  if ((player.q.oil||0) < BEACON_COST){
+    toast(`Not enough oil — a beacon takes ${BEACON_COST}.`, 2.6); return false;
+  }
+  player.q.oil -= BEACON_COST;
+  player.q.beacons[c.id] = [c.mark.position.x, c.y, c.mark.position.z];
+  _beaconKey = ' ';                                 // force the cache to rebuild
+  SFX.heal(); boom(c.x, c.y+2, c.z, 0xffb35e);
+  const n = Object.keys(player.q.beacons).length;
+  toast(`Beacon lit. ${n} ${n===1?'light stands':'lights stand'} in the vale.`, 3.6);
+  drawVitals();
+  return true;
+}
 function nearestChest(){
   let best = null, bd = 3.4;
   for (const c of chests){
@@ -3206,6 +3295,61 @@ function tickBarrowLights(t){
     if (!inside || !n || n.d > 34){ L.intensity = 0; continue; }
     L.position.set(n.b[0]+0.5, n.b[1]+0.4, n.b[2]+0.5);
     L.intensity = 3.6 + Math.sin(t*7 + i*2.1)*0.5;
+  }
+}
+
+// ── the lantern, and the beacons you leave behind ───────────────────────────
+// Same pooled-light trick as the barrow braziers: a handful of real lights that
+// follow you to whatever is nearest, so a hundred lit beacons cost nothing.
+let lanternLight = null;
+const beaconLights = [];
+const beaconFlames = [];
+function buildLightRig(){
+  if (lanternLight) return;
+  // Outdoors there are no walls to catch the light the way the barrow braziers get
+  // caught, so the same numbers that lit a burial hall read as nothing on open
+  // ground. Brighter, slower falloff, and warmer.
+  lanternLight = new THREE.PointLight(0xffbe72, 0, LANTERN_R*3.0, 1.25);
+  scene.add(lanternLight);
+  for (let i=0;i<5;i++){
+    // Visual reach is tied to BEACON_R so what LOOKS lit is what IS lit — the first
+    // pass threw light half a field past the radius the rules use, which quietly
+    // teaches the player the wrong thing about where they are safe.
+    const l = new THREE.PointLight(0xffb35e, 0, BEACON_R*1.35, 1.15);
+    beaconLights.push(l); scene.add(l);
+    // a flame you can see from much further than the light carries
+    const f = new THREE.Mesh(new THREE.SphereGeometry(0.42, 8, 6),
+      new THREE.MeshBasicMaterial({ color:0xffca6a, transparent:true, opacity:0.9, fog:false }));
+    f.visible = false; beaconFlames.push(f); scene.add(f);
+  }
+}
+function tickLight(t, dt){
+  buildLightRig();
+  const q = player.q;
+  if (!q) return;
+  // Oil only burns when it is doing something — carrying a lit lantern through
+  // daylight should not cost you the evening.
+  if (q.lantern && q.oil > 0 && daylight() < 0.55){
+    q.oil = Math.max(0, q.oil - OIL_BURN*dt);
+    if (q.oil === 0) toast('Your lantern gutters out.', 3.0);
+  }
+  const on = lanternOn();
+  lanternLight.visible = on;
+  lanternLight.position.set(player.pos.x, player.pos.y + 1.3, player.pos.z);
+  const flick = 1 + Math.sin(t*9.3)*0.06 + Math.sin(t*3.1)*0.04;
+  lanternLight.intensity = on ? (1 - daylight()*0.75) * 7.5 * flick : 0;
+
+  const near = litBeacons()
+    .map(b=>({ b, d:Math.hypot(b.x-player.pos.x, b.z-player.pos.z) }))
+    .sort((p,r)=>p.d-r.d).slice(0, beaconLights.length);
+  for (let i=0;i<beaconLights.length;i++){
+    const L = beaconLights[i], F = beaconFlames[i], n = near[i];
+    if (!n || n.d > 150){ L.intensity = 0; F.visible = false; continue; }
+    L.position.set(n.b.x+0.5, n.b.y+3.4, n.b.z+0.5);
+    L.intensity = (1 - daylight()*0.8) * 11.0 * (1 + Math.sin(t*6 + i*1.7)*0.09);
+    F.position.copy(L.position);
+    F.visible = true;
+    F.scale.setScalar(1 + Math.sin(t*8 + i)*0.10);
   }
 }
 
@@ -3727,10 +3871,18 @@ addEventListener('keydown', e=>{
   }
   if (G.mode === 'explore'){
     if (e.code === 'KeyE'){
-      const f = nearestFolk(), c = f ? null : nearestChest();
+      const f = nearestFolk(), c = f ? null : nearestChest(), w = (f||c) ? null : nearestWaymark();
       if (f) openTown(f);
       else if (c) openChest(c);
+      else if (w) lightBeacon(w);
       else tryEngage();
+    }
+    if (e.code === 'KeyL'){
+      if ((player.q.oil||0) <= 0){ toast('The lamp is dry.', 1.6); return; }
+      player.q.lantern = !player.q.lantern;
+      SFX.ui();
+      toast(player.q.lantern ? 'Lantern lit — and they can see it.' : 'Lantern shuttered. You go dark.', 2.2);
+      drawVitals();
     }
   } else if (G.mode === 'combat'){
     const n = ['Digit1','Digit2','Digit3','Digit4'].indexOf(e.code);
@@ -3983,7 +4135,15 @@ function updateExplore(dt){
     if (!e.alive || inTown(e.x, e.z)) continue;
     const dx = p.x-e.px, dz = p.z-e.pz;
     const d = Math.hypot(dx, dz);
-    const range = e.K.aggro * (sprint ? 1.30 : 1) * (concealed(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)) ? 0.45 : 1);
+    // LIGHT IS THE TACTICS GRID. In daylight this is a no-op and the old rules
+    // stand. After dark, a lit lantern is a signal you are carrying — things find
+    // you half a field away — and shuttering it makes you nearly invisible at the
+    // price of not seeing what you walk into.
+    const lit = playerLight();
+    const lightMul = 0.42 + lit*1.16;
+    const range = e.K.aggro * (sprint ? 1.30 : 1)
+                * (concealed(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)) ? 0.45 : 1)
+                * lightMul;
     let sees = false;
     if (d < range && Math.abs(p.y-e.py) < 6){
       const fy = e.faceYaw === undefined ? e.yaw : e.faceYaw;
@@ -5302,6 +5462,17 @@ function drawVitals(){
   document.getElementById('vXpB').style.width = (player.xp/player.xpNext*100) + '%';
   const w = WEAPONS.find(x=>x.id===player.weaponId), s = SPELLS.find(x=>x.id===player.spellId);
   document.getElementById('vGear').textContent = `${w?w.name:'—'} · ${s?s.name:'—'}`;
+  // the lamplighter's own numbers: what you have left to burn, and what you've lit
+  const oilEl = document.getElementById('vOil');
+  if (oilEl && player.q){
+    const oil = Math.round(player.q.oil||0), lit = Object.keys(player.q.beacons||{}).length;
+    oilEl.textContent = `${oil} / ${OIL_MAX}`;
+    document.getElementById('vOilB').style.width = (oil/OIL_MAX*100) + '%';
+    document.getElementById('vOilB').style.opacity = lanternOn() ? '1' : '0.35';
+    document.getElementById('vLamp').textContent = lanternOn()
+      ? (lit ? `Lantern lit · ${lit} beacon${lit===1?'':'s'}` : 'Lantern lit · L to shutter')
+      : (oil > 0 ? 'Shuttered — you are hard to see' : 'Dry');
+  }
 }
 function drawOrder(){
   const el = document.getElementById('order');
@@ -5803,6 +5974,10 @@ function loadGame(){
     player.q = s.p.q || { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none' };
     if (!player.q.barrow) player.q.barrow = 'none';
     if (!player.q.chests) player.q.chests = {};
+    if (!player.q.beacons) player.q.beacons = {};          // saves made before the lamp
+    if (typeof player.q.oil !== 'number') player.q.oil = OIL_MAX;
+    if (typeof player.q.lantern !== 'boolean') player.q.lantern = true;
+    _beaconKey = ' ';
     player.look = s.p.look || { skin:1, hair:1, tunic:0, cloak:0 };
     player.gear = s.p.gear || {};
     player.rest = s.p.rest || null;
@@ -5832,7 +6007,8 @@ function newWorld(){
   player.pitch = -0.05; player.vel.set(0,0,0);
   G.tod = 0.30;                                 // you wake in the early morning
   player.bag = {}; player.worn = [null, null];  // a new run starts empty-handed
-  player.q = { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none', chests:{} };
+  player.q = { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none', chests:{},
+               beacons:{}, oil:OIL_MAX, lantern:true };
   player.gear = {};
   // The waymark is a second mesh per cache and it has to go too. Starting a new
   // world used to leave the old one's chests in the scene — invisible while they
@@ -5911,6 +6087,7 @@ function step(dt){
   tickAudio(dt);
   tickMusic(dt);
   tickBarrowLights(G.time);
+  tickLight(G.time, dt);
   tickCampfire(G.time, dt);
   // sky dome rides with the camera; clouds wrap around it
   skyDome.position.copy(camera.position);
@@ -6031,11 +6208,13 @@ function enterWorld(){
   // A guided opening: a few beats, spaced out, rather than one wall of text.
   if (!localStorage.getItem('strata-seen-intro')){
     localStorage.setItem('strata-seen-intro','1');
+    // You are not an amnesiac with a sword. You have a job, and the job is the game.
     const beats = [
-      [0.6, 'You wake beside a fire you did not build'],
-      [5.5, 'WASD to walk · mouse to look · V for third person'],
-      [11,  'Ruins around you. Water below. Smoke over the hill'],
-      [17,  'Follow the worn path north-east to find who lit it'],
+      [0.6, 'You wake beside a fire you did not build — and a lamp that is yours'],
+      [5.5, 'WASD to walk · mouse to look · L shutters the lantern · V for third person'],
+      [11,  'The vale is dark past the firelight. Fendmere pays to change that'],
+      [17,  'Set beacons at the standing stones. Light held is ground held'],
+      [23,  'Follow the worn path north-east to the people who hired you'],
     ];
     for (const [t,msg] of beats) setTimeoutFX(()=> toast(msg, 4.4), t);
   } else {
@@ -6400,6 +6579,8 @@ window.STRATA = {
   threatOf, drawThreat, tReach, tThreat, save:saveGame, load:loadGame,
   keys, get pendingClick(){ return pendingClick; },
   isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,
+  daylight, lightAt, playerLight, lanternOn, litBeacons, lightBeacon, nearestWaymark,
+  OIL_MAX, BEACON_COST, BEACON_R,
   openPause, closePause, computeIntents, effStats, equipItem, useItem, unequipItem,
   flankOf, inRangeFrom, adjacentTo, hostilesAdjacent, threateners, backCovered, isSolid,
   TOWNSFOLK, openTown, closeTown, acceptErrand, acceptBarrow, turnInErrands, refreshOffers,
