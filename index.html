@@ -403,8 +403,8 @@ const SPELLS = [
     desc:'Bursts on impact, scorching everything adjacent.' },
   { id:'pierce', name:'Piercing Shot',req:['agi',9], mana:3, ap:1, target:'ranged', range:10, dmg:[9,15],
     desc:'Ignores cover entirely.' },
-  { id:'sunder', name:'Stone Sunder',req:['mgt',8],  mana:3, ap:1, target:'ground', range:5,
-    desc:'Shatter a block and the ones beside it. Anything standing there falls.' },
+  { id:'hamstring', name:'Hamstring', req:['mgt',8], mana:2, ap:1, target:'melee', dmg:[6,10],
+    desc:'A low cut that roots a foe in place for 2 turns.' },
 ];
 const meets = (st, req)=> !req || st[req[0]] >= req[1];
 
@@ -479,7 +479,20 @@ function biomeTop(topY, x, z){
   if (topY <= SEA+1) return B.SAND;
   if (topY > 54) return B.SNOW;
   if (topY > 46) return B.STONE;
+  if (onPath(x, z)) return B.DIRT;      // a worn track reads as "people live here"
   return B.GRASS;
+}
+// A wandering footpath from the camp up to the town. Straight lines look surveyed,
+// so the centreline wobbles with noise.
+function onPath(x, z){
+  const d = Math.hypot(x-HOME.x, z-HOME.z);
+  if (d > VALE_R || d < 5) return false;
+  const ax = TOWN.x-HOME.x, az = TOWN.z-HOME.z, L2 = ax*ax + az*az;
+  const t = ((x-HOME.x)*ax + (z-HOME.z)*az) / L2;
+  if (t < 0 || t > 1.04) return false;
+  const wob = (fbm(x*0.035, z*0.035, 2, SEED+808) - 0.5) * 11;
+  const perp = Math.hypot(HOME.x + ax*t - x, HOME.z + az*t - z) + wob;
+  return Math.abs(perp) < 1.7;
 }
 // ───────────────────── the authored starting vale ─────────────────────
 // Terrain is a pure function of (x,z), so the start area is BLENDED INTO the
@@ -535,9 +548,31 @@ function treeDensity(x, z){
   return f;
 }
 
+// Scattered landscape features. A world of nothing but trees and turf has no
+// mid-scale geometry at all — the eye needs boulders, deadfall and scrub between
+// the grass blades and the canopy.
+function featureAt(x, z){
+  const topY = heightAt(x, z);
+  if (topY <= SEA+1 || topY > 52) return null;
+  if (inCamp(x,z) || inTown(x,z) || onPath(x,z)) return null;
+  const slope = Math.abs(heightAt(x+1,z)-topY) + Math.abs(heightAt(x,z+1)-topY);
+  const h = hash2(x, z, SEED+4242);
+  if (h < 0.0040) return { t:'boulder', topY, r:1+Math.floor(hash2(x,z,SEED+11)*2),
+                           hh:1+Math.floor(hash2(x,z,SEED+12)*3) };
+  if (slope > 2) return null;
+  if (h < 0.0072) return { t:'log',   topY, len:3+Math.floor(hash2(x,z,SEED+13)*4),
+                           dir:hash2(x,z,SEED+14) < 0.5 };
+  if (h < 0.0102) return { t:'stump', topY };
+  if (h < 0.0130) return { t:'snag',  topY, hh:5+Math.floor(hash2(x,z,SEED+15)*5) };
+  if (h < 0.0290) return { t:'bush',  topY, r:1, hh:1+Math.floor(hash2(x,z,SEED+16)*2) };
+  if (h < 0.0330) return { t:'rocks', topY };
+  return null;
+}
+
 // deterministic tree test for a column
 function treeAt(x, z){
   if (inCamp(x,z) || inTown(x,z)) return null;   // keep the camp and streets clear
+  if (onPath(x,z)) return null;
   const topY = heightAt(x, z);
   if (topY <= SEA+1 || topY > 46) return null;
   if (hash2(x, z, SEED+31337) > 0.022 * treeDensity(x, z)) return null;
@@ -608,6 +643,44 @@ function structures(){
     for (let x=-2;x<=2;x++) put(HOME.x+x, gy+5, HOME.z-12, B.MOSS);
   });
 
+  // ── rubble and toppled columns, so the ruins aren't all upright walls ──
+  for (let i=0;i<9;i++){
+    const th = i/9*Math.PI*2 + 1.1, rad = 13 + rnd(i+40)*7;
+    const bx = Math.round(HOME.x + Math.cos(th)*rad), bz = Math.round(HOME.z + Math.sin(th)*rad);
+    const len = 3 + Math.floor(rnd(i+50)*4), along = rnd(i+60) < 0.5;
+    box(bx-1, bz-1, bx+len+1, bz+len+1, (put)=>{
+      for (let k=0;k<len;k++){
+        const px = bx + (along?k:0), pz = bz + (along?0:k);
+        put(px, heightAt(px,pz)+1, pz, B.MOSS);
+      }
+      // a scatter of loose rubble at the broken end
+      for (let r=0;r<4;r++){
+        const px = bx + Math.round((rnd(i*7+r)-0.5)*5), pz = bz + Math.round((rnd(i*11+r)-0.5)*5);
+        put(px, heightAt(px,pz)+1, pz, B.MOSS);
+      }
+    });
+  }
+
+  // ── a jetty out over the lake, with mooring posts ──
+  {
+    const jz = LAKE.z - LAKE.r - 4;                 // start on dry shore
+    box(LAKE.x-2, jz-1, LAKE.x+2, jz+14, (put)=>{
+      for (let k=0; k<14; k++){
+        const z = jz + k;
+        const ground = heightAt(LAKE.x, z);
+        if (ground > SEA && k > 2) break;            // stop if we never reach water
+        for (let dx=-1; dx<=1; dx++) put(LAKE.x+dx, SEA+1, z, B.PLANK);
+        if (k % 3 === 0){                            // pilings down to the bed
+          for (let y=ground+1; y<=SEA; y++){
+            put(LAKE.x-1, y, z, B.WOOD); put(LAKE.x+1, y, z, B.WOOD);
+          }
+        }
+      }
+      put(LAKE.x-1, SEA+2, jz+13, B.WOOD);           // mooring posts at the end
+      put(LAKE.x+1, SEA+2, jz+13, B.WOOD);
+    });
+  }
+
   // ── town on the rise ──
   const house = (px,pz,w,d,h)=> box(px-2, pz-2, px+w+1, pz+d+1, (put)=>{
     const gy = heightAt(px+(w>>1), pz+(d>>1));
@@ -635,6 +708,22 @@ function structures(){
       if (x+z===0||x+z===2) put(TOWN.x+x, gy+2, TOWN.z+z, B.STONE);
     }
   });
+  // ── a fence ring around the town, broken by a gate facing the path ──
+  box(TOWN.x-26, TOWN.z-26, TOWN.x+26, TOWN.z+26, (put)=>{
+    const R = 23;
+    for (let a=0; a<180; a++){
+      const th = a/180*Math.PI*2;
+      const x = Math.round(TOWN.x + Math.cos(th)*R), z = Math.round(TOWN.z + Math.sin(th)*R);
+      // leave a gateway where the path arrives
+      const toCamp = Math.atan2(HOME.z-TOWN.z, HOME.x-TOWN.x);
+      let dth = Math.abs(((th - toCamp + Math.PI*3) % (Math.PI*2)) - Math.PI);
+      if (dth > Math.PI - 0.22) continue;
+      const gy = heightAt(x, z);
+      put(x, gy+1, z, B.WOOD);
+      if (a % 6 === 0) put(x, gy+2, z, B.WOOD);       // taller posts at intervals
+    }
+  });
+
   // a watchtower, so the town has a silhouette from 75 blocks out
   box(TOWN.x+17, TOWN.z+9, TOWN.x+21, TOWN.z+13, (put)=>{
     const gy = heightAt(TOWN.x+19, TOWN.z+11);
@@ -723,6 +812,44 @@ function genChunk(cx, cz){
       }
     }
   }
+  // scattered features — boulders, deadfall, scrub. Same padded sweep as trees so
+  // anything overhanging a chunk border is written by both sides identically.
+  for (let lz=-PAD; lz<CZ+PAD; lz++) for (let lx=-PAD; lx<CX+PAD; lx++){
+    const f = featureAt(ox+lx, oz+lz); if (!f) continue;
+    const put = (px, py, pz, b)=>{
+      if (px<0||px>=CX||pz<0||pz>=CZ||py<0||py>=CY) return;
+      if (data[idx(px,py,pz)] !== B.AIR) return;         // never punch through terrain
+      data[idx(px,py,pz)] = b; if (py > maxY) maxY = py;
+    };
+    const gy = f.topY;
+    if (f.t === 'boulder'){
+      for (let dy=0; dy<f.hh; dy++){
+        const rr = dy === f.hh-1 ? f.r-1 : f.r;
+        for (let dz=-rr; dz<=rr; dz++) for (let dx=-rr; dx<=rr; dx++){
+          if (rr>1 && Math.abs(dx)===rr && Math.abs(dz)===rr) continue;
+          put(lx+dx, gy+1+dy, lz+dz, B.STONE);
+        }
+      }
+    } else if (f.t === 'log'){
+      for (let i=0; i<f.len; i++)
+        put(lx + (f.dir?i:0), gy+1, lz + (f.dir?0:i), B.WOOD);
+    } else if (f.t === 'stump'){
+      put(lx, gy+1, lz, B.WOOD);
+      if (hash2(ox+lx, oz+lz, SEED+17) < 0.5) put(lx, gy+2, lz, B.WOOD);
+    } else if (f.t === 'snag'){
+      for (let dy=0; dy<f.hh; dy++) put(lx, gy+1+dy, lz, B.WOOD);
+      put(lx+1, gy+f.hh-1, lz, B.WOOD);                  // one bare branch
+    } else if (f.t === 'bush'){
+      for (let dy=0; dy<f.hh; dy++) for (let dz=-1; dz<=1; dz++) for (let dx=-1; dx<=1; dx++){
+        if (Math.abs(dx)===1 && Math.abs(dz)===1 && dy===f.hh-1) continue;
+        put(lx+dx, gy+1+dy, lz+dz, B.LEAF);
+      }
+    } else if (f.t === 'rocks'){
+      put(lx, gy+1, lz, B.STONE);
+      if (hash2(ox+lx, oz+lz, SEED+18) < 0.6) put(lx+1, gy+1, lz, B.STONE);
+    }
+  }
+
   // stamp camp / ruins / town over the generated terrain (before player edits)
   {
     const put = (wx, wy, wz, b)=>{
@@ -1339,14 +1466,63 @@ function pathFrom(map, x, y, z){
 
 // ───────────────────────────── entities ─────────────────────────────
 const KINDS = {
-  husk:    { name:'Husk',     hp:32, mp:4, atk:[6,11],  reach:1, init:8,  xp:16,
-             body:0x6b5f4a, trim:0x3f3627, scale:1.00, aggro:11 },
-  sprig:   { name:'Sprig',    hp:19, mp:6, atk:[4,8],   reach:1, init:14, xp:12,
-             body:0x5b8a46, trim:0x2f5227, scale:0.82, aggro:13 },
-  slinger: { name:'Slinger',  hp:22, mp:4, atk:[5,10],  reach:8, init:11, xp:18,
-             body:0x7a4a52, trim:0x40262b, scale:0.94, aggro:15 },
+  husk:      { name:'Husk',      hp:32, mp:4, atk:[6,11],  reach:1, init:8,  xp:16,
+               body:0x6b5f4a, trim:0x3f3627, scale:1.00, aggro:11, shape:'brute' },
+  sprig:     { name:'Sprig',     hp:19, mp:6, atk:[4,8],   reach:1, init:14, xp:12,
+               body:0x5b8a46, trim:0x2f5227, scale:0.82, aggro:13, shape:'lithe' },
+  slinger:   { name:'Slinger',   hp:22, mp:4, atk:[5,10],  reach:8, init:11, xp:18,
+               body:0x7a4a52, trim:0x40262b, scale:0.94, aggro:15, shape:'caster' },
+  // ── the newcomers ──
+  warden:    { name:'Warden',    hp:52, mp:3, atk:[8,14],  reach:1, init:6,  xp:34,
+               body:0x55606b, trim:0x333c45, scale:1.18, aggro:10, shape:'brute',
+               soak:0.30, blurb:'Slow, armoured, hits like a gate falling.' },
+  ashling:   { name:'Ashling',   hp:20, mp:5, atk:[4,8],   reach:7, init:13, xp:26,
+               body:0xa8522e, trim:0x5e2a17, scale:0.88, aggro:15, shape:'caster',
+               glow:0xff8a3c, onHit:{ kind:'burn', turns:3 }, blurb:'Sets you alight.' },
+  stalker:   { name:'Stalker',   hp:24, mp:9, atk:[7,12],  reach:1, init:17, xp:30,
+               body:0x40364a, trim:0x241d2c, scale:0.90, aggro:17, shape:'lithe',
+               blurb:'Crosses the whole board in one turn.' },
+  delver:    { name:'Delver',    hp:28, mp:4, atk:[5,9],   reach:1, init:10, xp:32,
+               body:0x6d5636, trim:0x3d2f1d, scale:0.96, aggro:12, shape:'brute',
+               onHit:{ kind:'root', turns:2 }, blurb:'Grabs your legs and holds you.' },
+  cairnwight:{ name:'Cairnwight',hp:34, mp:3, atk:[6,10],  reach:6, init:9,  xp:36,
+               body:0x707a6a, trim:0x424a3c, scale:1.06, aggro:14, shape:'caster',
+               glow:0x9fe8b0, knock:2, blurb:'A ringing blow that throws you back.' },
 };
+const STATUS = {
+  burn: { name:'Burning', col:'#ff8a5c', dmg:4,  tick:'damage' },
+  root: { name:'Rooted',  col:'#8fbf6a', mp:1,   tick:'slow'   },
+};
+function applyStatus(t, kind, turns){
+  t.status = t.status || {};
+  t.status[kind] = Math.max(t.status[kind] || 0, turns);
+  fct(t, STATUS[kind].name.toUpperCase(), STATUS[kind].col);
+}
+// Run at the top of a combatant's turn: burn bites, root shortens the leash.
+function tickStatus(a){
+  if (!a.status) return;
+  for (const k of Object.keys(a.status)){
+    if (a.status[k] <= 0){ delete a.status[k]; continue; }
+    if (STATUS[k].tick === 'damage'){
+      log(`<b>${a.name}</b> is <span class="hit">${STATUS[k].name.toLowerCase()}</span>.`);
+      sparks(a.x, a.y, a.z, 0xff8a3c, 8);
+      damage(a, STATUS[k].dmg, STATUS[k].name.toUpperCase());
+    } else if (STATUS[k].tick === 'slow'){
+      a.mp = Math.min(a.mp, STATUS[k].mp);
+    }
+    a.status[k]--;
+    if (a.status[k] <= 0) delete a.status[k];
+  }
+}
+const statusText = a => a.status ? Object.keys(a.status).map(k=>STATUS[k].name[0]).join('') : '';
+// Weighted so the nasty newcomers stay uncommon — an even roll across eight
+// types means a level-1 character meets two Wardens in their first fight.
+const KIND_WEIGHTS = { husk:26, sprig:24, slinger:18, ashling:10, stalker:9,
+                       delver:7, cairnwight:4, warden:3 };
 const KIND_KEYS = Object.keys(KINDS);
+const KIND_POOL = [];
+for (const k of KIND_KEYS) for (let i=0; i<(KIND_WEIGHTS[k]||1); i++) KIND_POOL.push(k);
+const randomKind = ()=> KIND_POOL[Math.floor(Math.random()*KIND_POOL.length)];
 const entities = [];        // living creatures in the world (not the player)
 
 function makeBody(kind){
@@ -1354,12 +1530,37 @@ function makeBody(kind){
   const g = new THREE.Group();
   const bm = new THREE.MeshLambertMaterial({ color:K.body });
   const tm = new THREE.MeshLambertMaterial({ color:K.trim });
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.62,0.78,0.42), bm); torso.position.y = 0.86;
+  // Silhouette carries more identity than colour at tactical camera distance.
+  const sh = K.shape || 'brute';
+  const tw = sh === 'brute' ? 0.78 : sh === 'lithe' ? 0.48 : 0.60;
+  const td = sh === 'brute' ? 0.50 : sh === 'lithe' ? 0.34 : 0.42;
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(tw,0.78,td), bm); torso.position.y = 0.86;
   const head  = new THREE.Mesh(new THREE.BoxGeometry(0.46,0.44,0.44), tm); head.position.y = 1.46;
   const legL  = new THREE.Mesh(new THREE.BoxGeometry(0.20,0.50,0.22), tm); legL.position.set(-0.16,0.24,0);
   const legR  = legL.clone(); legR.position.x = 0.16;
-  const armL  = new THREE.Mesh(new THREE.BoxGeometry(0.17,0.56,0.20), bm); armL.position.set(-0.40,0.88,0);
-  const armR  = armL.clone(); armR.position.x = 0.40;
+  const armL  = new THREE.Mesh(new THREE.BoxGeometry(0.17,0.56,0.20), bm);
+  armL.position.set(-(tw*0.5+0.09), 0.88, 0);
+  const armR  = armL.clone(); armR.position.x = tw*0.5+0.09;
+  if (sh === 'brute'){                          // heavy pauldrons
+    const pl = new THREE.Mesh(new THREE.BoxGeometry(0.26,0.16,0.34), tm);
+    pl.position.set(-(tw*0.5+0.04), 1.16, 0);
+    const pr = pl.clone(); pr.position.x = tw*0.5+0.04;
+    g.add(pl, pr);
+  } else if (sh === 'caster'){                  // hood + a floating mote
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(0.56,0.22,0.54), bm);
+    hood.position.y = 1.66; g.add(hood);
+    if (K.glow){
+      const mote = new THREE.Mesh(new THREE.SphereGeometry(0.11,8,6),
+        new THREE.MeshBasicMaterial({ color:K.glow }));
+      mote.position.set(0, 1.05, 0.42); g.add(mote);
+      g.userData.mote = mote;
+    }
+  } else {                                      // lithe: a crest of spines
+    for (let i=0;i<3;i++){
+      const sp = new THREE.Mesh(new THREE.ConeGeometry(0.07,0.24,4), tm);
+      sp.position.set(0, 1.70, 0.12 - i*0.14); g.add(sp);
+    }
+  }
   const eye   = new THREE.Mesh(new THREE.BoxGeometry(0.09,0.09,0.03),
                   new THREE.MeshBasicMaterial({ color:0xffe9a8 }));
   eye.position.set(-0.11,1.50,0.23);
@@ -1375,58 +1576,182 @@ function makeBody(kind){
   return g;
 }
 // ───────────────────────────── animation & fx ─────────────────────────────
-function setAnim(a, type, dur){ if (a && a.mesh) a.anim = { type, t:0, dur }; }
+function setAnim(a, type, dur, v){ if (a && a.mesh) a.anim = { type, t:0, dur, v:v||'slash' }; }
+// Wind up, snap through, recover. A single sine makes every strike a slow
+// symmetric wave, which is why prototype combat always feels like waving.
+function swingCurve(p){
+  if (p < 0.34) return -0.42 * (p/0.34);
+  if (p < 0.52) return -0.42 + 1.42*((p-0.34)/0.18);
+  return 1.0 * (1 - (p-0.52)/0.48);
+}
 function tickAnims(dt, list){
   for (const a of list){
     const g = a.mesh; if (!g) continue;
     const arms = g.userData.arms, legs = g.userData.legs;
     a.bob = (a.bob || 0) + dt * 2;
-    let fwd = 0, up = 0, tilt = 0, armX = 0, armZ = 0;
+    let fwd = 0, up = 0, tilt = 0, yawOff = 0;
+    let armLX = 0, armRX = 0, armZ = 0, legLX = 0, legRX = 0;
 
     if (a.anim){
       a.anim.t += dt;
-      const p = Math.min(1, a.anim.t / a.anim.dur), s = Math.sin(p*Math.PI);
+      const p = Math.min(1, a.anim.t / a.anim.dur);
+      const s = Math.sin(p*Math.PI), sw = swingCurve(p);
       switch (a.anim.type){
-        case 'attack': fwd = s*0.42; armX = -s*2.3; break;
-        case 'cast':   up  = s*0.20; armX = -s*2.5; armZ = s*0.55; break;
-        case 'hurt':   fwd = -s*0.26; tilt = -s*0.34; break;
-        case 'die':    tilt = -p*(Math.PI/2.1); up = -p*0.35; break;
+        case 'attack':
+          if (a.anim.v === 'chop'){            // greataxe: both hands, overhead
+            armLX = armRX = -1.1 - sw*1.9; fwd = Math.max(0,sw)*0.50; tilt = sw*0.22;
+          } else if (a.anim.v === 'draw'){     // bow: pull, hold, release
+            armLX = -1.45; armRX = -1.45 + Math.min(0,sw)*0.9;
+            yawOff = -0.35; fwd = Math.max(0,sw)*0.12;
+          } else if (a.anim.v === 'thrust'){
+            armRX = -1.5 - sw*0.5; fwd = Math.max(0,sw)*0.62; yawOff = sw*0.18;
+          } else {                             // slash: body twists into it
+            armRX = -0.5 - sw*2.1; armLX = sw*0.5;
+            yawOff = -0.55*Math.max(0,-sw) + sw*0.62;
+            fwd = Math.max(0,sw)*0.42; tilt = sw*0.10;
+          }
+          legLX = sw*0.28; legRX = -sw*0.20;
+          break;
+        case 'cast':
+          up = s*0.22; armLX = armRX = -2.5*s; armZ = s*0.55; yawOff = Math.sin(p*Math.PI*2)*0.12;
+          break;
+        case 'hurt':
+          fwd = -s*0.30; tilt = -s*0.38; yawOff = s*0.22; armLX = armRX = s*0.5;
+          break;
+        case 'die': {
+          const e = p*p;                       // accelerate as it topples
+          tilt = -e*(Math.PI/2.1); up = -e*0.38; yawOff = e*0.5;
+          break;
+        }
       }
       if (p >= 1 && a.anim.type !== 'die') a.anim = null;
     }
-    if (!a.alive && !a.anim) tilt = -Math.PI/2.1;
+    if (!a.alive && !a.anim){ tilt = -Math.PI/2.1; up = -0.38; }
 
     if (!a.walking){
-      const yaw = g.rotation.y;
+      const yaw = (a.faceYaw !== undefined ? a.faceYaw : g.rotation.y);
+      g.rotation.y = yaw + yawOff;
       g.position.set(a.px + Math.sin(yaw)*fwd,
                      a.py + up + (a.alive ? Math.sin(a.bob)*0.035 : 0),
                      a.pz + Math.cos(yaw)*fwd);
-      if (legs){ legs[0].rotation.x = 0; legs[1].rotation.x = 0; }
+      if (legs){ legs[0].rotation.x = legLX; legs[1].rotation.x = legRX; }
     }
     g.rotation.x = tilt;
     if (arms){
-      // idle sway so a waiting fighter isn't a statue
       const sway = a.alive && !a.anim && !a.walking ? Math.sin(a.bob*0.7)*0.07 : 0;
-      arms[0].rotation.x = armX + sway; arms[1].rotation.x = armX - sway;
-      arms[0].rotation.z = armZ;        arms[1].rotation.z = -armZ;
+      arms[0].rotation.x = armLX + sway; arms[1].rotation.x = armRX - sway;
+      arms[0].rotation.z = armZ;         arms[1].rotation.z = -armZ;
     }
   }
 }
+// which swing style a weapon uses
+const SWING = { blade:'slash', sword:'slash', axe:'chop', staff:'cast', bow:'draw' };
 const FX = [];
+function fxAdd(m, dur, tick){ fxRoot.add(m); FX.push({ m, t:0, dur, tick }); }
 function boom(x, y, z, color){
   const m = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8),
     new THREE.MeshBasicMaterial({ color, transparent:true, opacity:0.9, depthWrite:false }));
   m.position.set(x+0.5, y+0.9, z+0.5);
-  fxRoot.add(m); FX.push({ m, t:0, dur:0.5 });
+  fxAdd(m, 0.5, (f,p)=>{ f.m.scale.setScalar(0.6 + p*3.4); f.m.material.opacity = 0.9*(1-p); });
+  shake(0.42);
 }
+// an expanding ground ring — shockwaves, sunder, bash
+function ring(x, y, z, color, maxR){
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.62, 22).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({ color, transparent:true, opacity:0.9,
+      depthWrite:false, side:THREE.DoubleSide }));
+  m.position.set(x+0.5, y+0.06, z+0.5);
+  fxAdd(m, 0.45, (f,p)=>{ f.m.scale.setScalar(1 + p*(maxR||3.2)); f.m.material.opacity = 0.9*(1-p); });
+}
+// the swept arc of a melee swing, drawn in front of the attacker
+function slashArc(a, tx, tz, color){
+  const yaw = Math.atan2((tx+0.5)-a.px, (tz+0.5)-a.pz);
+  const m = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.075, 6, 14, Math.PI*0.95),
+    new THREE.MeshBasicMaterial({ color:color||0xffeec2, transparent:true, opacity:0.95,
+      depthWrite:false, side:THREE.DoubleSide }));
+  m.position.set(a.px + Math.sin(yaw)*0.55, a.py + 1.05, a.pz + Math.cos(yaw)*0.55);
+  m.rotation.set(Math.PI/2 - 0.45, yaw, 0);
+  fxAdd(m, 0.26, (f,p)=>{
+    f.m.rotation.z = -1.5 + p*2.6;
+    f.m.scale.setScalar(0.7 + p*0.75);
+    f.m.material.opacity = 0.95*(1-p*p);
+  });
+}
+function sparks(x, y, z, color, n){
+  const N = n||16, pos = new Float32Array(N*3), vel = [];
+  for (let i=0;i<N;i++){
+    const th = Math.random()*Math.PI*2, ph = Math.random()*Math.PI;
+    vel.push([Math.sin(ph)*Math.cos(th)*3.2, Math.cos(ph)*2.6+1.2, Math.sin(ph)*Math.sin(th)*3.2]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const m = new THREE.Points(g, new THREE.PointsMaterial({
+    size:0.20, map:softDot(color), transparent:true, depthWrite:false,
+    blending:THREE.AdditiveBlending }));
+  m.position.set(x+0.5, y+1.0, z+0.5);
+  fxAdd(m, 0.55, (f,p)=>{
+    const arr = f.m.geometry.attributes.position;
+    for (let i=0;i<N;i++){
+      arr.array[i*3]   = vel[i][0]*p;
+      arr.array[i*3+1] = vel[i][1]*p - 4.2*p*p;
+      arr.array[i*3+2] = vel[i][2]*p;
+    }
+    arr.needsUpdate = true;
+    f.m.material.opacity = 1-p;
+  });
+}
+// Purely cosmetic: damage is already resolved when this flies. Keeping the
+// simulation instant means headless sim stays correct and ordering can't drift.
+function projectile(x0,y0,z0, x1,y1,z1, color, kind){
+  const geo = kind === 'arrow'
+    ? new THREE.BoxGeometry(0.07, 0.07, 0.75)
+    : new THREE.SphereGeometry(kind === 'fire' ? 0.32 : 0.16, 8, 6);
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent:true, opacity:1 }));
+  m.position.set(x0,y0,z0);
+  m.lookAt(x1,y1,z1);
+  const arc = Math.hypot(x1-x0, z1-z0) * 0.10;
+  fxAdd(m, 0.26, (f,p)=>{
+    f.m.position.set(x0+(x1-x0)*p, y0+(y1-y0)*p + Math.sin(p*Math.PI)*arc, z0+(z1-z0)*p);
+    if (kind === 'fire') f.m.scale.setScalar(1 + Math.sin(p*Math.PI)*0.4);
+  });
+  if (kind === 'fire'){                       // a short trail of embers
+    for (let i=0;i<5;i++){
+      const t = (i+1)/6;
+      setTimeoutFX(()=> sparks(x0+(x1-x0)*t-0.5, y0+(y1-y0)*t-1.0, z0+(z1-z0)*t-0.5, color, 4), t*0.22);
+    }
+  }
+}
+const FX_TIMERS = [];
+function setTimeoutFX(fn, delay){ FX_TIMERS.push({ fn, t:delay }); }
+// brief white-hot flash on a struck body
+function hitFlash(a){
+  if (!a.mesh) return;
+  const mats = [];
+  a.mesh.traverse(o=>{ if (o.material && o.material.emissive) mats.push(o.material); });
+  for (const m of mats) m.emissive.setHex(0x884433);
+  setTimeoutFX(()=>{ for (const m of mats) m.emissive.setHex(0x000000); }, 0.11);
+}
+let SHAKE = 0;
+function shake(v){ SHAKE = Math.min(1.2, SHAKE + v); }
+
 function tickFX(dt){
+  for (let i=FX_TIMERS.length-1; i>=0; i--){
+    FX_TIMERS[i].t -= dt;
+    if (FX_TIMERS[i].t <= 0){ const f = FX_TIMERS[i].fn; FX_TIMERS.splice(i,1); f(); }
+  }
   for (let i=FX.length-1; i>=0; i--){
     const f = FX[i]; f.t += dt;
-    const p = f.t/f.dur;
-    if (p >= 1){ fxRoot.remove(f.m); f.m.geometry.dispose(); f.m.material.dispose(); FX.splice(i,1); continue; }
-    f.m.scale.setScalar(0.6 + p*3.4);
-    f.m.material.opacity = 0.9*(1-p);
+    const p = Math.min(1, f.t/f.dur);
+    if (f.tick) f.tick(f, p);
+    if (f.t >= f.dur){
+      fxRoot.remove(f.m);
+      f.m.geometry.dispose();
+      if (f.m.material.map) f.m.material.map.dispose();
+      f.m.material.dispose();
+      FX.splice(i,1);
+    }
   }
+  SHAKE = Math.max(0, SHAKE - dt*3.2);
 }
 
 // ── the campfire you wake beside ──
@@ -1545,7 +1870,7 @@ function populate(px, pz){
       const oz = z + (i ? Math.round((Math.random()-0.5)*5) : 0);
       const oy = surfaceY(ox, oz);
       if (oy <= SEA+1 || Math.abs(oy-y) > 4) continue;
-      const kind = KIND_KEYS[Math.floor(Math.random()*KIND_KEYS.length)];
+      const kind = randomKind();
       spawnEntity(kind, ox, oy, oz);
     }
   }
@@ -1580,6 +1905,11 @@ function applyBuild(refill){
   else { player.hp = Math.min(player.hp || player.maxHp, player.maxHp);
          player.mana = Math.min(player.mana, player.maxMana); }
   buildAbilities();
+  if (player.mesh){
+    const sh = player.mesh.userData.shield;
+    if (sh){ sh.parent.remove(sh); player.mesh.userData.shield = null; }
+    buildWeaponProp();
+  }
 }
 // third-person avatar, only shown during combat
 {
@@ -1604,6 +1934,48 @@ function applyBuild(refill){
   g.visible = false;
   scene.add(g);
   player.mesh = g;
+}
+// A weapon in hand does more for readability than any amount of HUD text.
+function buildWeaponProp(){
+  const armR = player.mesh.userData.arms[1];
+  if (player.mesh.userData.weapon){ armR.remove(player.mesh.userData.weapon); }
+  const w = new THREE.Group();
+  const steel = new THREE.MeshLambertMaterial({ color:0xc8ced6 });
+  const wood  = new THREE.MeshLambertMaterial({ color:0x6b4a2b });
+  const gold  = new THREE.MeshLambertMaterial({ color:0xd8b45a });
+  const add = (geo, mat, x,y,z, rx)=>{ const m = new THREE.Mesh(geo, mat);
+    m.position.set(x,y,z); if (rx) m.rotation.x = rx; w.add(m); return m; };
+  switch (player.weaponId){
+    case 'axe':
+      add(new THREE.BoxGeometry(0.07,0.95,0.07), wood, 0,-0.34,0);
+      add(new THREE.BoxGeometry(0.09,0.30,0.34), steel, 0,-0.74,0.10);
+      break;
+    case 'staff':
+      add(new THREE.BoxGeometry(0.06,1.15,0.06), wood, 0,-0.42,0);
+      add(new THREE.SphereGeometry(0.11,8,6),
+          new THREE.MeshBasicMaterial({ color:0x8fd0ff }), 0,-1.02,0);
+      break;
+    case 'bow':
+      add(new THREE.BoxGeometry(0.05,0.90,0.05), wood, 0,-0.42,0.02);
+      add(new THREE.BoxGeometry(0.04,0.22,0.04), wood, 0,-0.86,-0.05, 0.5);
+      add(new THREE.BoxGeometry(0.04,0.22,0.04), wood, 0, 0.02,-0.05, -0.5);
+      break;
+    case 'sword':
+      add(new THREE.BoxGeometry(0.09,0.72,0.05), steel, 0,-0.62,0);
+      add(new THREE.BoxGeometry(0.30,0.07,0.09), gold,  0,-0.28,0);
+      // a shield on the off hand
+      { const sh = new THREE.Mesh(new THREE.BoxGeometry(0.42,0.52,0.08),
+          new THREE.MeshLambertMaterial({ color:0x6b7a8c }));
+        sh.position.set(0,-0.34,0.10);
+        player.mesh.userData.arms[0].add(sh);
+        player.mesh.userData.shield = sh; }
+      break;
+    default:
+      add(new THREE.BoxGeometry(0.08,0.60,0.05), steel, 0,-0.56,0);
+      add(new THREE.BoxGeometry(0.22,0.06,0.08), wood,  0,-0.26,0);
+  }
+  armR.add(w);
+  player.mesh.userData.weapon = w;
 }
 
 const PW = 0.60, PH = 1.80, EYE = 1.62;      // player AABB + eye height
@@ -1835,19 +2207,15 @@ function buildAbilities(){
   }];
   const sp = SPELLS.find(s=>s.id===player.spellId);
   if (sp){
-    const sw = sp.target==='ranged'||sp.id==='fire' ? 'int' : (sp.id==='pierce'?'agi':(sp.id==='bash'?'vit':'mgt'));
+    const sw = sp.id==='fire' ? 'int' : sp.id==='pierce' ? 'agi' : sp.id==='bash' ? 'vit' : 'mgt';
     const sd = sp.dmg ? [Math.round(sp.dmg[0]*powerOf(player.st,sw)), Math.round(sp.dmg[1]*powerOf(player.st,sw))] : null;
     ABILITIES.push({
       id:sp.id, name:sp.name, ap:sp.ap, mana:sp.mana, spell:sp, dmg:sd,
-      kind: sp.target==='self' ? 'self' : sp.target==='ground' ? 'sunder'
-          : sp.target==='melee' ? 'melee' : 'ranged',
+      kind: sp.target==='self' ? 'self' : sp.target==='melee' ? 'melee' : 'ranged',
       range: sp.range || 1,
       desc: `${sp.mana} mana · ${sd ? sd[0]+'–'+sd[1] : 'no damage'}`,
     });
   }
-  ABILITIES.push(
-    { id:'quarry', name:'Quarry', desc:'Break a block · 5', ap:1, mana:0, kind:'dig',   range:5, probe:true },
-    { id:'raise',  name:'Raise',  desc:'Set a block · 4',   ap:1, mana:0, kind:'build', range:4, probe:true });
 }
 
 const CB = {
@@ -1939,10 +2307,14 @@ function toast(msg, secs=1.9){
 
 // ── damage & death ──
 function damage(t, amt, note){
-  if (t.isPlayer && t.soak > 0){              // sword & shield
-    const cut = Math.round(amt * t.soak);
-    if (cut > 0){ amt -= cut; note = (note?note+' · ':'') + 'SHIELD −'+cut; }
+  const soak = t.isPlayer ? t.soak : (t.K && t.K.soak) || 0;
+  if (soak > 0){                              // sword & shield, or a Warden's plate
+    const cut = Math.round(amt * soak);
+    if (cut > 0){ amt -= cut; note = (note?note+' · ':'') + 'ARMOUR −'+cut; }
   }
+  hitFlash(t);
+  sparks(t.x, t.y, t.z, t.isPlayer ? 0xff7a6a : 0xffd27a, 10);
+  shake(t.isPlayer ? 0.55 : 0.22);
   t.hp = Math.max(0, t.hp - amt);
   setAnim(t, 'hurt', 0.28);
   CB.lastDamageRound = CB.round;              // any hit resets the stalemate clock
@@ -1969,10 +2341,29 @@ function resolveAttack(a, t, ab){
     dmg = Math.round(dmg*0.75); notes.push('COVER −25%');
   }
   faceToward(a, t.x, t.z);
+
+  // visuals: a swing arc up close, a travelling shot at range
+  if (ab.kind === 'ranged'){
+    const col = ab.spell && ab.spell.id === 'fire' ? 0xff8a3c
+              : a.isPlayer && player.weaponId === 'bow' ? 0xd8c9a8 : 0xbfc8d4;
+    const kind = ab.spell && ab.spell.id === 'fire' ? 'fire'
+               : (a.isPlayer && player.weaponId === 'bow') || (ab.spell && ab.spell.id === 'pierce')
+                 ? 'arrow' : 'stone';
+    projectile(a.px, a.py+1.25, a.pz, t.x+0.5, t.y+1.05, t.z+0.5, col, kind);
+  } else {
+    slashArc(a, t.x, t.z, a.isPlayer && player.weaponId === 'axe' ? 0xffd9a0 : 0xffeec2);
+  }
+
   damage(t, dmg, notes.join(' · '));
+
+  // an attacker's signature rider — burn, root, a shove
+  const K = a.K || {};
+  if (t.alive && K.onHit) applyStatus(t, K.onHit.kind, K.onHit.turns);
+  if (t.alive && K.knock){ knockback(t, a, K.knock); ring(a.x, a.y, a.z, 0xcfe0ea, 2.4); }
 }
 function faceToward(a, tx, tz){
-  if (a.mesh) a.mesh.rotation.y = Math.atan2((tx+0.5)-a.px, (tz+0.5)-a.pz);
+  a.faceYaw = Math.atan2((tx+0.5)-a.px, (tz+0.5)-a.pz);
+  if (a.mesh) a.mesh.rotation.y = a.faceYaw;
 }
 // push a creature away from `from`, letting terrain decide where it lands
 function knockback(t, from, cells){
@@ -2006,6 +2397,7 @@ function castSpell(a, ab, target, cell){
   } else if (sp.id === 'bash'){
     faceToward(a, target.x, target.z);
     resolveAttack(a, target, ab);
+    ring(a.x, a.y, a.z, 0xdfe9f2, 2.8);
     if (target.alive){ knockback(target, a, 2); log(`<b>${target.name}</b> is hurled back.`); }
   } else if (sp.id === 'cleave'){
     const hit = CB.order.filter(o => o.alive && o !== a &&
@@ -2025,14 +2417,11 @@ function castSpell(a, ab, target, cell){
     faceToward(a, target.x, target.z);
     log(`<b>Piercing Shot</b> — cover be damned.`);
     resolveAttack(a, target, ab);
-  } else if (sp.id === 'sunder'){
-    if (!cell) return false;
-    log(`You <b>Sunder</b> the ground.`);
-    boom(cell.x, cell.y, cell.z, 0x9aa3b0);
-    for (const [dx,dy,dz] of [[0,0,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1],[0,-1,0]])
-      setBlock(cell.x+dx, cell.y+dy, cell.z+dz, B.AIR);
-    forceRemeshAround(cell.x, cell.z, 1);
-    settleFalls();
+  } else if (sp.id === 'hamstring'){
+    faceToward(a, target.x, target.z);
+    log(`You <b>Hamstring</b> ${target.name}.`);
+    resolveAttack(a, target, ab);
+    if (target.alive) applyStatus(target, 'root', 2);
   }
   if (a.isPlayer){ player.mana -= ab.mana; drawVitals(); }
   return true;
@@ -2202,6 +2591,8 @@ function beginTurn(a){
   CB.walkPath = null; CB.walker = null;
   CB.hoverPath = []; tPath.count = 0;
   CB.aiQueue = []; CB.aiPlanned = false;
+  tickStatus(a);
+  if (!a.alive){ nextTurn(); return; }          // burned to death on your own turn
   if (a.isPlayer){
     CB.phase = 'idle';
     const before = player.mana;
@@ -2254,9 +2645,6 @@ function selectAbility(i){
   refreshTargets(); drawActs();
   const ab = ABILITIES[CB.selAbility];
   if (!ab) setHint('Click a blue tile to move · pick an action · click a target');
-  else if (ab.kind === 'dig')    setHint('QUARRY — click a block within 5 to break it');
-  else if (ab.kind === 'build')  setHint('RAISE — click a face within 4 to set stone');
-  else if (ab.kind === 'sunder') setHint(`${ab.name.toUpperCase()} — click the ground to shatter it`);
   else if (ab.kind === 'self')   setHint(`${ab.name.toUpperCase()} — click anywhere to use it`);
   else if (ab.spell && ab.spell.id === 'cleave') setHint('CLEAVE — click anywhere to strike all around you');
   else setHint(`${ab.name.toUpperCase()} — click a highlighted enemy`);
@@ -2297,14 +2685,6 @@ function handleCombatClick(){
       castSpell(a, ab, null, null);
       CB.selAbility = -1; afterPlayerAction(); return;
     }
-    if (ab.kind === 'sunder'){                    // Stone Sunder — targets ground
-      const rc = mouseVoxel(40);
-      if (!rc.hit) return;
-      if (Math.hypot(rc.x+0.5-a.px, rc.y-a.py, rc.z+0.5-a.pz) > ab.range + 0.9){ toast('Too far'); return; }
-      a.ap -= ab.ap;
-      castSpell(a, ab, null, { x:rc.x, y:rc.y, z:rc.z });
-      CB.selAbility = -1; afterPlayerAction(); return;
-    }
     if (ab.kind === 'melee' || ab.kind === 'ranged'){
       // Cleave hits everything adjacent, so it needs no target under the cursor
       if (ab.spell && ab.spell.id === 'cleave'){
@@ -2324,38 +2704,10 @@ function handleCombatClick(){
         castSpell(a, ab, t, null);
       } else {
         log(`You <b>${ab.name}</b> ${t.name}.`);
-        setAnim(a, 'attack', 0.35);
+        faceToward(a, t.x, t.z);
+        setAnim(a, 'attack', 0.42, SWING[player.weaponId] || 'slash');
         resolveAttack(a, t, ab);
       }
-      CB.selAbility = -1;
-      afterPlayerAction();
-      return;
-    }
-    if (ab.kind === 'dig'){
-      const rc = mouseVoxel(40);
-      if (!rc.hit) return;
-      if (Math.hypot(rc.x+0.5-a.px, rc.y-a.py, rc.z+0.5-a.pz) > ab.range + 0.9){ toast('Too far'); return; }
-      a.ap -= ab.ap;
-      setBlock(rc.x, rc.y, rc.z, B.AIR);
-      forceRemeshAround(rc.x, rc.z, 1);
-      log(`You <b>quarry</b> the ground away.`);
-      settleFalls();
-      CB.selAbility = -1;
-      afterPlayerAction();
-      return;
-    }
-    if (ab.kind === 'build'){
-      const rc = mouseVoxel(40);
-      if (!rc.hit) return;
-      const bx = rc.nx, by = rc.ny, bz = rc.nz;
-      if (Math.hypot(bx+0.5-a.px, by-a.py, bz+0.5-a.pz) > ab.range + 0.9){ toast('Too far'); return; }
-      const clash = CB.order.some(o => o.alive && o.x===bx && o.z===bz && (o.y===by || o.y+1===by));
-      if (clash){ toast('Someone is standing there'); return; }
-      a.ap -= ab.ap;
-      setBlock(bx, by, bz, B.STONE);
-      forceRemeshAround(bx, bz, 1);
-      log(`You <b>raise</b> a block of stone.`);
-      settleFalls();
       CB.selAbility = -1;
       afterPlayerAction();
       return;
@@ -2449,7 +2801,8 @@ function aiStep(){
   } else if (step.t === 'attack'){
     a.ap -= 1;
     log(`<b>${a.name}</b> attacks.`);
-    setAnim(a, 'attack', 0.35);
+    faceToward(a, step.target.x, step.target.z);
+    setAnim(a, 'attack', 0.42, a.K.reach > 1 ? 'cast' : (a.K.scale > 1.05 ? 'chop' : 'slash'));
     resolveAttack(a, step.target, step.ab);
     if (!player.alive){ endCombat('lose'); return; }
     CB.phase = 'aithink'; CB.timer = 0.42;
@@ -2497,6 +2850,12 @@ function updateCombat(dt){
   camera.position.y = lerp(camera.position.y, ty, k);
   camera.position.z = lerp(camera.position.z, tz, k);
   camera.lookAt(CB.focus.x, CB.focus.y, CB.focus.z);
+  if (SHAKE > 0.001){                        // impact kick, decays in tickFX
+    const s = SHAKE * 0.20;
+    camera.position.x += (Math.random()-0.5)*s;
+    camera.position.y += (Math.random()-0.5)*s;
+    camera.position.z += (Math.random()-0.5)*s;
+  }
 
   tickAnims(dt, CB.order);
   tickFX(dt);
@@ -2511,15 +2870,7 @@ function updateCombat(dt){
       // hover preview: path to the tile under the cursor
       const cell = tileUnderMouse();
       const ab = ABILITIES[CB.selAbility];
-      if (ab && (ab.kind === 'dig' || ab.kind === 'build' || ab.kind === 'sunder')){
-        const rc = mouseVoxel(40);
-        if (rc.hit){
-          highlight.visible = true;
-          if (ab.kind === 'build') highlight.position.set(rc.nx+0.5, rc.ny+0.5, rc.nz+0.5);
-          else highlight.position.set(rc.x+0.5, rc.y+0.5, rc.z+0.5);
-        } else highlight.visible = false;
-        tPath.count = 0;
-      } else {
+      {
         highlight.visible = false;
         if (cell){
           const kk = cell.x+','+cell.y+','+cell.z;
@@ -2611,7 +2962,8 @@ function drawOrder(){
   const el = document.getElementById('order');
   el.innerHTML = CB.order.map((a,i)=>{
     const cls = [a === actor() ? 'act':'', !a.alive ? 'dead':'', a.isPlayer ? 'you':''].join(' ');
-    return `<div class="chip ${cls}"><div class="nm">${a.name}</div>
+    const st = statusText(a);
+    return `<div class="chip ${cls}"><div class="nm">${a.name}${st?' <b style="color:#ff9a6a">'+st+'</b>':''}</div>
       <div class="hb"><i style="width:${Math.max(0,a.hp/a.maxHp*100)}%"></i></div></div>`;
   }).join('');
 }
@@ -2751,7 +3103,8 @@ function newWorld(){
 // within sight of the fire without them walking into you the moment you stand up.
 function seedValeEnemies(){
   const spots = [[-19,-14],[-22,-6],[14,12],[19,17],[9,-19],[-6,22],[24,-3],[-13,15]];
-  const kinds = ['husk','sprig','husk','slinger','sprig','husk','slinger','sprig'];
+  // the opening vale stays gentle — one of each newcomer at most, out at the edges
+  const kinds = ['husk','sprig','husk','slinger','sprig','ashling','stalker','delver'];
   spots.forEach(([ox,oz], i)=>{
     // nudge off anything perched on a ruin wall — a creature on a 4-block wall
     // is unreachable by melee and turns the fight into a stalemate
@@ -3039,6 +3392,7 @@ window.STRATA = {
   block(x,y,z){ return getBlock(x,y,z); },
   standable, surfaceY, reachable, hasLOS, planApproach,
   attack: resolveAttack, cast: castSpell, applyBuild, derive, knockback,
+  tickStatus, applyStatus, KINDS, STATUS,
   get abilities(){ return ABILITIES; },
   WEAPONS, SPELLS, STATS, HOME, LAKE, TOWN,
   teleport(x,z){
