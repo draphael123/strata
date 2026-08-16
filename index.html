@@ -601,8 +601,12 @@ const WEAPONS = [
     scale:'mgt', desc:'A soldier\'s castoff. Asks nothing of you.' },
   { id:'sword',  name:'Sword & Shield',  req:['vit',8],      kind:'melee',  range:1, dmg:[5,9],
     scale:'mgt', soak:0.25, desc:'Take a quarter less from every blow.' },
+  // A two-hander with no armour at all dies before its damage can matter: at level
+  // 5 in the barrow it was killed in 2.8 rounds while needing 3.3 to win. The haft
+  // is a guard as much as the edge, so it gets a little soak — enough for the
+  // extra round that turns the race.
   { id:'axe',    name:'Greataxe',        req:['mgt',10],     kind:'melee',  range:1, dmg:[10,17],
-    scale:'mgt', move:-1, desc:'Ruinous. Costs you a step of movement.' },
+    scale:'mgt', move:-1, soak:0.12, desc:'Ruinous. Costs you a step of movement.' },
   { id:'staff',  name:'Elm Staff',       req:['int',9],      kind:'ranged', range:6, dmg:[5,9],
     scale:'int', mana:2, desc:'Strikes at range and deepens your mana.' },
   { id:'bow',    name:'Hunting Bow',     req:['agi',9],      kind:'ranged', range:9, dmg:[5,10],
@@ -3914,7 +3918,9 @@ function buildAbilities(){
   const dmg = [Math.max(1,Math.round(w.dmg[0]*pw)), Math.max(2,Math.round(w.dmg[1]*pw))];
   ABILITIES = [{
     id:'strike', name:'Strike', ap:1, mana:0, kind:w.kind, range:w.range, dmg,
-    desc:`${w.kind==='ranged'?'Range '+w.range:'Melee'} · ${dmg[0]}–${dmg[1]}`,
+    desc:`${w.kind==='ranged'?'Range '+w.range:'Melee'} · ${dmg[0]}–${dmg[1]}`
+      + (FOLLOW_THROUGH[player.weaponId]
+         ? ` · carries ${Math.round(FOLLOW_THROUGH[player.weaponId]*100)}% to others in reach` : ''),
   },{
     // Measured: only 27% of ambushes offered a cell that was both in reach of a
     // foe AND had cover at your back. Without an answer in the open, the flank
@@ -4157,7 +4163,25 @@ function resolveAttack(a, t, ab){
   const K = a.K || {};
   if (t.alive && K.onHit) applyStatus(t, K.onHit.kind, K.onHit.turns);
   if (t.alive && K.knock){ knockback(t, a, K.knock); ring(a.x, a.y, a.z, 0xcfe0ea, 2.4); }
+
+  // ── FOLLOW-THROUGH ────────────────────────────────────────────────────────
+  // Three foes with two actions each is six swings a round against your two, and
+  // only a melee build has to stand inside that. Measured at level 5 in the
+  // barrow: bow 100%, staff 100%, sword 0%, axe 0%, n=10 each. So a heavy swing
+  // carries into everything else in reach. Numbers become the melee build's
+  // OPPORTUNITY instead of its execution, and it needs no new button — it is the
+  // same Strike, paying off for standing where the game otherwise punishes you.
+  if (a.isPlayer && ab.id === 'strike' && FOLLOW_THROUGH[player.weaponId]){
+    const mult = FOLLOW_THROUGH[player.weaponId];
+    for (const o of CB.order){
+      if (o === t || o.isPlayer || !o.alive || !adjacentTo(o, a)) continue;
+      damage(o, Math.max(1, Math.round(dmg*mult)), 'FOLLOW-THROUGH');
+    }
+  }
 }
+// How much of a landed blow carries to the other creatures in reach. The greataxe
+// is the wide swing; the shield hand keeps the sword's arc short.
+const FOLLOW_THROUGH = { axe:0.60, blade:0.40, sword:0.35 };
 function faceToward(a, tx, tz){ setFacing(a, tx, tz); }
 // push a creature away from `from`, letting terrain decide where it lands
 function knockback(t, from, cells){
