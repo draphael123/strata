@@ -2203,7 +2203,7 @@ const KINDS = {
   // ── beasts: what actually lives in a wood, and what you meet first ──
   wolf:      { name:'Wolf',      hp:20, mp:8, atk:[5,9],   reach:1, init:16, xp:14,
                body:0x6e6a63, trim:0x3b3833, scale:0.92, aggro:14, shape:'beast',
-               beast:true, wild:true, blurb:'Quick, and never alone.' },
+               beast:true, wild:true, pack:true, blurb:'Quick, and never alone.' },
   boar:      { name:'Boar',      hp:34, mp:6, atk:[7,12],  reach:1, init:11, xp:20,
                body:0x5c4a3a, trim:0x342a20, scale:1.00, aggro:11, shape:'beast',
                beast:true, wild:true, knock:1, blurb:'Charges, and knocks you off your line.' },
@@ -2212,7 +2212,7 @@ const KINDS = {
                beast:true, wild:true, soak:0.15, blurb:'Slow. Enormous. Do not be surrounded with it.' },
   lynx:      { name:'Lynx',      hp:16, mp:9, atk:[6,10],  reach:1, init:18, xp:18,
                body:0x8a7a5e, trim:0x4e442f, scale:0.78, aggro:15, shape:'beast',
-               beast:true, wild:true, blurb:'Comes out of the scrub at you.' },
+               beast:true, wild:true, pack:true, blurb:'Comes out of the scrub at you.' },
   // ── the other things, further from the fire ──
   husk:      { name:'Husk',      hp:32, mp:4, atk:[6,11],  reach:1, init:8,  xp:16,
                body:0x6b5f4a, trim:0x3f3627, scale:1.00, aggro:11, shape:'brute' },
@@ -2696,6 +2696,11 @@ function hitFlash(a){
 }
 let SHAKE = 0;
 function shake(v){ SHAKE = Math.min(1.2, SHAKE + v); }
+// Hitstop: freeze everything for a few frames on impact. This is most of what
+// makes a blow feel like it connected, and it costs almost nothing.
+let HITSTOP = 0, TIMESCALE = 1, KILLPUSH = 0;
+function hitstop(s){ HITSTOP = Math.max(HITSTOP, s); }
+function killPunch(){ HITSTOP = Math.max(HITSTOP, 0.13); TIMESCALE = 0.22; KILLPUSH = 1; }
 
 function tickFX(dt){
   for (let i=FX_TIMERS.length-1; i>=0; i--){
@@ -3829,6 +3834,7 @@ function damage(t, amt, note){
   sparks(t.x, t.y, t.z, t.isPlayer ? 0xff7a6a : 0xffd27a, 10);
   shake(t.isPlayer ? 0.55 : 0.22);
   (amt >= 15 ? SFX.crit : SFX.hit)();
+  hitstop(amt >= 15 ? 0.085 : 0.05);
   if (CB.lastAttacker && CB.lastAttacker !== t)   // which way to recoil / topple
     CB.hitDir = Math.atan2(CB.lastAttacker.x - t.x, CB.lastAttacker.z - t.z);
   t.hp = Math.max(0, t.hp - amt);
@@ -3842,6 +3848,8 @@ function damage(t, amt, note){
     setAnim(t, 'die', 0.55);
     if (t.anim) t.anim.dir = CB.hitDir === undefined ? 0 : CB.hitDir;
     SFX.die();
+    killPunch();
+    sparks(t.x, t.y, t.z, t.isPlayer ? 0xff5a4a : 0xffe0a0, 22);
     log(`<b>${t.name}</b> falls.`);
     if (!t.isPlayer){ CB.xpPot += t.K.xp; creditKill(t); }
   }
@@ -4342,6 +4350,8 @@ function handleCombatClick(){
   startWalk(a, path, ()=>{ tutAdvance('moved'); afterPlayerAction(); });
 }
 function afterPlayerAction(){
+  const act = actor();
+  if (act){ act.mp = Math.max(0, act.mp); act.ap = Math.max(0, act.ap); }
   drawPips(); drawActs(); drawOrder();
   if (!player.alive){ endCombat('lose'); return; }
   if (!CB.order.some(o => !o.isPlayer && o.alive)){ endCombat('win'); return; }
@@ -4408,7 +4418,17 @@ function planApproach(a, target, ab){
   for (const [, n] of far){
     if (n.cost === 0 || !inRangeFrom(n.x, n.y, n.z, target, ab)) continue;
     const fl = flankOf(n.x, n.z, target);
-    const score = n.cost - (fl.m - 1) * 9 - (n.y > target.y ? 2.5 : 0);
+    let score = n.cost - (fl.m - 1) * 9 - (n.y > target.y ? 2.5 : 0);
+    // Pack hunters SPREAD. Queueing up in front of you is what made every fight
+    // a line; wolves that refuse to bunch will find your back on their own.
+    if (a.K.pack){
+      for (const o of CB.order){
+        if (o === a || o.isPlayer || !o.alive || !o.K.pack) continue;
+        const gap = Math.max(Math.abs(o.x-n.x), Math.abs(o.z-n.z));
+        if (gap <= 1) score += 7;
+        else if (gap === 2) score += 2.5;
+      }
+    }
     if (score < goalScore){ goalScore = score; goal = n; }
   }
   if (!goal){                              // can't get in range at all — just close in
@@ -4450,7 +4470,7 @@ function aiStep(){
   if (!CB.aiQueue.length){ nextTurn(); return; }
   const step = CB.aiQueue.shift();
   if (step.t === 'move'){
-    a.ap -= 1;                                   // creatures pay for movement too
+    a.ap = Math.max(0, a.ap - 1);                // creatures pay for movement too
     a.mp = Math.max(0, (a.mpPool||a.K.mp) - step.cost);
     startWalk(a, step.path, ()=>{ CB.phase = 'aithink'; CB.timer = 0.28; });
   } else if (step.t === 'attack'){
@@ -4505,8 +4525,9 @@ function updateCombat(dt){
   // active fighter. Without this, any fight under a forest points the tactical
   // camera at the inside of a leaf block and you cannot see your own character.
   _camDir.set(ux, uy, uz);
-  const hit = raycastVoxel(CB.focus, _camDir, CB.dist);
-  const cd = hit.hit ? Math.max(3.0, hit.dist - 0.5) : CB.dist;
+  const want = CB.dist * (1 - KILLPUSH*0.30);     // shove in on a killing blow
+  const hit = raycastVoxel(CB.focus, _camDir, want);
+  const cd = hit.hit ? Math.max(3.0, hit.dist - 0.5) : want;
 
   const tx = CB.focus.x + ux*cd, ty = CB.focus.y + uy*cd, tz = CB.focus.z + uz*cd;
   const k = 1 - Math.pow(0.0016, dt);
@@ -5186,6 +5207,14 @@ window.G = G;
 
 function step(dt){
   dt = Math.min(dt, 0.05);                     // clamp so a stalled tab can't teleport you
+  // Hitstop burns REAL time — decrement it before the timescale is applied, or a
+  // kill's slow-motion would stretch the freeze along with everything else.
+  if (HITSTOP > 0){ HITSTOP -= dt; renderOnlyTick(dt); return; }
+  if (TIMESCALE < 1){
+    dt *= TIMESCALE;
+    TIMESCALE = Math.min(1, TIMESCALE + dt*3.2);
+  }
+  KILLPUSH = Math.max(0, KILLPUSH - dt*2.2);
   G.time += dt;
   if (!G.paused && G.mode !== 'title') G.tod = (G.tod + dt/DAY_LENGTH) % 1;
   updateDayNight();
@@ -5229,6 +5258,14 @@ function step(dt){
   matWater.uniforms.uFogNear.value = scene.fog.near;
   matWater.uniforms.uFogFar.value  = scene.fog.far;
   if (G.mode === 'explore') tickFX(dt);
+  updateTags(dt);
+}
+// during hitstop the world is frozen, but the camera and sky still need a tick
+// or the frame visibly dies
+function renderOnlyTick(dt){
+  skyDome.position.copy(camera.position);
+  skyDome.scale.setScalar(camera.far * 0.88);
+  tickFX(dt);
   updateTags(dt);
 }
 function render(){
@@ -5594,7 +5631,14 @@ window.STRATA = {
           if (sc > bestScore){ bestScore = sc; best = nde; }
         }
         if (best && best.cost > 0){
-          a.mp -= best.cost;
+          // THE HANG: this deducted movement without paying the action or opening
+          // the pool, so mp went negative, budget() still read positive off the
+          // pool, and the loop re-picked the same cell forever.
+          if (a.mp <= 0){
+            if (a.ap <= 0){ endPlayerTurn(); continue; }
+            a.ap -= 1; a.mp = a.mpPool;
+          }
+          a.mp = Math.max(0, a.mp - best.cost);
           startWalk(a, pathFrom(CB.reach, best.x, best.y, best.z), ()=>afterPlayerAction());
           continue;
         }
@@ -5654,7 +5698,8 @@ window.STRATA = {
   BARROW, BARROW_FLOOR, inBarrow, BARROW_QUEST,
   chests, refreshChests, openChest, nearestChest, rollGear, giveGear, itemDef,
   LOOKS, applyLook, tutStart, TUT, heroTick, heroAttach, heroDetach,
-  moveCostInto, concealed, budget,
+  moveCostInto, concealed, budget, spawnEntity,
+  get TIMESCALE(){ return TIMESCALE; }, get HITSTOP(){ return HITSTOP; },
   populateSites, repTier, buildTownsfolk, creditKill,
   get abilities(){ return ABILITIES; },
   WEAPONS, SPELLS, STATS, HOME, LAKE, TOWN,
