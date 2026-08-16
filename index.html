@@ -3970,6 +3970,14 @@ const tReach  = mkTiles(0xe08a3c, 0.20);
 const tThreat = mkTiles(0xd0402c, 0.30);
 const _m4 = new THREE.Matrix4();
 const _camDir = new THREE.Vector3();
+// Roof culling for the tactical camera. Normal is -Y, so the plane keeps
+// everything BELOW `constant`. Swapped in globally only while a roofed fight is
+// on screen, and released the moment it ends.
+const ROOF_CLIP = new THREE.Plane(new THREE.Vector3(0,-1,0), 0);
+const ROOF_PLANES = [ROOF_CLIP], NO_PLANES = [];
+let ROOF_DARK = false;
+const _darkBg = new THREE.Color(0x07090c);
+function clearRoofClip(){ if (renderer.clippingPlanes.length) renderer.clippingPlanes = NO_PLANES; }
 function setTiles(mesh, cells, yOff=0.035){
   let n = 0;
   for (const c of cells){
@@ -4334,6 +4342,7 @@ function startCombat(trigger){
 }
 function endCombat(result){
   tutEnd();
+  clearRoofClip();
   CB.active = false;
   CB.phase = 'over';
   CB.result = result;
@@ -4864,11 +4873,27 @@ function updateCombat(dt){
   }
   // Indoors the camera cannot look down from above — it jams into the ceiling and
   // pulls in to the minimum, leaving you staring at the back of your own head.
-  // Flatten the angle instead of shortening the arm.
+  // Flattening the angle only traded one bad shot for another in a pillared hall,
+  // so the real answer is to CUT THE ROOF: clip everything above head height and
+  // let the camera climb through it, the way a tactics game shows you a room.
   let headroom = 0;
   while (headroom < 9 && !isSolid(Math.floor(CB.focus.x), Math.floor(CB.focus.y)+headroom+1,
                                   Math.floor(CB.focus.z))) headroom++;
-  const ct = headroom < 6 ? Math.min(CB.tilt, 0.10 + headroom*0.055) : CB.tilt;
+  // Only underground. Clipping outdoors would slice the sky dome and the hillside
+  // above you, which reads as a hole in the world; down here there is nothing above
+  // the ceiling to miss. The hall's roof is 6-7 up, so a headroom test never fired.
+  const roofed = inBarrow(CB.focus.x, CB.focus.z) && CB.focus.y < BARROW_FLOOR + 12;
+  let clipY = Infinity;
+  if (roofed){
+    // Just above head height, not just below the ceiling. Cutting at the ceiling
+    // leaves six blocks of wall standing beside the camera as dark slabs; cutting
+    // low turns the hall into a floor plan you can actually read the fight on.
+    clipY = CB.focus.y + 3.2;
+    ROOF_CLIP.constant = clipY;                 // keeps y < clipY  (normal is -Y)
+    if (renderer.clippingPlanes !== ROOF_PLANES) renderer.clippingPlanes = ROOF_PLANES;
+  } else clearRoofClip();
+  // With the roof gone the tilt no longer has to be flattened underground.
+  const ct = (!roofed && headroom < 6) ? Math.min(CB.tilt, 0.10 + headroom*0.055) : CB.tilt;
   const co = CB.orbit;
   let ux = Math.sin(co)*Math.cos(ct), uy = Math.sin(ct), uz = Math.cos(co)*Math.cos(ct);
   const ul = Math.hypot(ux,uy,uz) || 1; ux/=ul; uy/=ul; uz/=ul;
@@ -4879,7 +4904,10 @@ function updateCombat(dt){
   _camDir.set(ux, uy, uz);
   const want = CB.dist * (1 - KILLPUSH*0.30);     // shove in on a killing blow
   const hit = raycastVoxel(CB.focus, _camDir, want);
-  const cd = hit.hit ? Math.max(3.0, hit.dist - 0.5) : want;
+  // A block we have already clipped away must not also shove the camera in, or the
+  // roof still wins — it is just invisible while it does it.
+  const hitAboveCut = hit.hit && (CB.focus.y + uy*hit.dist) >= clipY - 0.05;
+  const cd = (hit.hit && !hitAboveCut) ? Math.max(3.0, hit.dist - 0.5) : want;
 
   const tx = CB.focus.x + ux*cd, ty = CB.focus.y + uy*cd, tz = CB.focus.z + uz*cd;
   const k = 1 - Math.pow(0.0016, dt);
@@ -5674,6 +5702,14 @@ function step(dt){
   // sky dome rides with the camera; clouds wrap around it
   skyDome.position.copy(camera.position);
   skyDome.scale.setScalar(camera.far * 0.88);
+  // Cutting the roof also cuts the hillside above it, and the sky shows through —
+  // the barrow ends up floating in a bright orange void. While the cut is on, the
+  // world above the player is simply dark.
+  const cut = renderer.clippingPlanes.length > 0;
+  if (cut !== ROOF_DARK){ ROOF_DARK = cut; skyDome.visible = !cut; cloudMesh.visible = !cut; }
+  // Re-asserted every frame: the day/night keyframes rewrite scene.background, so a
+  // one-shot assignment on the transition gets overwritten the very next tick.
+  if (cut) scene.background.copy(_darkBg);
   trackSun(camera.position.x, camera.position.y, camera.position.z);
   tickClouds(G.time, camera.position.x, camera.position.z);
   WIND.value = G.time;
