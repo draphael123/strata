@@ -73,6 +73,23 @@ save/load and chunk eviction for free and seams back into procedural terrain.
 cycles with counter-swinging arms, idle sway, a flickering fire with real point light,
 and impact bursts for Fireball and Sunder.
 
+**The look pass**
+- Gradient sky dome with a real sun disc and bloom, plus **blocky drifting clouds**
+  that wrap around the camera so the sky is never empty
+- **Water that reads as a lake**: swell in the vertex shader, sun glint, a narrow
+  foam lace at the waterline, and colour + opacity driven by a baked **depth**
+  attribute — pale green over the shallows, dark in the deeps
+- **Ground scatter emitted into the chunk buffer itself** — grass blades, ferns,
+  flowers, pebbles, shoreline reeds, lily pads. No extra draw calls, and it streams
+  and evicts with the terrain for free
+- **Three tree species** — tapered conifers, airy pale-trunked birches, round oaks
+- Per-voxel brightness jitter weighted heavily toward masonry, so ruin walls read as
+  weathered stone instead of painted cardboard
+- Contact shadows under every figure; campfire embers and smoke
+- Fog retuned to the sky dome's *horizon* colour so distance melts into haze
+
+Render cost at 7-chunk view distance: ~0.8 ms/frame, ~174k triangles, ~125 draw calls.
+
 **M0 — world**
 - Chunked voxel terrain (16×16×80), value-noise FBM with continentalness + mountain mask
 - Baked per-vertex ambient occlusion with the standard diagonal flip
@@ -174,6 +191,17 @@ well should find this much easier, and the numbers say nothing about whether it'
   giving a pond ringed by a desert; a steeper exponent keeps the water wide.
 - **Don't measure a structure with `surfaceY`** — it returns the roof, so every wall below
   falls outside the scanned band and reads as missing. Sweep an absolute Y range.
+- **Crossed quads make cones.** A tapered X-billboard reads as a miniature conifer planted
+  on the lawn at *every* size — shrinking it doesn't help. Grass has to be several
+  separate thin single quads at scattered angles with a lean.
+- **Clear water shows you a staircase.** A voxel lake bed is stepped by construction; the
+  fix is a baked per-vertex depth driving colour and opacity, not more bed noise.
+- **A custom ShaderMaterial does not get `attribute vec3 color`** — three only auto-declares
+  position/normal/uv. Alias the buffer under another name (`wcol`) and declare it yourself.
+- Wrap sky/cloud instances inside **both** the dome radius and the camera far plane, or
+  they pop out of existence at the seam.
+- Faces turned away from the sun crush to near-black with stingy ambient — a shaded ruin
+  wall should read as stone, not as a hole in the world.
 - **A CDN import map is a silent single point of failure** — see the vendored `vendor/`
   directory and the boot watchdog. A dead engine looks exactly like dead buttons.
 - InstancedMesh culls by its origin-centred bounding sphere → `frustumCulled = false`.

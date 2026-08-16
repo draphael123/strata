@@ -344,9 +344,9 @@ const MESH_BUDGET = 7;                     // ms/frame spent building chunk mesh
 const SAVE_KEY = 'strata-save-v1';
 
 const B = { AIR:0, GRASS:1, DIRT:2, STONE:3, SAND:4, WATER:5, WOOD:6, LEAF:7, SNOW:8, SLATE:9,
-            MOSS:10, PLANK:11, THATCH:12, EMBER:13 };
-const SOLID = [0,1,1,1,1,0,1,1,1,1, 1,1,1,1];   // blocks movement + line of sight
-const OPAQUE= [0,1,1,1,1,0,1,1,1,1, 1,1,1,1];   // blocks light for AO
+            MOSS:10, PLANK:11, THATCH:12, EMBER:13, BIRCH:14, PINE:15 };
+const SOLID = [0,1,1,1,1,0,1,1,1,1, 1,1,1,1,1,1];   // blocks movement + line of sight
+const OPAQUE= [0,1,1,1,1,0,1,1,1,1, 1,1,1,1,1,1];   // blocks light for AO
 
 // per-block face colours: [top, side, bottom]
 const COL = {
@@ -367,6 +367,8 @@ const COL = {
   [B.PLANK]: [0x9c7444, 0x8a663c, 0x775833],
   [B.THATCH]:[0xb08a4a, 0x8d6d39, 0x775c30],
   [B.EMBER]: [0xff9a3c, 0xe8742a, 0xc2551c],
+  [B.BIRCH]: [0xd8d2c4, 0xcfc8b8, 0xbdb6a6],
+  [B.PINE ]: [0x3c6438, 0x355a32, 0x2e4e2c],
 };
 
 // ═══════════════════════ character: stats, gear, spells ═══════════════════════
@@ -542,8 +544,14 @@ function treeAt(x, z){
   // thin them out on steep slopes so trees don't hang off cliffs
   const slope = Math.abs(heightAt(x+1,z)-topY) + Math.abs(heightAt(x,z+1)-topY);
   if (slope > 2) return null;
-  const trunk = 4 + Math.floor(hash2(x,z,SEED+777)*4);
-  return { topY, trunk };
+  // Three species. A forest of one silhouette repeated is the single loudest
+  // "this is a prototype" signal a voxel world can send.
+  const r = hash2(x, z, SEED+555);
+  const kind = r < 0.34 ? 'pine' : r < 0.60 ? 'birch' : 'oak';
+  const trunk = kind === 'pine'  ? 6 + Math.floor(hash2(x,z,SEED+777)*5)
+              : kind === 'birch' ? 6 + Math.floor(hash2(x,z,SEED+777)*4)
+              :                    4 + Math.floor(hash2(x,z,SEED+777)*4);
+  return { topY, trunk, kind };
 }
 
 // ───────────────────── structures (camp / ruins / town) ─────────────────────
@@ -671,16 +679,47 @@ function genChunk(cx, cz){
   for (let lz=-PAD; lz<CZ+PAD; lz++) for (let lx=-PAD; lx<CX+PAD; lx++){
     const t = treeAt(ox+lx, oz+lz); if (!t) continue;
     const base = t.topY + 1, topT = t.topY + t.trunk;
+    const bark = t.kind === 'birch' ? B.BIRCH : B.WOOD;
+    const leaf = t.kind === 'pine'  ? B.PINE  : B.LEAF;
     for (let y=base; y<=topT; y++)
-      if (lx>=0&&lx<CX&&lz>=0&&lz<CZ&&y<CY){ data[idx(lx,y,lz)] = B.WOOD; if(y>maxY) maxY=y; }
-    for (let dy=-2; dy<=1; dy++){
-      const r = (dy<=-1) ? 2 : 1;
-      for (let dz=-r; dz<=r; dz++) for (let dx=-r; dx<=r; dx++){
-        if (Math.abs(dx)===r && Math.abs(dz)===r && r>1) continue;
-        if (dx===0 && dz===0 && dy<=0) continue;
-        const px = lx+dx, pz = lz+dz, py = topT+dy;
-        if (px<0||px>=CX||pz<0||pz>=CZ||py<0||py>=CY) continue;
-        if (data[idx(px,py,pz)] === B.AIR){ data[idx(px,py,pz)] = B.LEAF; if(py>maxY) maxY=py; }
+      if (lx>=0&&lx<CX&&lz>=0&&lz<CZ&&y<CY){ data[idx(lx,y,lz)] = bark; if(y>maxY) maxY=y; }
+
+    const leafPut = (px,pz,py)=>{
+      if (px<0||px>=CX||pz<0||pz>=CZ||py<0||py>=CY) return;
+      if (data[idx(px,py,pz)] === B.AIR){ data[idx(px,py,pz)] = leaf; if(py>maxY) maxY=py; }
+    };
+    if (t.kind === 'pine'){
+      // tapered conifer: wide skirt narrowing to a spire
+      let ring = 0;
+      for (let dy=-4; dy<=1; dy++){
+        const rr = dy<=-4 ? 2 : dy<=-2 ? 2 : dy<=0 ? 1 : 0;
+        for (let dz=-rr; dz<=rr; dz++) for (let dx=-rr; dx<=rr; dx++){
+          if (Math.abs(dx)+Math.abs(dz) > rr+ (rr>1?0:1)) continue;
+          if (dx===0 && dz===0 && dy<=0) continue;
+          leafPut(lx+dx, lz+dz, topT+dy);
+        }
+        ring++;
+      }
+      leafPut(lx, lz, topT+2);
+    } else if (t.kind === 'birch'){
+      // sparse, airy crown
+      for (let dy=-2; dy<=1; dy++){
+        const rr = (dy===-2||dy===1) ? 1 : 2;
+        for (let dz=-rr; dz<=rr; dz++) for (let dx=-rr; dx<=rr; dx++){
+          if (Math.abs(dx)===rr && Math.abs(dz)===rr) continue;
+          if (dx===0 && dz===0 && dy<=0) continue;
+          if (hash3(ox+lx+dx, topT+dy, oz+lz+dz) < 0.22) continue;   // gaps let sky through
+          leafPut(lx+dx, lz+dz, topT+dy);
+        }
+      }
+    } else {
+      for (let dy=-2; dy<=1; dy++){
+        const rr = (dy<=-1) ? 2 : 1;
+        for (let dz=-rr; dz<=rr; dz++) for (let dx=-rr; dx<=rr; dx++){
+          if (Math.abs(dx)===rr && Math.abs(dz)===rr && rr>1) continue;
+          if (dx===0 && dz===0 && dy<=0) continue;
+          leafPut(lx+dx, lz+dz, topT+dy);
+        }
       }
     }
   }
@@ -753,12 +792,16 @@ const FACES = [
   { n:[0,0,-1], v:[[1,0,0],[0,0,0],[0,1,0],[1,1,0]], shade:0.72, ci:1 },
 ];
 const AO_LEVEL = [0.50, 0.68, 0.84, 1.0];
+// Per-voxel brightness jitter. Big flat stone surfaces (ruin walls, cliffs) look
+// like painted cardboard without it, so masonry gets far more than turf.
+const JITTER = { [B.MOSS]:0.20, [B.STONE]:0.15, [B.SLATE]:0.15, [B.THATCH]:0.13,
+                 [B.PLANK]:0.11, [B.SAND]:0.09 };
 
 function buildChunkGeometry(cx, cz){
   const c = ensureChunk(cx, cz);
   const ox = cx*CX, oz = cz*CZ;
   const P=[], N=[], C=[], I=[];            // opaque
-  const wP=[], wN=[], wC=[], wI=[];        // water
+  const wP=[], wN=[], wC=[], wI=[], wS=[], wD=[];  // wS = shore proximity, wD = depth
   const tmp = new THREE.Color();
 
   for (let y=0; y<=c.maxY; y++)
@@ -768,7 +811,8 @@ function buildChunkGeometry(cx, cz){
     if (b === B.AIR) continue;
     const wx = ox+lx, wz = oz+lz;
     const water = (b === B.WATER);
-    const jit = 0.94 + hash3(wx, y, wz) * 0.12;
+    const jAmp = JITTER[b] || 0.06;
+    const jit = (1 - jAmp) + hash3(wx, y, wz) * jAmp * 2;
 
     for (let f=0; f<6; f++){
       const F = FACES[f];
@@ -781,6 +825,22 @@ function buildChunkGeometry(cx, cz){
       const arrP = water?wP:P, arrN = water?wN:N, arrC = water?wC:C, arrI = water?wI:I;
       const vStart = arrP.length/3;
       const ao = [0,0,0,0];
+      // how close this water face is to dry land (foam), and how deep it is
+      // (colour + opacity). Depth is what buries the stepped lake bed — without
+      // it you are looking through clear glass at a flight of stairs.
+      let shore = 0, depth = 1;
+      if (water){
+        if (F.n[1] !== 1) shore = 1;
+        else {
+          for (const [dx,dz] of DIRS4){
+            if (SOLID[getBlock(wx+dx, y, wz+dz)]) shore = Math.max(shore, 1);
+            else if (SOLID[getBlock(wx+dx*2, y, wz+dz*2)]) shore = Math.max(shore, 0.45);
+          }
+          let d = 0;
+          while (d < 12 && getBlock(wx, y-1-d, wz) === B.WATER) d++;
+          depth = d + 1;
+        }
+      }
 
       for (let i=0;i<4;i++){
         const V = F.v[i];
@@ -810,6 +870,7 @@ function buildChunkGeometry(cx, cz){
         const k = F.shade * jit * (water ? 1 : AO_LEVEL[ao[i]]);
         tmp.setHex(base);
         arrC.push(tmp.r*k, tmp.g*k, tmp.b*k);
+        if (water){ wS.push(shore); wD.push(depth); }
       }
       // flip the diagonal so AO gradients read symmetrically
       if (ao[0] + ao[2] > ao[1] + ao[3])
@@ -818,6 +879,115 @@ function buildChunkGeometry(cx, cz){
         arrI.push(vStart+0, vStart+1, vStart+2, vStart+0, vStart+2, vStart+3);
     }
   }
+  // ─────────────── ground decoration ───────────────
+  // Emitted INTO the chunk's own buffer: no extra draw calls, and it streams and
+  // evicts with the terrain for free. Every quad is written twice with opposite
+  // winding so the single-sided terrain material still shows both faces.
+  const _dc = new THREE.Color();
+  function decQuad(v, nx, ny, nz, cols){
+    const s = P.length/3;
+    for (let i=0;i<4;i++){ P.push(v[i][0],v[i][1],v[i][2]); N.push(nx,ny,nz);
+      _dc.setHex(cols[i]); C.push(_dc.r,_dc.g,_dc.b); }
+    I.push(s,s+1,s+2, s,s+2,s+3);
+    const t = P.length/3;
+    for (let i=3;i>=0;i--){ P.push(v[i][0],v[i][1],v[i][2]); N.push(-nx,-ny,-nz);
+      _dc.setHex(cols[i]); C.push(_dc.r,_dc.g,_dc.b); }
+    I.push(t,t+1,t+2, t,t+2,t+3);
+  }
+  // Two quads crossed in an X. The top edge TAPERS — a parallel-sided quad reads
+  // as a little rectangle standing in the grass; a tapered one reads as blades.
+  function decCross(x, y, z, w, h, base, tip, lean, taper){
+    const lx2 = (lean||0)*0.5, tw = (taper === undefined ? 0.22 : taper);
+    for (const a of [0, Math.PI/2]){
+      const dx = Math.cos(a)*w*0.5, dz = Math.sin(a)*w*0.5;
+      decQuad([[x-dx, y, z-dz],[x+dx, y, z+dz],
+               [x+dx*tw+lx2, y+h, z+dz*tw],[x-dx*tw+lx2, y+h, z-dz*tw]],
+              0,0,1, [base,base,tip,tip]);
+    }
+  }
+  // A SINGLE thin leaning quad. Crossed quads make a cone — at grass scale that
+  // reads as a miniature conifer planted on the lawn, however small you make it.
+  // Several thin blades at scattered angles are what reads as a tuft of grass.
+  function decBlade(x, y, z, w, h, rot, lean, base, tip){
+    const dx = Math.cos(rot)*w*0.5, dz = Math.sin(rot)*w*0.5;
+    const lx2 = Math.cos(rot+1.57)*lean, lz2 = Math.sin(rot+1.57)*lean;
+    decQuad([[x-dx, y, z-dz],[x+dx, y, z+dz],
+             [x+dx*0.18+lx2, y+h, z+dz*0.18+lz2],[x-dx*0.18+lx2, y+h, z-dz*0.18+lz2]],
+            0,0,1, [base,base,tip,tip]);
+  }
+  function decDisc(x, y, z, r, col){
+    decQuad([[x-r,y,z-r],[x+r,y,z-r],[x+r,y,z+r],[x-r,y,z+r]], 0,1,0, [col,col,col,col]);
+  }
+  function decBox(x, y, z, sx, sy, sz, col){
+    const hx=sx*0.5, hz=sz*0.5;
+    const c4 = [col,col,col,col];
+    decQuad([[x-hx,y,z+hz],[x+hx,y,z+hz],[x+hx,y+sy,z+hz],[x-hx,y+sy,z+hz]], 0,0,1, c4);
+    decQuad([[x+hx,y,z-hz],[x-hx,y,z-hz],[x-hx,y+sy,z-hz],[x+hx,y+sy,z-hz]], 0,0,-1, c4);
+    decQuad([[x+hx,y,z+hz],[x+hx,y,z-hz],[x+hx,y+sy,z-hz],[x+hx,y+sy,z+hz]], 1,0,0, c4);
+    decQuad([[x-hx,y,z-hz],[x-hx,y,z+hz],[x-hx,y+sy,z+hz],[x-hx,y+sy,z-hz]], -1,0,0, c4);
+    decQuad([[x-hx,y+sy,z+hz],[x+hx,y+sy,z+hz],[x+hx,y+sy,z-hz],[x-hx,y+sy,z-hz]], 0,1,0, c4);
+  }
+  // Tufts must be TALLER than wide. Wide-and-short crossed quads read as flat
+  // playing cards scattered over the lawn, not as grass.
+  const TUFT=[0x44702f,0x6d9c46], TUFT2=[0x4a7434,0x79a951];
+  const FLOWERS=[0xf2e9d2, 0xe8c552, 0xc4574c, 0x9b6bb5, 0xe08a4c];
+
+  for (let lz=0; lz<CZ; lz++) for (let lx=0; lx<CX; lx++){
+    const wx = ox+lx, wz = oz+lz;
+    let ty = -1;
+    for (let y=Math.min(c.maxY, CY-2); y>=1; y--){
+      const b = c.data[idx(lx,y,lz)];
+      if (b !== B.AIR && b !== B.WATER){ ty = y; break; }
+    }
+    if (ty < 0) continue;
+    const top = c.data[idx(lx,ty,lz)];
+    const above = c.data[idx(lx,ty+1,lz)];
+    const cx0 = wx + 0.5, cz0 = wz + 0.5;
+    const r1 = hash3(wx, 7, wz), r2 = hash3(wx, 19, wz), r3 = hash3(wx, 31, wz);
+    const jx = (r2-0.5)*0.55, jz = (r3-0.5)*0.55;
+
+    if (above === B.AIR && (top === B.GRASS || top === B.MOSS)){
+      if (r1 < 0.30){
+        // A clump of 3 thin blades at jittered offsets. One big tapered quad per
+        // column reads as a miniature conifer planted on the lawn; several small
+        // ones read as grass.
+        for (let bI=0; bI<5; bI++){
+          const bh = hash3(wx*3+bI, 41+bI, wz*3);
+          const ox2 = (hash3(wx+bI, 53, wz)-0.5)*0.5, oz2 = (hash3(wx, 59, wz+bI)-0.5)*0.5;
+          const alt = bh < 0.5;
+          decBlade(cx0+ox2, ty+1, cz0+oz2, 0.085+bh*0.05, 0.24+bh*0.26,
+                   bI*1.26 + bh*1.4, (bh-0.5)*0.20,
+                   alt?TUFT[0]:TUFT2[0], alt?TUFT[1]:TUFT2[1]);
+        }
+      } else if (r1 < 0.415){                    // flowers
+        const fc = FLOWERS[(r2*FLOWERS.length)|0];
+        for (let bI=0; bI<3; bI++)
+          decBlade(cx0+jx, ty+1, cz0+jz, 0.07, 0.22+r3*0.10, bI*2.09, 0.03, TUFT[0], TUFT[1]);
+        decDisc(cx0+jx, ty+1.28+r3*0.08, cz0+jz, 0.055, fc);
+        decBlade(cx0+jx, ty+1.20+r3*0.08, cz0+jz, 0.11, 0.11, 0.7, 0, fc, fc);
+      } else if (r1 < 0.438){                    // pebbles — a solid nub, not a decal
+        decBox(cx0+jx, ty+1, cz0+jz, 0.20+r2*0.14, 0.12+r3*0.10, 0.18+r3*0.14, 0x878b93);
+      } else if (r1 < 0.458){                    // ferns — broader fronds, splayed out
+        for (let bI=0; bI<5; bI++){
+          const bh = hash3(wx+bI*7, 67, wz+bI*11);
+          decBlade(cx0+jx*0.5, ty+1, cz0+jz*0.5, 0.20+bh*0.10, 0.26+bh*0.18,
+                   bI*1.26+bh, 0.16+bh*0.16, 0x36642f, 0x6a9a4c);
+        }
+      }
+    }
+    // reeds where sand meets water, and lilies on the shallows
+    if (top === B.SAND && above === B.AIR && r1 < 0.34){
+      let nearWater = false;
+      for (const [dx,dz] of DIRS4) if (getBlock(wx+dx, ty+1, wz+dz) === B.WATER) nearWater = true;
+      if (nearWater) decCross(cx0+jx, ty+1, cz0+jz, 0.30, 1.25+r2*0.7, 0x6d7a34, 0xa8b25a,
+                              (r3-0.5)*0.35, 0.10);
+    }
+    if (above === B.WATER && SEA - ty <= 2){
+      if (r1 < 0.10) decDisc(cx0+jx, SEA+0.93, cz0+jz, 0.34+r2*0.16, 0x3f7a46);
+      else if (r1 < 0.16) decCross(cx0+jx, ty+1, cz0+jz, 0.26, (SEA-ty)+1.1, 0x5f6f30, 0x94a052, 0, 0.10);
+    }
+  }
+
   const mk = (p,n,col,ind)=>{
     if (!ind.length) return null;
     const g = new THREE.BufferGeometry();
@@ -828,7 +998,13 @@ function buildChunkGeometry(cx, cz){
     g.computeBoundingSphere();
     return g;
   };
-  return { solid: mk(P,N,C,I), water: mk(wP,wN,wC,wI) };
+  const wg = mk(wP,wN,wC,wI);
+  if (wg){
+    wg.setAttribute('shore', new THREE.Float32BufferAttribute(wS,1));
+    wg.setAttribute('depth', new THREE.Float32BufferAttribute(wD,1));
+    wg.setAttribute('wcol', wg.getAttribute('color'));   // same buffer, explicit name
+  }
+  return { solid: mk(P,N,C,I), water: wg };
 }
 
 // ───────────────────────────── voxel DDA raycast ─────────────────────────────
@@ -881,21 +1057,147 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const SKY_COL = 0x9dc0dc;
+const SKY_COL = 0x9dc0dc, HAZE_COL = 0xcfdde6;
 scene.background = new THREE.Color(SKY_COL);
-scene.fog = new THREE.Fog(SKY_COL, VIEW*CX*0.62, VIEW*CX*0.99);
+// fog matches the sky dome's HORIZON, not its zenith, so distance melts away
+scene.fog = new THREE.Fog(HAZE_COL, VIEW*CX*0.55, VIEW*CX*1.02);
 
 const camera = new THREE.PerspectiveCamera(74, innerWidth/innerHeight, 0.1, 600);
 
-const sun = new THREE.DirectionalLight(0xfff2d8, 1.55);
-sun.position.set(0.42, 1, 0.28).normalize();
+const SUN_DIR = new THREE.Vector3(0.42, 0.86, 0.28).normalize();
+const sun = new THREE.DirectionalLight(0xfff2d8, 1.5);
+sun.position.copy(SUN_DIR);
 scene.add(sun);
-scene.add(new THREE.HemisphereLight(0xbcd8f0, 0x4a4433, 0.72));
-scene.add(new THREE.AmbientLight(0xffffff, 0.16));
+
+// ── sky dome: vertical gradient, warm horizon, and an actual sun ──
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: {
+    uTop:{value:new THREE.Color(0x4d86c4)}, uMid:{value:new THREE.Color(0x9dc0dc)},
+    uHaze:{value:new THREE.Color(0xdfe9ee)}, uSun:{value:SUN_DIR.clone()},
+    uSunCol:{value:new THREE.Color(0xfff4d6)},
+  },
+  vertexShader:`varying vec3 vD;
+    void main(){ vD = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    uniform vec3 uTop,uMid,uHaze,uSun,uSunCol; varying vec3 vD;
+    void main(){
+      vec3 d = normalize(vD);
+      float h = clamp(d.y*1.15, -0.2, 1.0);
+      vec3 col = mix(uHaze, uMid, smoothstep(-0.02, 0.30, h));
+      col = mix(col, uTop, smoothstep(0.22, 0.92, h));
+      float sd = max(dot(d, normalize(uSun)), 0.0);
+      col += uSunCol * pow(sd, 620.0) * 1.5;                 // disc
+      col += uSunCol * pow(sd, 12.0) * 0.16;                 // bloom
+      col += uSunCol * pow(max(1.0-abs(h),0.0), 8.0) * 0.05; // horizon warmth
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+});
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), skyMat);
+skyDome.frustumCulled = false;
+skyDome.renderOrder = -1;
+scene.add(skyDome);
+
+// ── blocky drifting clouds, in keeping with the rest of the world ──
+const CLOUD_N = 130;
+const cloudMesh = new THREE.InstancedMesh(
+  new THREE.BoxGeometry(1,1,1),
+  new THREE.MeshLambertMaterial({ color:0xffffff, transparent:true, opacity:0.9, fog:false }),
+  CLOUD_N);
+cloudMesh.frustumCulled = false;
+cloudMesh.renderOrder = -1;
+scene.add(cloudMesh);
+const CLOUDS = [];
+{
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
+  let i = 0;
+  for (let puff=0; puff<26 && i<CLOUD_N; puff++){
+    const bx = (hash2(puff,1,99)-0.5)*900, bz = (hash2(puff,2,99)-0.5)*900;
+    const by = 120 + hash2(puff,3,99)*46;
+    const n = 3 + Math.floor(hash2(puff,4,99)*3);
+    for (let k=0; k<n && i<CLOUD_N; k++, i++){
+      CLOUDS.push({
+        x: bx + (hash2(puff,k+10,99)-0.5)*44, y: by + (hash2(puff,k+20,99)-0.5)*7,
+        z: bz + (hash2(puff,k+30,99)-0.5)*30,
+        sx: 22 + hash2(puff,k+40,99)*30, sy: 5 + hash2(puff,k+50,99)*5,
+        sz: 16 + hash2(puff,k+60,99)*20,
+      });
+    }
+  }
+  cloudMesh.count = CLOUDS.length;
+  cloudMesh.userData = { m, q, s, p };
+}
+function tickClouds(t, camX, camZ){
+  const { m, q, s, p } = cloudMesh.userData;
+  q.identity();
+  for (let i=0; i<CLOUDS.length; i++){
+    const c = CLOUDS[i];
+    // wrap around the camera so the sky is never empty however far you walk
+    // wrap inside the dome AND the far plane, or clouds vanish at the seam
+    let x = c.x + t*1.6, z = c.z;
+    x = ((x - camX + 230) % 460 + 460) % 460 - 230 + camX;
+    z = ((z - camZ + 230) % 460 + 460) % 460 - 230 + camZ;
+    p.set(x, c.y, z); s.set(c.sx, c.sy, c.sz);
+    m.compose(p, q, s);
+    cloudMesh.setMatrixAt(i, m);
+  }
+  cloudMesh.instanceMatrix.needsUpdate = true;
+}
+// Generous bounce: faces turned away from the sun otherwise crush to near-black,
+// and a ruin wall in shade should read as stone, not as a hole in the world.
+scene.add(new THREE.HemisphereLight(0xc6dff5, 0x5b5540, 0.95));
+scene.add(new THREE.AmbientLight(0xffffff, 0.30));
 
 const matSolid = new THREE.MeshLambertMaterial({ vertexColors:true });
-const matWater = new THREE.MeshLambertMaterial({
-  vertexColors:true, transparent:true, opacity:0.74, depthWrite:false, side:THREE.DoubleSide });
+// Water: gentle swell, a foam band baked from distance-to-shore, and a real sun
+// glint. A flat translucent plane is the difference between "a lake" and "a hole
+// filled with blue".
+const matWater = new THREE.ShaderMaterial({
+  transparent:true, depthWrite:false, side:THREE.DoubleSide,
+  uniforms:{
+    uTime:{value:0}, uSun:{value:SUN_DIR.clone()}, uCam:{value:new THREE.Vector3()},
+    uFogCol:{value:new THREE.Color(0xcfdde6)}, uFogNear:{value:0}, uFogFar:{value:1},
+  },
+  vertexShader:`
+    attribute float shore; attribute float depth;
+    attribute vec3 wcol;                 // NOT "color": three only auto-declares that
+    varying vec3 vCol; varying float vShore; varying vec3 vW; varying float vUp; varying float vDep;
+    void main(){
+      vCol = wcol; vShore = shore; vUp = normal.y; vDep = depth;
+      vec3 p = position;
+      float w = sin(p.x*0.55 + p.z*0.31) * 0.5 + sin(p.z*0.83 - p.x*0.22) * 0.5;
+      if (normal.y > 0.5) p.y += w * 0.055;
+      vec4 wp = modelMatrix * vec4(p,1.0);
+      vW = wp.xyz;
+      gl_Position = projectionMatrix * viewMatrix * wp;
+    }`,
+  fragmentShader:`
+    uniform float uTime; uniform vec3 uSun, uCam, uFogCol; uniform float uFogNear, uFogFar;
+    varying vec3 vCol; varying float vShore; varying vec3 vW; varying float vUp; varying float vDep;
+    void main(){
+      float dep = clamp(vDep / 7.0, 0.0, 1.0);
+      // shallows go pale green-blue over sand, depths go dark — this is what
+      // hides the stepped bed and makes it read as a lake instead of a stairwell
+      vec3 col = mix(vec3(0.42,0.66,0.68), vec3(0.09,0.22,0.38), dep);
+      col = mix(vCol, col, 0.82);
+      vec3 V = normalize(uCam - vW);
+      // ripple normal, only meaningful on the surface
+      float r = sin(vW.x*1.7 + uTime*1.1) * sin(vW.z*1.5 - uTime*0.9);
+      vec3 nrm = normalize(vec3(r*0.16, 1.0, r*0.13));
+      float fres = pow(1.0 - max(dot(nrm, V), 0.0), 3.0);
+      col = mix(col, vec3(0.66,0.80,0.90), fres * 0.45 * step(0.5, vUp));
+      float spec = pow(max(dot(reflect(-normalize(uSun), nrm), V), 0.0), 90.0);
+      col += vec3(1.0,0.96,0.85) * spec * 1.1 * step(0.5, vUp);
+      // foam: a narrow animated lace right at the waterline, not a glare sheet
+      float band = 0.5 + 0.5*sin(vW.x*1.9 + vW.z*1.6 - uTime*1.8);
+      float foam = smoothstep(0.85, 1.0, vShore) * (0.30 + 0.70*band);
+      col = mix(col, vec3(0.92,0.96,1.0), clamp(foam,0.0,1.0) * 0.30 * step(0.5, vUp));
+      float a = mix(0.52, 0.93, dep);            // see the sand, lose the depths
+      float fd = smoothstep(uFogNear, uFogFar, length(uCam - vW));
+      col = mix(col, uFogCol, fd);
+      gl_FragColor = vec4(col, mix(a, 0.0, fd*0.85));
+    }`,
+});
 
 const chunkRoot = new THREE.Group(); scene.add(chunkRoot);
 const fxRoot    = new THREE.Group(); scene.add(fxRoot);
@@ -1062,7 +1364,11 @@ function makeBody(kind){
                   new THREE.MeshBasicMaterial({ color:0xffe9a8 }));
   eye.position.set(-0.11,1.50,0.23);
   const eye2 = eye.clone(); eye2.position.x = 0.11;
-  g.add(torso, head, legL, legR, armL, armR, eye, eye2);
+  // a cheap contact shadow — without one, figures look pasted onto the ground
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 14).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({ color:0x0a0d12, transparent:true, opacity:0.26, depthWrite:false }));
+  shadow.position.y = 0.03; shadow.renderOrder = 1;
+  g.add(torso, head, legL, legR, armL, armR, eye, eye2, shadow);
   g.scale.setScalar(K.scale);
   g.userData.legs = [legL, legR];
   g.userData.arms = [armL, armR];
@@ -1137,11 +1443,39 @@ function buildCampfire(){
   const light = new THREE.PointLight(0xffa54a, 3.2, 26, 1.7);
   light.position.y = 1.1;
   g.add(flame, core, light);
+
+  // embers + smoke. THREE.Points without a map renders hard SQUARES, so both
+  // layers get a radial-gradient canvas texture.
+  const N = 34;
+  const ep = new Float32Array(N*3), sp = new Float32Array(N*3);
+  for (let i=0;i<N;i++){ ep[i*3+1] = Math.random()*3; sp[i*3+1] = Math.random()*7; }
+  const eg = new THREE.BufferGeometry(); eg.setAttribute('position', new THREE.BufferAttribute(ep,3));
+  const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp,3));
+  const embers = new THREE.Points(eg, new THREE.PointsMaterial({
+    size:0.20, map:softDot(0xffc46a), transparent:true, depthWrite:false,
+    blending:THREE.AdditiveBlending, opacity:0.95 }));
+  const smoke = new THREE.Points(sg, new THREE.PointsMaterial({
+    size:1.5, map:softDot(0xffffff), transparent:true, depthWrite:false,
+    color:0x9aa2ab, opacity:0.16 }));
+  g.add(embers, smoke);
+
   g.position.set(HOME.x+0.5, SHORE_Y+1, HOME.z+0.5);
-  g.userData = { flame, core, light };
+  g.userData = { flame, core, light, embers, smoke, N };
   scene.add(g); campfire = g;
 }
-function tickCampfire(t){
+function softDot(hex){
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const col = new THREE.Color(hex);
+  const grd = g.createRadialGradient(32,32,0, 32,32,32);
+  grd.addColorStop(0,   `rgba(${col.r*255|0},${col.g*255|0},${col.b*255|0},1)`);
+  grd.addColorStop(0.45,`rgba(${col.r*255|0},${col.g*255|0},${col.b*255|0},0.42)`);
+  grd.addColorStop(1,   'rgba(0,0,0,0)');
+  g.fillStyle = grd; g.fillRect(0,0,64,64);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+function tickCampfire(t, dt){
   if (!campfire) return;
   const u = campfire.userData;
   const f = 0.82 + Math.sin(t*11)*0.11 + Math.sin(t*23.7)*0.07;
@@ -1149,6 +1483,22 @@ function tickCampfire(t){
   u.core.scale.setScalar(0.9 + Math.sin(t*19)*0.12);
   u.flame.rotation.y = t*1.3;
   u.light.intensity = 2.7 + f*0.9;
+
+  const ea = u.embers.geometry.attributes.position, sa = u.smoke.geometry.attributes.position;
+  for (let i=0;i<u.N;i++){
+    let y = ea.array[i*3+1] + dt*(1.4 + (i%5)*0.22);
+    if (y > 3.4){ y = 0.25; ea.array[i*3] = (Math.random()-0.5)*0.7; ea.array[i*3+2] = (Math.random()-0.5)*0.7; }
+    ea.array[i*3+1] = y;
+    ea.array[i*3]   += Math.sin(t*2.2 + i)*dt*0.28;
+    ea.array[i*3+2] += Math.cos(t*1.8 + i)*dt*0.28;
+
+    let sy = sa.array[i*3+1] + dt*(0.8 + (i%4)*0.14);
+    if (sy > 8){ sy = 1.2; sa.array[i*3] = (Math.random()-0.5)*0.5; sa.array[i*3+2] = (Math.random()-0.5)*0.5; }
+    sa.array[i*3+1] = sy;
+    sa.array[i*3]   += Math.sin(t*0.7 + i)*dt*0.5;
+    sa.array[i*3+2] += Math.cos(t*0.5 + i)*dt*0.4;
+  }
+  ea.needsUpdate = true; sa.needsUpdate = true;
 }
 
 let nextId = 1;
@@ -1245,7 +1595,10 @@ function applyBuild(refill){
   const legR  = legL.clone(); legR.position.x=0.15;
   const armL  = new THREE.Mesh(new THREE.BoxGeometry(0.17,0.58,0.20), bm); armL.position.set(-0.39,0.90,0);
   const armR  = armL.clone(); armR.position.x=0.39;
-  g.add(torso, head, hat, legL, legR, armL, armR);
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 14).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({ color:0x0a0d12, transparent:true, opacity:0.26, depthWrite:false }));
+  shadow.position.y = 0.03; shadow.renderOrder = 1;
+  g.add(torso, head, hat, legL, legR, armL, armR, shadow);
   g.userData.legs = [legL, legR];
   g.userData.arms = [armL, armR];
   g.visible = false;
@@ -2439,7 +2792,15 @@ function step(dt){
     updateCombat(dt);
   }
   drainMeshQueue(MESH_BUDGET);
-  tickCampfire(G.time);
+  tickCampfire(G.time, dt);
+  // sky dome rides with the camera; clouds wrap around it
+  skyDome.position.copy(camera.position);
+  skyDome.scale.setScalar(camera.far * 0.88);
+  tickClouds(G.time, camera.position.x, camera.position.z);
+  matWater.uniforms.uTime.value = G.time;
+  matWater.uniforms.uCam.value.copy(camera.position);
+  matWater.uniforms.uFogNear.value = scene.fog.near;
+  matWater.uniforms.uFogFar.value  = scene.fog.far;
   if (G.mode === 'explore') tickFX(dt);
   updateTags(dt);
 }
