@@ -567,7 +567,7 @@ const OPAQUE= [0,1,1,1,1,0,1,1,1,1, 1,1,1,1,1,1,1,1];   // blocks light for AO
 // Tree voxels stay in the data — they still block movement, sight and cover —
 // but they are NOT drawn. Real tapered meshes are drawn over them instead, which
 // is what finally stops the forest reading as Minecraft.
-const UNDRAWN = { [B.TRUNK]:1, [B.BIRCH]:1, [B.LEAF]:1, [B.PINE]:1 };
+const UNDRAWN = { [B.TRUNK]:1, [B.BIRCH]:1, [B.LEAF]:1, [B.PINE]:1, [B.SHRUB]:1 };
 
 // per-block face colours: [top, side, bottom]
 const COL = {
@@ -834,9 +834,19 @@ function heightAt(x, z){
   const hit = _hCache.get(k); if (hit !== undefined) return hit;
   let c = fbm(x*0.0030, z*0.0030, 5, SEED);
   c = clamp((c - 0.34) / 0.34, 0, 1);                 // continentalness, contrast-stretched
-  const d = fbm(x*0.0120, z*0.0120, 4, SEED+511) - 0.5;
-  const m = Math.max(0, c - 0.55) / 0.45;             // mountain mask
-  let h = 18 + c*22 + d*9 + m*m*26;
+  // Lower frequency as well as lower amplitude: at 0.012 the detail octave put a
+  // 1-block terrace every few cells, which is what actually makes ground read as
+  // stairs. Broad, gentle swells instead.
+  const d = fbm(x*0.0068, z*0.0068, 4, SEED+511) - 0.5;
+  const m = Math.max(0, c - 0.72) / 0.28;             // mountain mask, pushed further out
+  // MUCH flatter than it was (was 18 + c*22 + d*9 + m*m*26, a ~48-block range).
+  // The old relief did three bad things at once: it made a tactics grid you could
+  // not walk across, it broke every long sightline the game depends on, and every
+  // steep face turned into a stack of 1-block terraces whose bevelled DIRT sides
+  // read as big diagonal brown slabs. Variety now comes from what GROWS on the
+  // ground, not from how far the ground falls away. Mountains survive as distant
+  // silhouettes because the mask only opens up in the top quarter of the range.
+  let h = 28 + c*9 + d*3.4 + m*m*17;
   const vale = valeHeight(x, z);
   if (vale !== null){
     const dd = Math.hypot(x-HOME.x, z-HOME.z);
@@ -1262,6 +1272,7 @@ function genChunk(cx, cz){
   }
   // scattered features — boulders, deadfall, scrub. Same padded sweep as trees so
   // anything overhanging a chunk border is written by both sides identically.
+  const snags = [];
   for (let lz=-PAD; lz<CZ+PAD; lz++) for (let lx=-PAD; lx<CX+PAD; lx++){
     const f = featureAt(ox+lx, oz+lz); if (!f) continue;
     const put = (px, py, pz, b)=>{
@@ -1285,13 +1296,21 @@ function genChunk(cx, cz){
       put(lx, gy+1, lz, B.WOOD);
       if (hash2(ox+lx, oz+lz, SEED+17) < 0.5) put(lx, gy+2, lz, B.WOOD);
     } else if (f.t === 'snag'){
-      for (let dy=0; dy<f.hh; dy++) put(lx, gy+1+dy, lz, B.WOOD);
-      put(lx+1, gy+f.hh-1, lz, B.WOOD);                  // one bare branch
+      // A 1-wide, 9-tall bare WOOD column reads as a plank standing in a field —
+      // this is the "weird geometry" in the wild. Use B.TRUNK, which is UNDRAWN,
+      // and let the tree mesh pass put a real tapered dead trunk over it: the
+      // voxels still block movement, sight and cover, exactly like a live tree.
+      for (let dy=0; dy<f.hh; dy++) put(lx, gy+1+dy, lz, B.TRUNK);
+      if (lx>=0 && lx<CX && lz>=0 && lz<CZ)
+        snags.push({ x:ox+lx, z:oz+lz, topY:gy, trunk:f.hh, kind:'snag' });
     } else if (f.t === 'bush'){
       for (let dy=0; dy<f.hh; dy++) for (let dz=-1; dz<=1; dz++) for (let dx=-1; dx<=1; dx++){
         if (Math.abs(dx)===1 && Math.abs(dz)===1 && dy===f.hh-1) continue;
         put(lx+dx, gy+1+dy, lz+dz, B.SHRUB);
       }
+      // drawn as a clump of rounded forms, not a 3x3 green cube — see UNDRAWN
+      if (lx>=0 && lx<CX && lz>=0 && lz<CZ)
+        snags.push({ x:ox+lx, z:oz+lz, topY:gy, trunk:f.hh, kind:'bush' });
     } else if (f.t === 'rocks'){
       put(lx, gy+1, lz, B.STONE);
       if (hash2(ox+lx, oz+lz, SEED+18) < 0.6) put(lx+1, gy+1, lz, B.STONE);
@@ -1319,6 +1338,8 @@ function genChunk(cx, cz){
     data[idx(lx,ly,lz)] = v;
     if (v !== B.AIR && ly > maxY) maxY = ly;
   }
+  // snags ride along with the trees so one instancing pass draws both
+  for (const s of snags) trees.push(s);
   return { data, trees, maxY: Math.min(maxY+1, CY-1), mesh:null, wmesh:null, dirty:true };
 }
 function ensureChunk(cx, cz){
@@ -1422,8 +1443,12 @@ function buildChunkGeometry(cx, cz){
       const F = FACES[f];
       const nx = wx+F.n[0], ny = y+F.n[1], nz = wz+F.n[2];
       const nb = getBlock(nx, ny, nz);
-      if (water){ if (nb !== B.AIR) continue; }        // water shows only where it meets air
-      else      { if (nb !== B.AIR && nb !== B.WATER) continue; }
+      // An UNDRAWN neighbour must not cull the face behind it. It isn't rendered,
+      // so culling against it punches a real hole you can see the fog through —
+      // invisible under a 1-wide tree trunk whose mesh covers the gap, glaring
+      // under a 3x3 bush footprint.
+      if (water){ if (nb !== B.AIR && !UNDRAWN[nb]) continue; }
+      else      { if (nb !== B.AIR && nb !== B.WATER && !UNDRAWN[nb]) continue; }
 
       const base = COL[b][F.ci];
       // tint the face once, not once per vertex
@@ -2122,8 +2147,9 @@ highlight.visible = false; scene.add(highlight);
 // ───────────────────────────── tree meshes ─────────────────────────────
 // Real tapered geometry, instanced, drawn over the (invisible) tree voxels.
 const TREE_MAX = 900;
-function mkInst(geo, mat){
-  const m = new THREE.InstancedMesh(geo, mat, TREE_MAX);
+function mkInst(geo, mat, cap){
+  const m = new THREE.InstancedMesh(geo, mat, cap || TREE_MAX);
+  m.userData.cap = cap || TREE_MAX;
   m.frustumCulled = false; m.count = 0; m.castShadow = true; m.receiveShadow = true;
   scene.add(m); return m;
 }
@@ -2132,20 +2158,26 @@ const birchMat = new THREE.MeshLambertMaterial({ color:0xd6d0c0 });
 const oakMat   = new THREE.MeshLambertMaterial({ color:0x4f7d38, flatShading:true });
 const pineMat  = new THREE.MeshLambertMaterial({ color:0x335c33, flatShading:true });
 const birchLeafMat = new THREE.MeshLambertMaterial({ color:0x74a04a, flatShading:true });
+// Scrub is ~4x more common than trees, so it needs its own pool and a much bigger
+// cap. Sharing oakTop silently blew the 900 limit and left bushes INVISIBLE while
+// their voxels still blocked movement — collision you cannot see is worse than a
+// green cube.
+const bushMat = new THREE.MeshLambertMaterial({ color:0x466b31, flatShading:true });
 const TREES = {
   trunk:  mkInst(new THREE.CylinderGeometry(0.20, 0.38, 1, 6), barkMat),
   birch:  mkInst(new THREE.CylinderGeometry(0.15, 0.24, 1, 6), birchMat),
   oakTop: mkInst(new THREE.IcosahedronGeometry(1, 0), oakMat),
   pineTop:mkInst(new THREE.ConeGeometry(1, 1, 7), pineMat),
   birTop: mkInst(new THREE.IcosahedronGeometry(1, 0), birchLeafMat),
+  bushTop:mkInst(new THREE.IcosahedronGeometry(1, 0), bushMat, 4200),
 };
 const _tm = new THREE.Matrix4(), _tq = new THREE.Quaternion(),
       _tv = new THREE.Vector3(), _ts = new THREE.Vector3(), _te = new THREE.Euler();
 let treeChunkKey = null;
 function rebuildTrees(pcx, pcz){
-  const counts = { trunk:0, birch:0, oakTop:0, pineTop:0, birTop:0 };
+  const counts = { trunk:0, birch:0, oakTop:0, pineTop:0, birTop:0, bushTop:0 };
   const push = (key, x,y,z, sx,sy,sz, yaw, tilt)=>{
-    if (counts[key] >= TREE_MAX) return;
+    if (counts[key] >= TREES[key].userData.cap) return;
     _te.set(tilt||0, yaw||0, 0);
     _tq.setFromEuler(_te);
     _tv.set(x,y,z); _ts.set(sx,sy,sz);
@@ -2163,7 +2195,22 @@ function rebuildTrees(pcx, pcz){
       const yaw = hash2(t.x, t.z, 991) * Math.PI * 2;
       const tilt = (hash2(t.x, t.z, 992) - 0.5) * 0.10;
       const jitter = 0.85 + hash2(t.x, t.z, 993) * 0.35;
-      if (t.kind === 'pine'){
+      if (t.kind === 'bush'){
+        // Three overlapping rounded masses at different heights — a shrub, rather
+        // than the 3x3 green cube the raw voxels make.
+        const bh = 0.8 + t.trunk*0.55;
+        push('bushTop', x,        base + bh*0.42, z,        1.9*jitter, bh, 1.9*jitter, yaw, tilt);
+        push('bushTop', x - 0.55, base + bh*0.30, z + 0.45, 1.35*jitter, bh*0.72, 1.35*jitter, yaw+2.0, tilt);
+        push('bushTop', x + 0.5,  base + bh*0.34, z - 0.4,  1.25*jitter, bh*0.66, 1.25*jitter, yaw+4.1, tilt);
+      } else if (t.kind === 'snag'){
+        // A dead tree: a tapered spar, snapped off at the top, with a couple of
+        // broken limbs. Narrow at the base so it never reads as a fence post.
+        push('trunk', x, base + h*0.45, z, 0.62, h*0.95, 0.62, yaw, tilt);
+        push('trunk', x, base + h*0.92, z, 0.34, h*0.30, 0.34, yaw+0.7, tilt*2.2);
+        push('trunk', x + 0.42, base + h*0.62, z, 0.62, 0.20, 0.20, yaw+1.2, 0.5);
+        if (jitter > 1.05)
+          push('trunk', x - 0.36, base + h*0.44, z + 0.2, 0.5, 0.18, 0.18, yaw+3.4, -0.45);
+      } else if (t.kind === 'pine'){
         push('trunk', x, base + h*0.5, z, 0.75, h+1.2, 0.75, yaw, tilt);
         for (let i=0;i<3;i++){
           const f = i/2;
@@ -3121,11 +3168,14 @@ function makeWaymark(tier){
     m.position.y = y; m.rotation.y = rot; m.castShadow = true; return m;
   };
   if (tier <= 1){                                  // a cairn — someone passed here
+    // The rag shares the YAW of the stone it is tied round and is narrower than it.
+    // At a different angle a 0.5 box has a 0.71 diagonal, so it speared straight
+    // through the 0.7 stone and stuck out both sides like a skewer.
     g.add(stone(0.9,0.34,0.8, 0.17, 0.3),
           stone(0.7,0.30,0.62, 0.49, 1.1, lich),
           stone(0.46,0.26,0.42, 0.77, 2.2),
           stone(0.26,0.20,0.24, 1.00, 0.6, lich),
-          stone(0.5,0.10,0.5, 0.62, 0.5, rag));           // rag round the middle
+          stone(0.60,0.11,0.52, 0.50, 1.1, rag));         // rag round the middle
   } else if (tier === 2){                          // a standing stone
     g.add(stone(0.62,3.2,0.5, 1.60, 0.35),
           stone(1.1,0.26,0.9, 0.13, 0.9, lich),
@@ -3178,10 +3228,16 @@ function refreshChests(){
     m.rotation.y = hash2(s.x, s.z, SEED+9)*6.28;
     if (player.q.chests && player.q.chests[s.id]) m.userData.lid.rotation.x = -1.5;
     scene.add(m);
-    // the marker that makes it findable, set a pace off so it doesn't hide the chest
+    // The marker stands a pace off so it doesn't hide the chest — which means it
+    // stands on DIFFERENT GROUND. Placing it at the chest's height left cairns
+    // floating in the air on any slope. Sample the surface under the marker itself.
     const w = makeWaymark(s.tier);
     const wa = hash2(s.z, s.x, SEED+11)*6.28;
-    w.position.set(s.x+0.5 + Math.cos(wa)*1.4, s.y, s.z+0.5 + Math.sin(wa)*1.4);
+    // Search DOWN from just above the chest's own level, not from the sky: surfaceY
+    // would find the hilltop above a barrow cache and plant its cairn on the roof.
+    const wx = s.x + 0.5 + Math.cos(wa)*1.4, wz = s.z + 0.5 + Math.sin(wa)*1.4;
+    const wy = groundAt(Math.floor(wx), s.y + 3, Math.floor(wz), 8);
+    w.position.set(wx, wy === null ? s.y : wy, wz);
     w.rotation.y = wa;
     scene.add(w);
     chests.push({ ...s, mesh:m, mark:w });
