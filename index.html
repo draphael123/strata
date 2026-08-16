@@ -3769,31 +3769,75 @@ function tickAudio(dt){
 // Streamed via HTMLAudioElement rather than decoded into WebAudio: these are
 // minutes-long tracks and there's no reason to hold them in memory. Three beds,
 // crossfaded — the wood, the barrow, and a fight.
-const MUSIC = { t:{}, want:null, ready:false };
-const MUSIC_SRC = { explore:'audio/explore.ogg', barrow:'audio/barrow.ogg', battle:'audio/battle.mp3' };
-function musicInit(){
-  if (MUSIC.ready) return;
-  for (const k of Object.keys(MUSIC_SRC)){
+// ═══════════════════════════════ MUSIC ══════════════════════════════════════
+// Eight CC0 tracks (credits in README), each re-encoded as a short loop whose end
+// is crossfaded onto its own beginning, so the wrap is inaudible — a plain trim
+// clicks and a fade-out leaves a hole every time the element restarts. All eight
+// are loudness-matched, because they come from eight different uploads and
+// without that the game lurches in volume every time it changes context.
+//
+// ⚠️ LAZY. Preloading everything meant 17MB before the title screen would play a
+// note. A track is fetched the first time something actually asks for it.
+const MUSIC = { t:{}, want:null, ready:false, faded:{} };
+const MUSIC_SRC = {
+  menu:    'audio/menu.ogg',           // the title screen
+  day:     'audio/day.ogg',            // overworld, full light
+  dusk:    'audio/dusk.ogg',           // overworld, the light going or coming
+  night:   'audio/night.ogg',          // overworld, dark — the lamplighter's shift
+  barrow:  'audio/barrow.ogg',         // underground
+  battle:  'audio/battle.ogg',         // an ordinary fight
+  battle_night: 'audio/battle_night.ogg',   // a fight after dark
+  battle_boss:  'audio/battle_boss.ogg',    // Aelthwyn, and whatever comes after her
+};
+function musicInit(){ MUSIC.ready = true; musicTrack(musicWant()); }
+// Fetch on demand and remember it.
+function musicTrack(k){
+  if (!k || !MUSIC_SRC[k]) return null;
+  let a = MUSIC.t[k];
+  if (!a){
     try {
-      const a = new Audio(MUSIC_SRC[k]);
+      a = new Audio(MUSIC_SRC[k]);
       a.loop = true; a.volume = 0; a.preload = 'auto';
       MUSIC.t[k] = a;
-    } catch(e){}
+    } catch(e){ return null; }
   }
-  MUSIC.ready = true;
+  return a;
+}
+// Is there a boss in this fight? Bosses are flagged by carrying an `eliteFor`,
+// which is how the errand system already identifies a named quarry.
+function bossPresent(){
+  return CB.active && CB.order.some(a => !a.isPlayer && a.alive && a.eliteFor);
+}
+function musicWant(){
+  if (G.mode === 'title') return 'menu';
+  if (G.mode === 'combat'){
+    if (bossPresent()) return 'battle_boss';
+    // Underground counts as night: there is no sun down there either, and the
+    // barrow is where the dark-fight track belongs most.
+    const underground = inBarrow(player.pos.x, player.pos.z) && player.pos.y < BARROW_FLOOR + 10;
+    return (underground || daylight() < 0.35) ? 'battle_night' : 'battle';
+  }
+  if (inBarrow(player.pos.x, player.pos.z) && player.pos.y < BARROW_FLOOR + 10) return 'barrow';
+  // The overworld follows the light, which is the thing this game is about. The
+  // bands are deliberately wide at the edges so dusk gets a real turn rather
+  // than being a two-minute crossfade between day and night.
+  const d = daylight();
+  if (d > 0.72) return 'day';
+  if (d > 0.16) return 'dusk';
+  return 'night';
 }
 function tickMusic(dt){
   if (!MUSIC.ready) return;
-  // what should be playing right now
-  let want = 'explore';
-  if (G.mode === 'combat') want = 'battle';
-  else if (inBarrow(player.pos.x, player.pos.z) && player.pos.y < BARROW_FLOOR + 10) want = 'barrow';
-  if (G.mode === 'title') want = 'explore';
-  MUSIC.want = want;
+  const want = musicWant();
+  if (want !== MUSIC.want){ MUSIC.want = want; musicTrack(want); }
   for (const k of Object.keys(MUSIC.t)){
     const a = MUSIC.t[k];
     const target = (k === want && SETTINGS.music) ? SETTINGS.musicVol : 0;
-    const v = a.volume + (target - a.volume) * Math.min(1, dt*0.9);
+    // Slower than it was: at 0.9 a walk through dusk audibly wobbled between two
+    // tracks. Rising a little faster than falling keeps a gap out of the middle
+    // of a crossfade.
+    const rate = target > a.volume ? 0.55 : 0.40;
+    const v = a.volume + (target - a.volume) * Math.min(1, dt*rate);
     a.volume = clamp(v, 0, 1);
     if (target > 0.001 && a.paused) a.play().catch(()=>{});
     else if (a.volume < 0.005 && !a.paused && target === 0) a.pause();
@@ -8953,7 +8997,8 @@ window.STRATA = {
   standable, surfaceY, reachable, hasLOS, planApproach, nextWaymark, trait,
   attack: resolveAttack, cast: castSpell, applyBuild, derive, knockback,
   tickStatus, applyStatus, KINDS, STATUS, AUD, SFX, audioInit, rebuildTrees, WIND,
-  MUSIC, musicInit, tickMusic, IS_TOUCH, TOUCH, initTouch,
+  MUSIC, musicInit, tickMusic, musicWant, musicTrack, bossPresent, MUSIC_SRC,
+  IS_TOUCH, TOUCH, initTouch,
   threatOf, drawThreat, tReach, tThreat, save:saveGame, load:loadGame,
   keys, get pendingClick(){ return pendingClick; },
   isNight, randomKind, SUN_DIR, sunLight:sun, SETTINGS, ITEMS, giveItem,

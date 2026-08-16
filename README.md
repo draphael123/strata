@@ -393,12 +393,45 @@ high ground is a ±25%/15% damage swing. Elevation was moved to things that are
 BUILT — rampart walks, ruin steps, boulder tops, the barrow dais. Whether a fight
 still has usable height in it is a playtest question, not a measured one.
 
-## Audio credits
+## Music
 
-Music is CC0 from OpenGameArt and streamed from `audio/`:
+Eight tracks, all **CC0** from [OpenGameArt](https://opengameart.org/), lazily
+fetched from `audio/` the first time each is actually wanted.
 
-- `explore.ogg` — *Creepy Forest F* by Brandon Morris (CC0)
-- `barrow.ogg` — *Cave Theme* by brandon75689 (CC0)
-- `battle.mp3` — *Battle Theme A* by cynicmusic (CC0)
+| file | when it plays | track | author |
+|---|---|---|---|
+| `menu.ogg` | the title screen | *Breves dies hominis* | ceninan |
+| `day.ogg` | overworld, full light | *Unexplored Expansion* | Bo Jingles |
+| `dusk.ogg` | overworld, light going or coming | *The Field Of Dreams* | pauliuw |
+| `night.ogg` | overworld, dark | *Creepy Forest F* | Brandon Morris |
+| `barrow.ogg` | underground | *Cave Theme* | brandon75689 |
+| `battle.ogg` | an ordinary fight | *Battle Theme A* | cynicmusic |
+| `battle_night.ogg` | a fight after dark, or underground | *Determined Pursuit* | Emma_MA |
+| `battle_boss.ogg` | Aelthwyn, and whatever comes after her | *Boss Fight* | Lisboa |
+
+Most were found through the [CC0 Fantasy Music & Sounds](https://opengameart.org/content/cc0-fantasy-music-sounds)
+collection. Every licence was checked on the source page's own licence field, not
+inferred from the collection.
+
+### How they were prepared
+
+Each is cut to a 60–100 second loop, and the loop is **genuinely seamless**: the
+seconds after the cut point are crossfaded back onto the track's own opening, so
+the wrap has no join in it. A plain trim clicks, and a fade-out/fade-in leaves an
+audible hole every time the audio element restarts. All eight are then
+loudness-matched to −18 LUFS — they come from eight different uploads, and
+without that the game lurches in volume every time it changes context.
+
+Total audio is **7.2 MB**, down from 17 MB when there were only three tracks and
+all of them preloaded before the title screen would play a note.
+
+### What picks the track
+
+- **Overworld** follows the light, because that is what this game is about:
+  `daylight() > 0.72` day, `> 0.16` dusk, else night.
+- **Combat** is ordinary / after-dark / boss. Underground counts as after-dark —
+  there is no sun down there either. A boss is anything carrying `eliteFor`,
+  which is how the errand system already marks a named quarry.
+- **The barrow** keeps its own exploration theme on the existing location test.
 
 Sound effects are procedural WebAudio, generated at runtime — no files.
