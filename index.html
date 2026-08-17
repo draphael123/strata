@@ -2891,6 +2891,19 @@ const matPost = new THREE.ShaderMaterial({
       // Saturation back by a third, everything pulled toward warm grey and
       // ochre, and the darks lifted onto a paper tone rather than crushed to
       // black — a print has no true black in its midtones, it has ink density.
+      // ⚠️ TONEMAP FIRST. The scene buffer is half-float and genuinely HDR — the
+      // sky shader draws the sun as uSunCol * pow(sd,900) * 2.2, and braziers,
+      // beacons and the lantern all push past 1. The grade below finishes with a
+      // smoothstep contrast curve, g*g*(3-2g), which is only valid on [0,1]: at
+      // g=2 it evaluates to MINUS FOUR. So the brightest thing in frame was
+      // driven negative and clamped to black, and since red and green blew past
+      // 1 while blue (lowest channel in a warm colour) stayed under, what
+      // survived was BLUE. The sun rendered as a cyan ring round a dark navy
+      // core, and the dark core then read as shadow and got HATCHED.
+      // Compress into [0,1] before anything shapes the curve.
+      col = col / (1.0 + col);                     // Reinhard
+      col *= 1.32;                                 // regain the range it costs
+
       if (uGrade > 0.001){
         float l = dot(col, vec3(0.2126,0.7152,0.0722));
         vec3 g = mix(col, vec3(l), 0.34 * uGrade);
@@ -5290,8 +5303,22 @@ function headGeo(w){
   g.computeVertexNormals();
   return g;
 }
+// Where the head's surface actually is, at a given height up the face. headGeo()
+// squashes the sphere per-axis, so this has to mirror that squash exactly.
+function faceDepthAt(w, yLocal){
+  const R = w*0.54;
+  const t = clamp((yLocal/R + 1) * 0.5, 0, 1);        // 0 chin -> 1 crown
+  const ySq = 1.04 - t*0.10;
+  const ring = Math.sqrt(Math.max(0, 1 - Math.pow(clamp(yLocal/(R*ySq), -1, 1), 2)));
+  return R * ring * (0.76 + t*0.20) * 0.90;          // the front-facing squash
+}
 function addFace(head, w, o={}){
-  const d = o.depth !== undefined ? o.depth : w*0.5;
+  // ⚠️ The head used to be a CUBE, where the face plane was flat at w*0.5. It is
+  // now a shaped sphere whose front-most point is nearer than that, so every eye,
+  // brow and mouth was hanging about 4cm off the front of the face — very
+  // visible now that the camera orbits round to look at it. The face has to
+  // follow the surface, and the surface curves away with height.
+  const d = o.depth !== undefined ? o.depth : faceDepthAt(w, 0);
   const eyeCol = o.eyeCol || 0x241c14;
   const glow = !!o.eyeCol && o.eyeCol !== 0x241c14 && o.eyeCol !== 0x2a2016;
   // Eyes were w*0.20 wide with a white backing 1.35x bigger again — on a head
@@ -5305,17 +5332,17 @@ function addFace(head, w, o={}){
     if (!o.small && !glow){
       const wsl = new THREE.Mesh(_faceGeo, _eyeWhiteMat);
       wsl.scale.set(ew*1.22, eh*1.18, w*0.04);
-      wsl.position.set(s*ex, ey, d - w*0.005);
+      wsl.position.set(s*ex, ey, faceDepthAt(w, ey)*0.985 - w*0.004);
       head.add(wsl);
     }
     const eye = new THREE.Mesh(_faceGeo, faceMat(eyeCol, glow));
     eye.scale.set(ew, eh, w*0.06);
-    eye.position.set(s*ex, ey, d + w*0.01);
+    eye.position.set(s*ex, ey, faceDepthAt(w, ey)*0.985 + w*0.008);
     head.add(eye);
     if (o.brow){
       const brow = new THREE.Mesh(_faceGeo, faceMat(0x3a2a1c, false));
       brow.scale.set(ew*1.5, w*0.055, w*0.05);
-      brow.position.set(s*ex, ey + eh*1.15, d);
+      brow.position.set(s*ex, ey + eh*1.15, faceDepthAt(w, ey + eh*1.15)*0.985);
       brow.rotation.z = s * -0.12;
       head.add(brow);
     }
@@ -5323,7 +5350,7 @@ function addFace(head, w, o={}){
   if (o.brow){                                     // a plain line of a mouth
     const m = new THREE.Mesh(_faceGeo, faceMat(0x8a5f4a, false));
     m.scale.set(w*0.26, w*0.045, w*0.05);
-    m.position.set(0, -w*0.16, d);
+    m.position.set(0, -w*0.16, faceDepthAt(w, -w*0.16)*0.985);
     head.add(m);
   }
 }
