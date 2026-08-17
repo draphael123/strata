@@ -90,8 +90,44 @@
   .slot .sw{width:22px;height:22px;border-radius:3px;border:1px solid rgba(0,0,0,.45)}
   .slot .k{position:absolute;top:1px;left:4px;font-size:9px;color:#7d8798}
 
-  #compass{position:absolute;left:50%;top:12px;transform:translateX(-50%);
-    font-size:11px;letter-spacing:.24em;color:#b9c2d0;text-shadow:0 2px 6px #000}
+  /* the bearing strip */
+  #compass{position:absolute;left:50%;top:10px;transform:translateX(-50%);
+    width:min(560px,60vw);height:24px;pointer-events:none;
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);
+            mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
+  #compass::after{content:'';position:absolute;left:50%;top:20px;width:1px;height:6px;
+    background:rgba(232,226,212,.75);transform:translateX(-50%)}
+  #compass .cq{position:absolute;top:6px;transform:translateX(-50%);
+    font-size:9.5px;letter-spacing:.14em;color:#7d8798;text-shadow:0 2px 6px #000}
+  #compass .cq.card{font-size:12px;color:#d8cbb0;font-weight:600}
+  #compass .cm{position:absolute;top:0;transform:translateX(-50%);
+    font-size:13px;line-height:1;text-shadow:0 2px 6px #000;text-align:center;white-space:nowrap}
+  #compass .cm i{display:block;font-style:normal;font-size:8.5px;color:#9aa4b4;
+    font-variant-numeric:tabular-nums;margin-top:1px}
+  #compass .cm.main{font-size:15px}
+  /* the lamp: a drawn lantern, not a bar */
+  /* clear of the vitals panel, which sits in the bottom-left corner */
+  #lamp{position:absolute;left:22px;bottom:206px;width:52px;height:74px;pointer-events:none;z-index:21}
+  #lampGlass{position:absolute;left:11px;top:12px;width:30px;height:38px;border-radius:5px 5px 3px 3px;
+    background:linear-gradient(#3a2f22,#231c14);border:1px solid #6d5a3c;overflow:hidden}
+  #lampFlame{position:absolute;left:50%;bottom:3px;transform:translateX(-50%);
+    width:14px;border-radius:50% 50% 40% 40%;background:linear-gradient(#fff0c0,#ff9a2e 55%,#c2551c);
+    box-shadow:0 0 14px 4px rgba(255,150,50,.55);transition:height .35s, opacity .35s}
+  #lampCap{position:absolute;left:8px;top:6px;width:36px;height:7px;border-radius:2px;background:#6d5a3c}
+  #lampBase{position:absolute;left:8px;top:50px;width:36px;height:7px;border-radius:2px;background:#6d5a3c}
+  #lampHoop{position:absolute;left:24px;top:0;width:4px;height:8px;border:1px solid #6d5a3c;border-bottom:none}
+  #lampN{position:absolute;left:0;top:60px;width:52px;text-align:center;font-size:10px;
+    color:#c9a86a;font-variant-numeric:tabular-nums;text-shadow:0 2px 6px #000}
+  #lamp.dry #lampFlame{opacity:0}
+  #lamp.shut #lampFlame{opacity:.18}
+  #lamp.low #lampFlame{animation:gutter .7s infinite}
+  @keyframes gutter{0%,100%{opacity:1;transform:translateX(-50%) scaleY(1)}
+                    45%{opacity:.55;transform:translateX(-50%) scaleY(.72)}}
+  /* how findable you are */
+  #seen{position:absolute;left:86px;bottom:230px;font-size:10px;letter-spacing:.14em;z-index:21;
+    text-transform:uppercase;text-shadow:0 2px 6px #000;line-height:1.6}
+  #seenState{font-weight:700}
+  #seenWho{color:#cf5a4c;font-size:9.5px;letter-spacing:.1em}
   #coords{position:absolute;right:18px;top:12px;font-size:11px;color:#8b95a5;
     text-align:right;line-height:1.7;font-variant-numeric:tabular-nums;text-shadow:0 2px 6px #000}
 
@@ -447,7 +483,11 @@
 <div id="app"></div>
 
 <div id="hud">
-  <div id="compass">N</div>
+  <div id="compass"></div>
+  <div id="lamp"><div id="lampHoop"></div><div id="lampCap"></div>
+    <div id="lampGlass"><div id="lampFlame"></div></div>
+    <div id="lampBase"></div><div id="lampN"></div></div>
+  <div id="seen"><div id="seenState"></div><div id="seenWho"></div></div>
   <div id="clock"></div>
   <div id="coords"></div>
   <div id="cross"></div>
@@ -8269,9 +8309,88 @@ function updateTags(dt){
   }
 }
 const COMPASS = ['N','NE','E','SE','S','SW','W','NW'];
+// ── the bearing strip ───────────────────────────────────────────────────────
+// A single letter told you which way you faced and nothing about where anything
+// was, so orientation meant opening the map. The strip is a band of the compass
+// with everything you have been TOLD about pinned to its real bearing — the same
+// rule as the map marks: told about, it shows; have to find it, it doesn't.
+// 90 degrees of arc across the band, so things slide past as you turn.
+const STRIP_ARC = 96;
+function drawCompassStrip(){
+  const el = document.getElementById('compass');
+  if (!el) return;
+  const face = ((-viewYaw() * 180/Math.PI) % 360 + 360) % 360;
+  const rel = (a)=>{ let d = ((a - face + 540) % 360) - 180; return d; };
+  let html = '';
+  // cardinals
+  for (let a=0; a<360; a+=45){
+    const d = rel(a);
+    if (Math.abs(d) > STRIP_ARC/2) continue;
+    const x = 50 + (d / STRIP_ARC) * 100;
+    const c = COMPASS[Math.round(a/45) % 8];
+    html += `<span class="cq ${c.length===1?'card':''}" style="left:${x}%">${c}</span>`;
+  }
+  // and the things worth steering by
+  if (G.mode === 'explore'){
+    for (const mk of mapMarks()){
+      if (!mk.pierce) continue;
+      const bearing = (Math.atan2(mk.x - player.pos.x, -(mk.z - player.pos.z)) * 180/Math.PI + 360) % 360;
+      const d = rel(bearing);
+      if (Math.abs(d) > STRIP_ARC/2) continue;
+      const x = 50 + (d / STRIP_ARC) * 100;
+      const dist = Math.round(Math.hypot(mk.x-player.pos.x, mk.z-player.pos.z));
+      const glyph = mk.s === 'town' ? '⌂' : mk.s === 'barrow' ? '☗'
+                  : mk.s === 'fire' ? '✶' : mk.s === 'beacon' ? '♦' : '◈';
+      html += `<span class="cm ${mk.main?'main':''}" style="left:${x}%;color:${mk.c}">
+        ${glyph}<i>${dist}</i></span>`;
+    }
+  }
+  el.innerHTML = html;
+}
+// ── the lamp, and how findable you are ─────────────────────────────────────
+// The hook is that light makes you visible, and both halves of that were bars of
+// coloured pixels. The lamp is now a drawn lantern whose flame shrinks and
+// gutters as the oil goes, and the visibility readout says in words what the
+// creatures are actually reading off you — the same playerLight() they use.
+function drawLamp(){
+  const el = document.getElementById('lamp');
+  if (!el || !player.q) return;
+  const oil = Math.round(player.q.oil||0), frac = clamp(oil/OIL_MAX, 0, 1);
+  const on = lanternOn();
+  el.classList.toggle('dry', oil <= 0);
+  el.classList.toggle('shut', !on && oil > 0);
+  el.classList.toggle('low', on && frac < 0.22 && oil > 0);
+  const f = document.getElementById('lampFlame');
+  f.style.height = (6 + frac*22).toFixed(1) + 'px';
+  document.getElementById('lampN').textContent = oil;
+}
+function drawSeen(){
+  const el = document.getElementById('seenState'), who = document.getElementById('seenWho');
+  if (!el) return;
+  if (G.mode !== 'explore'){ el.textContent = ''; who.textContent = ''; return; }
+  // the same number the creatures read off you
+  const v = playerLight();
+  const inCover = concealed && concealed(player.pos.x, player.pos.z);
+  const label = v > 0.66 ? ['Lit — easily seen', '#ff9a6a']
+              : v > 0.34 ? ['Half-lit', '#e0c07a']
+              : inCover  ? ['Hidden in cover', '#9ac25c']
+              :            ['Dark — hard to find', '#8fbf6a'];
+  el.textContent = label[0];
+  el.style.color = label[1];
+  // and who has actually noticed
+  let n = 0, nearest = null, nd = 1e9;
+  for (const e of entities){
+    if (!e.alive || e.critter || !e.spotted) continue;
+    n++;
+    const d = Math.hypot(e.px-player.pos.x, e.pz-player.pos.z);
+    if (d < nd){ nd = d; nearest = e; }
+  }
+  who.textContent = n ? `${nearest.name} has seen you · ${Math.round(nd)}m` : '';
+}
 function updateHudText(){
-  const deg = ((-viewYaw() * 180/Math.PI) % 360 + 360) % 360;
-  document.getElementById('compass').textContent = COMPASS[Math.round(deg/45) % 8];
+  drawCompassStrip();
+  drawLamp();
+  drawSeen();
   const p = player.pos;
   document.getElementById('coords').innerHTML =
     `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}<br>
