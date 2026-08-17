@@ -241,6 +241,31 @@
     color:var(--gold);font-size:14px;line-height:1;padding:0}
   .plus:hover:not(:disabled){background:rgba(216,180,90,.34)}
   .plus:disabled{opacity:.25;cursor:default}
+  /* resting */
+  #restveil{position:fixed;inset:0;z-index:38;display:none;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 50% 55%, rgba(28,16,6,.35), rgba(6,7,10,.93));
+    animation:restIn .5s ease}
+  #restveil.on{display:flex}
+  @keyframes restIn{from{opacity:0}to{opacity:1}}
+  .rw{text-align:center}
+  #restwhere{font-size:13px;letter-spacing:.20em;text-transform:uppercase;color:#d8b98a}
+  #restclock{font-size:52px;letter-spacing:.06em;color:#f0dcb4;margin:10px 0 4px;
+    font-variant-numeric:tabular-nums;text-shadow:0 0 26px rgba(255,170,80,.35)}
+  .rh{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8a7a62}
+  /* a notice that waits to be read */
+  #notice{position:fixed;inset:0;z-index:44;display:none;align-items:center;justify-content:center;
+    background:rgba(6,8,12,.55)}
+  #notice.on{display:flex}
+  .nbox{width:min(430px,86vw);padding:20px 22px 18px;border-radius:8px;text-align:left;
+    background:linear-gradient(rgba(30,26,20,.98),rgba(17,15,12,.99));
+    border:1px solid rgba(216,180,90,.45);box-shadow:0 18px 60px rgba(0,0,0,.6)}
+  #noticeTitle{font-size:12px;letter-spacing:.20em;text-transform:uppercase;color:var(--gold);
+    margin-bottom:9px}
+  #noticeBody{font-size:12.5px;color:#cfc7b6;line-height:1.55}
+  .nrow{display:flex;justify-content:space-between;padding:4px 0;
+    border-bottom:1px solid rgba(255,255,255,.07);font-size:12.5px;color:#cfc7b6}
+  .nrow:last-child{border-bottom:none}
+  #noticeOk{margin-top:14px}
   .bsw{width:26px;height:26px;flex:0 0 26px;border-radius:5px;border:2px solid;margin-top:2px}
   /* the field spellbar — explore mode only */
   #spellbar{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);
@@ -446,6 +471,10 @@
   <div id="quests"></div>
   <div id="ptspip"></div>
   <div id="spellbar"></div>
+  <div id="restveil"><div class="rw"><div id="restwhere"></div><div id="restclock"></div>
+    <div class="rh">the fire burns down</div></div></div>
+  <div id="notice"><div class="nbox"><div id="noticeTitle"></div>
+    <div id="noticeBody"></div><button class="btn small" id="noticeOk">Go on</button></div></div>
   <div id="prompt"></div>
   <div id="eye"></div>
 </div>
@@ -1802,12 +1831,17 @@ function structures(){
     return Math.abs(((px-HOME.x)*az - (pz-HOME.z)*ax) / L) < 4.2;
   };
   // dx, dz, w, d, h, kind
+  // ⚠️ The SHOP used to sit at [-14, 2], which is barely twelve paces inside the
+  // gate — so the first person you met on entering Fendmere was a merchant, and
+  // the gatewarden read as scenery you walked past. The shop is now across the
+  // square on the far side from the road, and you meet Aldith first, as you
+  // should at a gate.
   const HOUSES = [
     [-13,-11, 9, 7, 5, 'hall'],     // the reeve's hall — the biggest roof in town
     [ -4,-13, 7, 6, 4, 'house'],
-    [  6,-11, 6, 5, 4, 'house'],
+    [  4,-12,10, 6, 4, 'shop'],     // Hess's, long and low, far side from the gate
     [ 13, -4, 8, 7, 5, 'inn'],      // the Kettle
-    [-14,  2,10, 6, 4, 'shop'],     // Hess's, long and low
+    [-14,  2, 6, 5, 4, 'house'],
     [ -5,  8, 6, 6, 4, 'house'],
     [  5,  9, 7, 5, 3, 'house'],
     [ 14,  7, 5, 5, 3, 'house'],
@@ -3224,6 +3258,9 @@ function toggleView(){
 const BEACON_R = 22;                          // a lit beacon holds this much road
 const LANTERN_R = 9;
 const OIL_MAX = 100;
+// The gatewarden sells oil, which puts a resupply point exactly where a
+// lamplighter wants one: on the way out.
+const OIL_PRICE = 9;
 const OIL_BURN = 1.35;                        // per second of night, lantern lit
 const BEACON_COST = 24;                       // you give up your OWN light to set one
 // 0 at midnight, 1 in full day — the same curve the sky keys ride.
@@ -4766,23 +4803,104 @@ function tickCurfew(){
 }
 
 let restT = 0;
+// ── resting ─────────────────────────────────────────────────────────────────
+// This used to be a keypress and a toast that was gone before you read it, which
+// is a strange way to treat the one moment in the game where you deliberately
+// stop. Sitting down is now a MOMENT: the figure sits, the world dims, the hour
+// visibly runs forward, and you are told plainly what it gave you.
+const REST = { on:false, t:0, dur:3.0, from:0, to:0, hearth:null, gained:null };
 function sitAt(h){
+  if (REST.on) return;
   if (hostilesAdjacent && hostilesAdjacent()){ toast('Not with something on you.', 2); return; }
   const full = player.hp >= player.maxHp && player.mana >= player.maxMana
             && (player.q.oil||0) >= OIL_MAX;
   if (full){ toast(`You sit a while at ${h.name}. Nothing to mend.`, 2.6); return; }
-  player.hp = player.maxHp;
-  player.mana = player.maxMana;
   // A fire in town or at camp refills the lamp; a beacon out in the vale only
   // tops it up, or you would never have to come home.
   const give = h.kind === 'beacon' ? 34 : OIL_MAX;
-  player.q.oil = Math.min(OIL_MAX, (player.q.oil||0) + give);
-  // Time passes. Four hours of it, which is the real cost of stopping.
-  G.tod = (G.tod + 0.17) % 1;
-  restT = 1.4;
-  SFX.heal(); boom(Math.floor(h.x), Math.floor(h.y)+1, Math.floor(h.z), 0xffb35e);
-  toast(`You rest at ${h.name}. Vigour, mana and lamp restored — and the hour has moved on.`, 4);
+  REST.gained = {
+    hp:   Math.round(player.maxHp - player.hp),
+    mana: Math.round(player.maxMana - player.mana),
+    oil:  Math.round(Math.min(OIL_MAX, (player.q.oil||0) + give) - (player.q.oil||0)),
+    hours: 4,
+  };
+  REST.on = true; REST.t = 0; REST.hearth = h;
+  REST.from = G.tod; REST.to = G.tod + 0.17;      // four hours, run forward visibly
+  player.vel.set(0,0,0);
+  if (locked) document.exitPointerLock();
+  setAnim(player, 'sit', REST.dur);
+  SFX.heal();
+  document.getElementById('restveil').classList.add('on');
+  document.getElementById('restwhere').textContent = `Resting at ${h.name}`;
+  document.getElementById('restclock').textContent = '';
+  // No lesson here on purpose. It fired at the START of the rest and covered the
+  // clock — which is the one part worth watching — and the summary at the end
+  // already says "+4 hours". Showing the cost beats explaining it.
+}
+function tickRest(dt){
+  if (!REST.on) return;
+  REST.t += dt;
+  const k = clamp(REST.t / REST.dur, 0, 1);
+  // ease the hours forward rather than snapping them
+  G.tod = (REST.from + (REST.to - REST.from) * (k*k*(3-2*k))) % 1;
+  const hh = Math.floor(G.tod*24), mm = Math.floor((G.tod*24 % 1) * 60);
+  document.getElementById('restclock').textContent =
+    String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+  if (REST.t < REST.dur) return;
+  // ── done ──
+  const h = REST.hearth, g = REST.gained;
+  player.hp = player.maxHp;
+  player.mana = player.maxMana;
+  player.q.oil = Math.min(OIL_MAX, (player.q.oil||0) + (h.kind === 'beacon' ? 34 : OIL_MAX));
+  REST.on = false; restT = 1.4;
+  document.getElementById('restveil').classList.remove('on');
+  boom(Math.floor(h.x), Math.floor(h.y)+1, Math.floor(h.z), 0xffb35e);
+  // A summary you can actually read, rather than a toast that outran you.
+  const rows = [
+    g.hp   > 0 ? ['Vigour', '+' + g.hp, '#cf5a4c'] : null,
+    g.mana > 0 ? ['Mana',   '+' + g.mana, '#6ea8e0'] : null,
+    g.oil  > 0 ? ['Lamp oil','+' + g.oil, '#e0a24a'] : null,
+    ['The hour', '+4 hours', '#8d97a7'],
+  ].filter(Boolean);
+  showNotice(`You rested at ${h.name}`, rows.map(r=>
+    `<div class="nrow"><span>${r[0]}</span><b style="color:${r[2]}">${r[1]}</b></div>`).join(''));
   drawVitals(); saveGame();
+  if (G.mode === 'explore' && !IS_TOUCH) document.getElementById('lockmsg').style.display = 'flex';
+}
+// A small panel that waits to be dismissed, for the things a toast loses.
+function showNotice(title, bodyHtml){
+  const el = document.getElementById('notice');
+  document.getElementById('noticeTitle').textContent = title;
+  document.getElementById('noticeBody').innerHTML = bodyHtml;
+  el.classList.add('on');
+}
+function closeNotice(){ document.getElementById('notice').classList.remove('on'); }
+
+// ── teaching, once ──────────────────────────────────────────────────────────
+// Dark-Souls-ish: the game notices something has happened for the FIRST time and
+// says one short thing about it, naming the key and why you would care. It never
+// repeats, and it is remembered in the save, so a returning player is not
+// lectured about the lantern again.
+const TEACH = {
+  lantern:  ['Your lamp', 'L shutters it. Lit, you can work — and things find you from half a field away. Shuttered, you are hard to see and nearly blind.'],
+  night:    ['Dark', 'This is the shift you were hired for. Light a waymark with E and it stays lit — but the oil comes out of your own lamp.'],
+  potion:   ['Something to drink', 'Open Items in a fight to use it. It costs you your action, so drinking is a turn you did not spend swinging.'],
+  levelup:  ['You are stronger', 'Press C and spend the attribute points. They are permanent, and they open weapons and spells you cannot use yet.'],
+  flanked:  ['They got behind you', 'Rear and flank attacks hit far harder. Put something solid at your back, or spend an action on Guard.'],
+  waymark:  ['Cut stone', 'Someone marked this place. E lights a beacon here — twenty-four oil out of your lamp, and this ground stays lit at midnight.'],
+  errand:   ['Work in hand', 'J shows what you are carrying and where it is. The map marks it too, even in ground you have not walked.'],
+  creature: ['Something new', 'B opens the bestiary. It fills in as you fight, and tells you more about a kind the more of them you put down.'],
+  lowoil:   ['The lamp is guttering', 'Rest at a fire to fill it, or buy a flask from the gatewarden. Caught out here with a dry lamp is how people disappear.'],
+  rest:     ['Sitting a while', 'Resting mends you and fills the lamp, and it costs you four hours. Time is the real price of stopping.'],
+  combat:   ['A fight', 'Everything freezes on the grid you were standing on. Move with the blue tiles, then pick one thing to do — high ground, cover and what is at your back all count.'],
+};
+function teach(key){
+  const t = TEACH[key];
+  if (!t) return;
+  if (!player.taught) player.taught = {};
+  if (player.taught[key]) return;
+  player.taught[key] = 1;
+  showNotice(t[0], `<div class="od3" style="line-height:1.6">${t[1]}</div>`);
 }
 
 // You light the vale with oil out of your own lamp. That is the whole trade the
@@ -5463,8 +5581,13 @@ function buildTownsfolk(){
     // actually look for them.
     { role:'reeve', name:'Reeve Ordwin', color:0x6b5f8a, hat:0x3d3550, dx:-9, dz:-14,
       line:'Fendmere always has work. Little of it pleasant.' },
-    { role:'quartermaster', name:'Quartermaster Hess', color:0x7a5a3a, hat:0x4e3a24, dx:-10, dz: 0,
+    { role:'quartermaster', name:'Quartermaster Hess', color:0x7a5a3a, hat:0x4e3a24, dx: 8, dz:-13,
       line:'Coin first. Then we talk about what I keep in the back.' },
+    // The notice board. Not a person, so it gets no body — but it lives in the
+    // same list because that is what nearestFolk() searches and what E opens,
+    // and a board you can read is exactly a thing you walk up to and talk to.
+    { role:'board', name:'The notice board', noMesh:true, dx:-2, dz:-6,
+      line:'Errands, nailed up and weathered.' },
     { role:'innkeeper', name:'Maerin of the Kettle', color:0x8a5a5a, hat:0x5a3232, dx:16, dz:-6,
       line:'Bed\'s warm, roof\'s sound, and I lock the door at dark. Twelve coin.' },
     // people who simply live here
@@ -5506,9 +5629,11 @@ function buildTownsfolk(){
     if (y === null) y = spawnGroundY(x, z);
     if (y === null) y = surfaceY(x, z);
     if (y === null) continue;
-    const m = makeVillager(s.color, s.hat);
+    // Not everything in this list has a body — the notice board is a place you
+    // can talk to, not a person.
+    const m = s.noMesh ? new THREE.Group() : makeVillager(s.color, s.hat);
     m.position.set(x+0.5, y, z+0.5);
-    scene.add(m);
+    if (!s.noMesh) scene.add(m);
     TOWNSFOLK.push({ ...s, x, y, z, hx:x, hz:z, mesh:m, bob:Math.random()*6,
                      px:x+0.5, pz:z+0.5, py:y, tx:x, tz:z, wait:Math.random()*4 });
   }
@@ -5626,6 +5751,7 @@ function noteSeen(kind){
   if (!player.seenKinds) player.seenKinds = new Set();
   if (player.seenKinds.has(kind)) return;
   player.seenKinds.add(kind);
+  teach('creature');
   toast(`${KINDS[kind].name} added to the bestiary — B`, 3);
 }
 function noteKill(kind){
@@ -5725,6 +5851,7 @@ function acceptErrand(i){
   if (errandsInHand() >= 2){ toast('You can carry two errands'); return; }
   const q = player.q.offers[i];
   if (!q) return;
+  teach('errand');
   q.id = 'q' + (Date.now() % 1e7) + i;
   player.q.active.push(q);
   player.q.offers.splice(i, 1);
@@ -5807,6 +5934,7 @@ const player = {
   weaponId: 'blade', spellId: 'wind',
   bag: {}, worn: [null, null],
   pts: 0,                              // unspent attribute points
+  taught: {},                          // which one-time lessons have been shown
   seenKinds: new Set(), kills: {},      // the bestiary: what you have met, and how often
   q: { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none' },
   look: { skin:1, hair:1, tunic:0, cloak:0 },
@@ -6074,6 +6202,7 @@ addEventListener('keydown', e=>{
       if ((player.q.oil||0) <= 0){ toast('The lamp is dry.', 1.6); return; }
       player.q.lantern = !player.q.lantern;
       SFX.ui();
+      teach('lantern');
       toast(player.q.lantern ? 'Lantern lit — and they can see it.' : 'Lantern shuttered. You go dark.', 2.2);
       drawVitals();
     }
@@ -6386,6 +6515,9 @@ function updateExplore(dt){
   pendingClick = null;
 
   // townsfolk, errand sites, and the "press E" prompt
+  tickRest(dt);
+  if (isNight()) teach('night');
+  if ((player.q.oil||0) < 18 && isNight()) teach('lowoil');
   tickTownsfolk(dt, G.time);
   populateSites();
   const folk = nearestFolk();
@@ -7085,6 +7217,7 @@ function startCombat(trigger){
     SFX.alarm();
     log(`<b>Spotted.</b> ${foes.length} creature${foes.length>1?'s':''} close in.`);
   }
+  teach('combat');
   tutStart();
   drawActs(); drawOrder();
   setHint('Combat — the ground you were standing on is the board.');
@@ -7184,6 +7317,7 @@ function gainXp(n){
     toast('Level ' + player.level);
   }
   if (gained){
+    teach('levelup');
     toast(`${gained} attribute point${gained>1?'s':''} to spend — C`, 5);
     SFX.ui && SFX.ui();
     drawPointsPip();
@@ -8280,7 +8414,93 @@ function drawTown(){
   document.getElementById('tStand').textContent =
     `${t.name} · ${player.q.coin} coin · ${player.q.done} settled`;
 
-  if (townFolk.role === 'reeve'){
+  // ── the notice board ────────────────────────────────────────────────────
+  // Errands live here as well as with the Reeve, so the loop does not depend on
+  // finding one particular man standing in one particular room. He keeps the
+  // barrow commission, your standing and the conversation.
+  if (townFolk.role === 'board'){
+    if (!player.q.offers.length) refreshOffers();
+    const ready = player.q.active.filter(q=>q.have >= q.need).length;
+    const act = player.q.active.map(q=>`
+      <div class="offer ${q.have>=q.need?'done':''}">
+        <span style="flex:1"><div class="on3">${q.title}</div>
+          <div class="od3">${q.desc}</div>
+          <div class="orw">${q.coin} coin · ${q.xp} xp</div></span>
+        <span class="prog">${q.have}/${q.need}</span></div>`).join('')
+      || `<div class="od3">Nothing in hand.</div>`;
+    const off = player.q.offers.map((q,i)=>`
+      <div class="offer">
+        <span style="flex:1"><div class="on3">${q.title}</div>
+          <div class="od3">${q.desc}</div>
+          ${q.why ? `<div class="od3" style="font-style:italic;color:#9aa4b4;margin-top:3px">${q.why}</div>` : ''}
+          <div class="orw">${q.coin} coin · ${q.xp} xp</div></span>
+        <button class="tog" data-take="${i}">Take</button></div>`).join('')
+      || `<div class="od3">Nothing nailed up today.</div>`;
+    body.innerHTML = `
+      <div class="od3" style="font-style:italic;margin-bottom:12px">Notices, nailed up and weathered.
+        Fendmere's business, for anyone who reads.</div>
+      <div class="psec">In hand ${ready?`— <span style="color:#9ac25c">${ready} ready to settle</span>`:''}</div>
+      ${act}
+      ${ready?`<button class="btn small" id="tTurnIn" style="margin:4px 0 12px">Settle ${ready} errand${ready>1?'s':''}</button>`:''}
+      <div class="psec">Posted</div>${off}
+      <div class="psec">Standing</div>
+      <div class="od3">${t.name} — ${t.blurb}</div>`;
+    const ti = document.getElementById('tTurnIn');
+    if (ti) ti.onclick = ()=>{ turnInErrands(); refreshOffers(); drawTown(); };
+    body.querySelectorAll('[data-take]').forEach(b=> b.onclick = ()=> acceptErrand(+b.dataset.take));
+  }
+
+  // ── the gatewarden ──────────────────────────────────────────────────────
+  // He stood at the gate saying one line, which made the gate scenery. A gate is
+  // a place with rules, and he is the man who keeps them.
+  else if (townFolk.role === 'gate'){
+    const open = gateOpen(), night = isNight();
+    const sworn = repIndex() >= 3;
+    const holding = player.q.active.filter(q=>q.have >= q.need).length;
+    const greet = !night
+      ? 'Gate\'s open. Mind how you go — and mind the hour, I shut it at dark.'
+      : sworn ? 'Late. But Fendmere counts you its own, so in you come.'
+      : holding ? 'Work to hand in? Then I\'ll not keep you standing in the cold.'
+      : 'Gate\'s shut. Nobody comes through after dark. That is the rule and I keep it.';
+    // What he has seen. Real state, not flavour: what is actually abroad and how
+    // dark it actually is, so asking him is worth doing before you go out.
+    const lit = litBeacons().length;
+    const hostiles = entities.filter(e=>e.alive && !e.critter &&
+      Math.hypot(e.px-TOWN.x, e.pz-TOWN.z) < 120).length;
+    const word = hostiles >= 6 ? 'A deal of movement out there tonight. Go careful.'
+               : hostiles >= 3 ? 'Some movement on the roads. Nothing I\'d call a mob.'
+               : 'Quiet, near as I can tell. That is not a promise.';
+    body.innerHTML = `
+      <div class="od3" style="font-style:italic;margin-bottom:12px">“${greet}”</div>
+      <div class="psec">The gate</div>
+      <div class="pgrid">
+        <span>Hour <b>${night ? 'after dark' : 'daylight'}</b></span>
+        <span>Gate <b style="color:${open?'#9ac25c':'#cf5a4c'}">${open?'open to you':'shut'}</b></span>
+        <span>Your standing <b>${t.name}</b></span>
+        <span>Beacons lit <b>${lit}</b></span>
+      </div>
+      ${!open ? `<div class="od3" style="margin-top:6px">Sworn to Fendmere and it opens at any hour.
+        So does holding a finished errand — he'll not keep you out in the rain with work to hand in.</div>` : ''}
+      <div class="psec">Word from the wall</div>
+      <div class="od3">“${word}”</div>
+      <div class="psec">Oil</div>
+      <div class="od3">“I keep a little for them as walks out at night. ${OIL_PRICE} coin the flask,
+        and it fills you to the brim.”</div>
+      <div class="srow2"><label>Your lamp — ${Math.round(player.q.oil||0)} / ${OIL_MAX}</label>
+        <button class="tog" id="tOil" ${player.q.coin < OIL_PRICE || (player.q.oil||0) >= OIL_MAX
+          ? 'disabled style="opacity:.4"' : ''}>Buy oil (${OIL_PRICE})</button></div>
+      <div class="od3" style="color:#7d8798">You have ${player.q.coin} coin.</div>`;
+    const ob = document.getElementById('tOil');
+    if (ob) ob.onclick = ()=>{
+      if (player.q.coin < OIL_PRICE || (player.q.oil||0) >= OIL_MAX) return;
+      player.q.coin -= OIL_PRICE;
+      player.q.oil = OIL_MAX;
+      SFX.ui(); toast('The flask is yours. Lamp full.', 2.4);
+      drawVitals(); drawTown(); saveGame();
+    };
+  }
+
+  else if (townFolk.role === 'reeve'){
     const ledger = LEDGER.text
       ? `<div class="psec">The ledger</div>
          <div class="od3" style="font-style:italic;line-height:1.55;white-space:pre-wrap">${
@@ -8715,10 +8935,12 @@ function drawPause(){
     inp.nextElementSibling.textContent = k === 'view' ? v : (k === 'sens' ? SETTINGS[k].toFixed(2) : v);
   });
 }
+function _teachOnItem(id){ const it = itemDef(id); if (it && it.kind === 'use') teach('potion'); }
 function giveItem(id, n){
   player.bag[id] = (player.bag[id] || 0) + (n || 1);
   const d = itemDef(id);
   toast(`Found: ${d ? d.name : id}`);
+  _teachOnItem(id);            // "a creature dropped a potion — here is how to use it"
 }
 function giveGear(g){
   player.gear[g.id] = g;
@@ -8766,6 +8988,7 @@ function unequipItem(i){
   player.bag[id] = (player.bag[id] || 0) + 1;
   applyBuild(false); drawVitals(); drawPause(); SFX.ui();
 }
+document.getElementById('noticeOk').onclick = closeNotice;
 document.getElementById('pClose').onclick = closePause;
 document.getElementById('pQuit').onclick = ()=>{
   closePause();
@@ -8788,6 +9011,7 @@ function saveGame(){
            hp:player.hp, mana:player.mana, lvl:player.level, xp:player.xp, xpNext:player.xpNext,
            st:player.st, weaponId:player.weaponId, spellId:player.spellId,
            bonusHp:player.bonusHp||0, bonusMana:player.bonusMana||0, pts:player.pts||0,
+           taught:player.taught||{},
            seen:[...(player.seenKinds||[])], kills:player.kills||{},
            bag:player.bag, worn:player.worn, q:player.q,
            look:player.look, gear:player.gear, rest:player.rest },
@@ -8811,6 +9035,7 @@ function loadGame(){
     player.st = s.p.st; player.weaponId = s.p.weaponId; player.spellId = s.p.spellId;
     player.bonusHp = s.p.bonusHp || 0; player.bonusMana = s.p.bonusMana || 0;
     player.pts = s.p.pts || 0;
+    player.taught = s.p.taught || {};
     player.seenKinds = new Set(s.p.seen || []);
     player.kills = s.p.kills || {};
     player.level = s.p.lvl; player.xp = s.p.xp; player.xpNext = s.p.xpNext;
@@ -8854,7 +9079,7 @@ function newWorld(){
   player.pitch = -0.05; player.vel.set(0,0,0);
   G.tod = 0.30;                                 // you wake in the early morning
   player.bag = {}; player.worn = [null, null];  // a new run starts empty-handed
-  player.pts = 0;
+  player.pts = 0; player.taught = {};
   player.seenKinds = new Set(); player.kills = {};   // an unwritten bestiary
   player.q = { active:[], done:0, rep:0, coin:0, offers:[], offerSeed:0, barrow:'none', chests:{},
                beacons:{}, oil:OIL_MAX, lantern:true };
@@ -9502,6 +9727,7 @@ window.STRATA = {
   heightAt, onPath, biomeTop,
   CAM, viewYaw, toggleView, gainXp, spendPoint, drawPause, openPause,
   worldCast, worldSpells, knownSpells, spellTargetInView, drawSpellbar, swingAtWorld,
+  teach, TEACH, REST, tickRest, showNotice, closeNotice, OIL_PRICE, armOpening,
   landmarkAt, landmarksNear, inLandmark, LM_GRID, LM_KINDS,
   noteSeen, noteKill, bestTier, ABILITIES:()=>ABILITIES, actCats, pickCat,
   teleport(x,z){
