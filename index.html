@@ -3558,21 +3558,30 @@ function rebuildTrees(pcx, pcz){
       const tilt = (hash2(t.x, t.z, 992) - 0.5) * 0.10;
       const jitter = 0.85 + hash2(t.x, t.z, 993) * 0.35;
       const tint = (hash2(t.x, t.z, 994) - 0.5) * 2;      // −1..1, stable per column
+      // ⚠️ A MESH MUST NEVER BE WIDER THAN ITS VOXELS.
+      // These were drawn from "what looks good" rather than from the collision
+      // footprint, and came out up to 80% too big — so the picture covered cells
+      // that were actually empty, and in a fight both you and the creatures
+      // walked into the middle of a boulder. The silhouette IS the promise about
+      // where you can stand; if it overhangs a standable cell, it lies.
+      // A voxel body of radius r occupies cells -r..+r, i.e. HALF-EXTENT r+0.5.
       if (t.kind === 'boulder'){
         // Two or three overlapping masses, wider than tall and sunk into the
         // ground, so it reads as stone that has been there a long time rather
         // than a cube dropped on the grass. The voxels underneath are unchanged.
-        const rr = (t.r + 0.55), hh = t.trunk;
-        push('rock', x, base + hh*0.42 - 0.35, z, rr*1.18*jitter, hh*0.80, rr*1.06*jitter, yaw, tilt, tint);
-        push('rock', x - rr*0.34, base + hh*0.30 - 0.3, z + rr*0.30,
-             rr*0.80*jitter, hh*0.56, rr*0.74*jitter, yaw+1.9, tilt, tint*0.6);
+        const half = t.r + 0.5, hh = t.trunk;
+        const rr = half * 0.92 * Math.min(jitter, 1.05);   // stay inside the footprint
+        push('rock', x, base + hh*0.42 - 0.35, z, rr, hh*0.80, rr*0.94, yaw, tilt, tint);
+        push('rock', x - rr*0.30, base + hh*0.30 - 0.3, z + rr*0.26,
+             rr*0.66, hh*0.56, rr*0.62, yaw+1.9, tilt, tint*0.6);
         if (t.r > 1)
-          push('rock', x + rr*0.36, base + hh*0.24 - 0.25, z - rr*0.26,
-               rr*0.66*jitter, hh*0.46, rr*0.62*jitter, yaw+3.7, tilt, tint*1.2);
+          push('rock', x + rr*0.32, base + hh*0.24 - 0.25, z - rr*0.24,
+               rr*0.55, hh*0.46, rr*0.52, yaw+3.7, tilt, tint*1.2);
       } else if (t.kind === 'rocks'){
-        push('rock', x, base - 0.28, z, 0.62*jitter, 0.72, 0.58*jitter, yaw, tilt, tint);
-        if (t.r) push('rock', x+1, base - 0.34, z, 0.50*jitter, 0.58, 0.52*jitter, yaw+2.2, tilt, tint*0.7);
-        push('rock', x - 0.34, base - 0.40, z + 0.3, 0.36*jitter, 0.40, 0.34*jitter, yaw+4.0, tilt, tint*1.3);
+        // a single block (half-extent 0.5), optionally paired
+        push('rock', x, base - 0.28, z, 0.46*jitter, 0.68, 0.44*jitter, yaw, tilt, tint);
+        if (t.r) push('rock', x+1, base - 0.34, z, 0.40*jitter, 0.54, 0.40*jitter, yaw+2.2, tilt, tint*0.7);
+        push('rock', x - 0.22, base - 0.40, z + 0.20, 0.30*jitter, 0.38, 0.28*jitter, yaw+4.0, tilt, tint*1.3);
       } else if (t.kind === 'log'){
         // a fallen trunk lying along its run, with the root plate at one end
         const len = t.trunk;
@@ -3587,10 +3596,13 @@ function rebuildTrees(pcx, pcz){
       } else if (t.kind === 'bush'){
         // Three overlapping rounded masses at different heights — a shrub, rather
         // than the 3x3 green cube the raw voxels make.
+        // Scrub voxels are a 3x3 footprint, so the half-extent is 1.5 — the old
+        // crowns reached 2.3 and you could stand a foot inside a bush.
         const bh = 0.8 + t.trunk*0.55;
-        push('bushTop', x,        base + bh*0.42, z,        1.9*jitter, bh, 1.9*jitter, yaw, tilt, tint);
-        push('bushTop', x - 0.55, base + bh*0.30, z + 0.45, 1.35*jitter, bh*0.72, 1.35*jitter, yaw+2.0, tilt, tint*0.7);
-        push('bushTop', x + 0.5,  base + bh*0.34, z - 0.4,  1.25*jitter, bh*0.66, 1.25*jitter, yaw+4.1, tilt, tint*1.2);
+        const br = 1.5 * 0.92 * Math.min(jitter, 1.06);
+        push('bushTop', x,        base + bh*0.42, z,        br, bh, br, yaw, tilt, tint);
+        push('bushTop', x - br*0.34, base + bh*0.30, z + br*0.28, br*0.70, bh*0.72, br*0.70, yaw+2.0, tilt, tint*0.7);
+        push('bushTop', x + br*0.30, base + bh*0.34, z - br*0.26, br*0.64, bh*0.66, br*0.64, yaw+4.1, tilt, tint*1.2);
       } else if (t.kind === 'snag'){
         // A dead tree: a tapered spar, snapped off at the top, with a couple of
         // broken limbs. Narrow at the base so it never reads as a fence post.
@@ -6358,20 +6370,18 @@ function updateExplore(dt){
     camera.position.set(p.x, p.y + EYE, p.z);
   }
 
-  // mine / place
+  // ── left click: swing at what you are looking at ──
+  // Mining is GONE. It was a fossil of the voxel-builder this grew out of, it
+  // fitted a game about digging rather than a game about walking into the dark
+  // with a lamp, and having the primary mouse button silently delete the world
+  // was actively bad. The button now means the same thing here as it does in a
+  // fight: hit that.
+  highlight.visible = false;
   digCooldown -= dt;
-  const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-  const rc = raycastVoxel(camera.position, dir, 6.2);
-  if (rc.hit){ highlight.visible = true; highlight.position.set(rc.x+0.5, rc.y+0.5, rc.z+0.5); }
-  else highlight.visible = false;
-
-  // Mining stays (it is traversal, and it feeds the terrain hook); the block
-  // palette is gone — this is an RPG, not a builder.
-  if (rc.hit && digCooldown <= 0 && (locked || IS_TOUCH) &&
+  if (digCooldown <= 0 && (locked || IS_TOUCH) &&
       (mouseDown[0] || (pendingClick && pendingClick.button === 0))){
-    setBlock(rc.x, rc.y, rc.z, B.AIR);
-    forceRemeshAround(rc.x, rc.z, 1);
-    digCooldown = 0.16;
+    digCooldown = 0.45;
+    swingAtWorld();
   }
   pendingClick = null;
 
@@ -6513,16 +6523,27 @@ function worldSpells(){ return knownSpells(); }
 function spellTargetInView(range){
   const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
   const ex = player.pos.x, ey = player.pos.y + EYE*0.9, ez = player.pos.z;
-  let best = null, bestDot = 0.90;               // must be roughly under the crosshair
+  // ⚠️ THE CONE HAS TO WIDEN AS THINGS GET CLOSE.
+  // A fixed dot >= 0.90 sounds like "roughly under the crosshair" and is not:
+  // your eye is about 1.5 above a creature's centre, so at one block away the
+  // thing you are standing next to sits at 0.79 and fails, while the same
+  // creature six blocks off passes easily. That is exactly backwards, and it
+  // meant melee could never target anything while Fireball worked fine — which
+  // is why this only surfaced when left click started swinging.
+  const coneAt = (d)=> d < 2.5 ? 0.30 : d < 5 ? 0.68 : 0.86;
+  let best = null, bestScore = -Infinity;
   for (const e of entities){
     if (!e.alive || e.critter) continue;
     const dx = e.px-ex, dy = (e.py+0.9)-ey, dz = e.pz-ez;
     const d = Math.hypot(dx, dy, dz);
     if (d > range + 1.2) continue;
     const dot = (dx*dir.x + dy*dir.y + dz*dir.z) / (d || 1);
-    if (dot < bestDot) continue;
+    if (dot < coneAt(d)) continue;
     if (!hasLOS(ex, ey, ez, e.px, e.py+1.0, e.pz)) continue;
-    bestDot = dot; best = e;
+    // prefer what you are most pointing AT, then what is nearest
+    const score = dot * 2 - d * 0.08;
+    if (score <= bestScore) continue;
+    bestScore = score; best = e;
   }
   return best;
 }
@@ -6554,22 +6575,59 @@ function worldCast(id){
 
   const t = spellTargetInView(sp.range || 1);
   if (!t){ toast(`Nothing in reach — aim at something within ${sp.range || 1}`, 2.2); return; }
-  CB.opening = { spellId: sp.id, targetId: t.id };
-  startCombat(t);
+  armOpening(t, { spellId: sp.id, targetId: t.id });
 }
 function resolveOpeningCast(){
   const op = CB.opening; CB.opening = null;
   if (!op) return;
-  const i = ABILITIES.findIndex(ab => ab.spell && ab.spell.id === op.spellId);
   const target = CB.order.find(o => o.id === op.targetId && o.alive);
   const a = actor();
-  if (i < 0 || !target || !a || !a.isPlayer) return;
+  if (!target || !a || !a.isPlayer) return;
+  // a swing that opened the fight
+  if (op.strike){
+    const ab = ABILITIES[0];
+    if (!ab || a.ap < ab.ap) return;
+    if (!canHit(a, target, ab)) return;          // it moved out of reach in the intro
+    a.ap -= ab.ap;
+    faceToward(a, target.x, target.z);
+    setAnim(a, 'attack', 0.35);
+    resolveAttack(a, target, ab);
+    log(`You struck first.`);
+    refreshTargets(); drawActs(); drawPips();
+    return;
+  }
+  const i = ABILITIES.findIndex(ab => ab.spell && ab.spell.id === op.spellId);
+  if (i < 0) return;
   const ab = ABILITIES[i];
   if (player.mana < ab.mana || a.ap < ab.ap) return;
   a.ap -= ab.ap;
   castSpell(a, ab, target);
   log(`You opened with <b>${ab.name}</b>.`);
   refreshTargets(); drawActs(); drawPips();
+}
+// Left click in the field. Reach comes from the weapon you are carrying, so a
+// bow opens at range and a blade has to be next to the thing.
+function swingAtWorld(){
+  if (G.mode !== 'explore' || G.paused || townFolk) return;
+  const ab = ABILITIES[0];
+  const reach = ab ? Math.max(1.6, ab.range + 0.6) : 2.0;
+  const t = spellTargetInView(reach);
+  if (!t){
+    // a swing at nothing still swings — silence reads as an unresponsive button
+    if (player.mesh) setAnim(player, 'attack', 0.32);
+    SFX.swing();
+    return;
+  }
+  armOpening(t, { strike:true, targetId: t.id });
+}
+// ⚠️ Arm the opening blow only once combat has ACTUALLY begun.
+// Setting CB.opening before calling startCombat leaks it whenever startCombat
+// declines (it early-returns if a fight is already active), and a stale opening
+// flag then fires a free hit at the start of some later, unrelated fight.
+function armOpening(target, op){
+  startCombat(target);
+  if (G.mode === 'combat' && CB.active) CB.opening = op;
+  else CB.opening = null;
 }
 function drawSpellbar(){
   const el = document.getElementById('spellbar');
@@ -8993,9 +9051,17 @@ setInterval(()=>{
 // ═══════════════════════════════════════════════════════════════════════
 function enterWorld(){
   document.getElementById('title').style.display = 'none';
-  // never inherit a paused/dialogue state into a fresh world — step() early-outs
-  // while paused, so a stale flag silently freezes the entire game
+  // ⚠️ Never inherit RUNTIME MODE FLAGS into a fresh world. step() early-outs
+  // while paused, so a stale G.paused silently freezes the entire game — and
+  // CB.active is the same trap wearing a different hat: startCombat() begins
+  // with `if (CB.active) return`, so a world that inherits it can never start a
+  // fight again, for the rest of the session, with no error anywhere. Quitting
+  // to the title mid-combat and starting a new world did exactly that.
   G.paused = false; townFolk = null;
+  CB.active = false; CB.opening = null; CB.cat = null;
+  CB.phase = 'idle'; CB.order = []; CB.turn = 0;
+  document.getElementById('combat').classList.remove('on');
+  clearRoofClip();
   document.getElementById('pause').classList.remove('on');
   document.getElementById('town').classList.remove('on');
   G.mode = 'explore';
@@ -9435,7 +9501,7 @@ window.STRATA = {
   // Every wall-integrity check wants this instead.
   heightAt, onPath, biomeTop,
   CAM, viewYaw, toggleView, gainXp, spendPoint, drawPause, openPause,
-  worldCast, worldSpells, knownSpells, spellTargetInView, drawSpellbar,
+  worldCast, worldSpells, knownSpells, spellTargetInView, drawSpellbar, swingAtWorld,
   landmarkAt, landmarksNear, inLandmark, LM_GRID, LM_KINDS,
   noteSeen, noteKill, bestTier, ABILITIES:()=>ABILITIES, actCats, pickCat,
   teleport(x,z){
