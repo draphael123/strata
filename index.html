@@ -4224,6 +4224,7 @@ const MUSIC_SRC = {
   day:     'audio/day.ogg',            // overworld, full light
   dusk:    'audio/dusk.ogg',           // overworld, the light going or coming
   night:   'audio/night.ogg',          // overworld, dark — the lamplighter's shift
+  town:    'audio/town.ogg',           // inside Fendmere's walls, any hour
   barrow:  'audio/barrow.ogg',         // underground
   battle:  'audio/battle.ogg',         // an ordinary fight
   battle_night: 'audio/battle_night.ogg',   // a fight after dark
@@ -4258,6 +4259,10 @@ function musicWant(){
     return (underground || daylight() < 0.35) ? 'battle_night' : 'battle';
   }
   if (inBarrow(player.pos.x, player.pos.z) && player.pos.y < BARROW_FLOOR + 10) return 'barrow';
+  // Inside the walls at any hour. Crossing the gate changing the music is the
+  // strongest signal the game has that you have reached somewhere safe, and it
+  // is what makes the walk home mean something.
+  if (inTown(player.pos.x, player.pos.z)) return 'town';
   // The overworld follows the light, which is the thing this game is about. The
   // bands are deliberately wide at the edges so dusk gets a real turn rather
   // than being a two-minute crossfade between day and night.

@@ -404,6 +404,7 @@ fetched from `audio/` the first time each is actually wanted.
 | `day.ogg` | overworld, full light | *Unexplored Expansion* | Bo Jingles |
 | `dusk.ogg` | overworld, light going or coming | *The Field Of Dreams* | pauliuw |
 | `night.ogg` | overworld, dark | *Creepy Forest F* | Brandon Morris |
+| `town.ogg` | inside Fendmere's walls, any hour | *Medieval: The Old Tower Inn* | RandomMind |
 | `barrow.ogg` | underground | *Cave Theme* | brandon75689 |
 | `battle.ogg` | an ordinary fight | *Battle Theme A* | cynicmusic |
 | `battle_night.ogg` | a fight after dark, or underground | *Determined Pursuit* | Emma_MA |
